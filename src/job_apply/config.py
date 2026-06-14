@@ -62,3 +62,39 @@ class DatabaseSettings:
 def get_database_settings() -> DatabaseSettings:
     """Build DatabaseSettings from the environment, honoring DATABASE_URL."""
     return DatabaseSettings(database_url=os.getenv("DATABASE_URL", "sqlite:///./dev.db"))
+
+
+# --- Resume settings (M1, issues #15 and #16) -------------------------------
+# Append-only: existing settings/dataclasses above are left untouched. The
+# resumes slice reads ``APP_RESUMES_MAX_FILE_SIZE_MB`` to know the per-upload
+# hard limit; defaulting to 10 MB matches the issue spec.
+_RESUMES_DEFAULT_MAX_FILE_SIZE_MB = 10
+
+
+@dataclass(frozen=True)
+class ResumeSettings:
+    """Configuration for the resumes vertical slice.
+
+    Only the size limit is environment-driven for now; the content-type
+    allow-list is intentionally a Python constant on ``ResumesService``
+    because changing it is a code-level decision, not an ops one.
+    """
+
+    max_file_size_mb: int = _RESUMES_DEFAULT_MAX_FILE_SIZE_MB
+
+    @property
+    def max_file_size_bytes(self) -> int:
+        """Maximum permitted upload size, in bytes."""
+        return self.max_file_size_mb * 1024 * 1024
+
+
+def get_resume_settings() -> ResumeSettings:
+    """Build ResumeSettings from the environment, honoring APP_RESUMES_MAX_FILE_SIZE_MB."""
+    raw = os.getenv("APP_RESUMES_MAX_FILE_SIZE_MB", str(_RESUMES_DEFAULT_MAX_FILE_SIZE_MB))
+    try:
+        max_mb = int(raw)
+    except ValueError as exc:
+        raise ValueError(f"APP_RESUMES_MAX_FILE_SIZE_MB must be an integer; got {raw!r}") from exc
+    if max_mb <= 0:
+        raise ValueError(f"APP_RESUMES_MAX_FILE_SIZE_MB must be a positive integer; got {max_mb}")
+    return ResumeSettings(max_file_size_mb=max_mb)
