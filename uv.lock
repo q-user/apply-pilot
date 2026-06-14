@@ -81,7 +81,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = ">=1.13.2" },
-    { name = "asyncpg", specifier = ">=0.30" },
+    { name = "asyncpg", specifier = ">=0.31.0" },
     { name = "fakeredis", specifier = ">=2.36.1" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.28.1" },
@@ -94,7 +94,7 @@ requires-dist = [
     { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.6.1" },
     { name = "redis", extras = ["hiredis"], specifier = ">=5.2" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.5.7" },
-    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.31" },
     { name = "ty", marker = "extra == 'dev'", specifier = ">=0.0.1a16" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32" },
 ]

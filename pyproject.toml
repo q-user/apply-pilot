@@ -9,13 +9,13 @@ description = "Telegram-first assistant for finding, scoring, reviewing, and app
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "sqlalchemy[asyncio]>=2.0",
+    "sqlalchemy[asyncio]>=2.0.31",
     "alembic>=1.13.2",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
-    "asyncpg>=0.30",
+    "asyncpg>=0.31.0",
     "redis[hiredis]>=5.2",
     "httpx>=0.28.1",
     "fakeredis>=2.36.1",

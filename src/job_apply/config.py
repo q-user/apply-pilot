@@ -42,3 +42,23 @@ def get_fastapi_settings() -> FastAPISettings:
         log_level=os.getenv("APP_LOG_LEVEL", "INFO"),
         log_json=os.getenv("APP_LOG_JSON", "true").lower() in ("1", "true", "yes", "on"),
     )
+
+
+@dataclass(frozen=True)
+class DatabaseSettings:
+    """Database connection settings (SQLAlchemy-oriented).
+
+    Read `DATABASE_URL` from the environment when present; otherwise fall back
+    to a local sqlite file suitable for development.
+    """
+
+    database_url: str = "sqlite:///./dev.db"
+    pool_size: int = 5
+    max_overflow: int = 10
+    pool_pre_ping: bool = True
+    echo: bool = False
+
+
+def get_database_settings() -> DatabaseSettings:
+    """Build DatabaseSettings from the environment, honoring DATABASE_URL."""
+    return DatabaseSettings(database_url=os.getenv("DATABASE_URL", "sqlite:///./dev.db"))
