@@ -3,9 +3,9 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "job_apply"
+name = "apply-pilot"
 version = "0.1.0"
-description = "Python template with uv, pytest, SQLAlchemy and Alembic"
+description = "Telegram-first assistant for finding, scoring, reviewing, and applying to jobs."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -17,8 +17,11 @@ dependencies = [
 dev = [
     "pytest>=8.3.2",
     "pytest-cov>=5.0.0",
+    "pytest-xdist>=3.6.1",
+    "pytest-timeout>=2.3.1",
     "ruff>=0.5.7",
     "ty>=0.0.1a16",
+    "pre-commit>=4.0.1",
 ]
 
 [tool.setuptools.packages.find]
@@ -41,7 +44,8 @@ pythonpath = ["src"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --cov=src --cov-report=term-missing"
+addopts = "-v -n auto --cov=src --cov-report=term-missing"
+timeout = 5
 
 [tool.alembic]
 script_location = "alembic"

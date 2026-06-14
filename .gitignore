@@ -48,3 +48,5 @@ build/
 # Local runtime files
 *.db
 *.sqlite3
+
+.agents/github_bootstrap_plan.md

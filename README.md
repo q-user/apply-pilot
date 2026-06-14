@@ -22,6 +22,10 @@ Telegram-first assistant for finding, scoring, reviewing, and applying to jobs.
 | M7        | Additional Sources          | Post-MVP           |
 | M8        | Intelligence Improvements   | Post-MVP           |
 
+> **Note:** M1's auth vertical slice evaluates `fastapi-users` (with the
+> SQLAlchemy adapter) before falling back to hand-rolled endpoints. See the
+> corresponding M1 issue for the decision criteria.
+
 Issue tracking, milestones, and labels are created via `scripts/bootstrap_github.sh`
 after the repository exists on GitHub.
 
@@ -31,6 +35,17 @@ after the repository exists on GitHub.
 uv sync --extra dev
 uv run pytest -v
 ```
+
+Dev tooling: **ruff** (lint + format) and **ty** for typing (no mypy). Pytest
+runs with `pytest-xdist` (`-n auto`) and a **5s per-test timeout** via
+`pytest-timeout`; both are configured in `pyproject.toml` under
+`[tool.pytest.ini_options]`.
+
+## Pre-commit hooks
+
+Install once with `uv run pre-commit install`. Hooks run **ruff** (`--fix` +
+`ruff-format`) and **ty** on staged changes; CI runs the same checks
+independently. The hook set is defined in `.pre-commit-config.yaml`.
 
 ## Repository bootstrap
 
