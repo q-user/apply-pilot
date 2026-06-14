@@ -8,12 +8,20 @@ wrapper used by the dispatcher; cross-slice dependencies stay on
 """
 
 from job_apply.features.telegram.bot import SendMessageRequest, TelegramBot, TelegramSettings
+from job_apply.features.telegram.linking import (
+    InvalidLinkingTokenError,
+    TelegramLinkingService,
+)
+from job_apply.features.telegram.models import TelegramAccount
 from job_apply.features.telegram.process import TelegramBotProcess, main
 
 __all__ = [
+    "InvalidLinkingTokenError",
     "SendMessageRequest",
+    "TelegramAccount",
     "TelegramBot",
     "TelegramBotProcess",
+    "TelegramLinkingService",
     "TelegramSettings",
     "main",
 ]

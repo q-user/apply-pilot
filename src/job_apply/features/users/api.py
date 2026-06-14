@@ -31,6 +31,10 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from job_apply.db import get_db
+from job_apply.features.telegram.linking import (
+    TelegramLinkingService,
+    get_linking_service,
+)
 from job_apply.features.users.repository import SqlAlchemyUsersRepository
 from job_apply.features.users.schemas import (
     AuthenticatedUser,
@@ -190,6 +194,34 @@ def me(
         return service.get_user(user_id=user_id)
     except AuthenticationError as exc:
         raise _http_error(status.HTTP_401_UNAUTHORIZED, "invalid_token", str(exc)) from exc
+
+
+@router.get(
+    "/telegram-link",
+    responses={
+        200: {"description": "Linking code generated"},
+        401: {"description": "Missing or invalid bearer token"},
+    },
+)
+def telegram_link(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),  # noqa: B008
+    service: AuthService = Depends(get_auth_service),  # noqa: B008
+    linking: TelegramLinkingService = Depends(get_linking_service),  # noqa: B008
+) -> dict[str, str]:
+    """Generate a one-time Telegram linking code for the authenticated user."""
+    if credentials is None:
+        raise _http_error(
+            status.HTTP_401_UNAUTHORIZED,
+            "authentication_required",
+            "bearer token is required",
+        )
+    try:
+        user_id = service.resolve_user_id_from_token(credentials.credentials)
+    except InvalidTokenError as exc:
+        raise _http_error(status.HTTP_401_UNAUTHORIZED, "invalid_token", str(exc)) from exc
+
+    code = linking.generate_token(user_id=str(user_id))
+    return {"linking_code": code}
 
 
 __all__ = [
