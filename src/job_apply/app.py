@@ -84,8 +84,10 @@ def create_app(settings: FastAPISettings | None = None) -> FastAPI:
     )
 
     # Register feature routers.
+    from job_apply.features.hh.api import router as hh_router
     from job_apply.features.search_profiles.api import router as search_profiles_router
 
+    app.include_router(hh_router)
     app.include_router(search_profiles_router)
 
     @app.get("/healthz", include_in_schema=False)
