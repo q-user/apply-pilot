@@ -1,0 +1,93 @@
+# Local development stack for apply-pilot.
+#
+# The api service is the FastAPI monolith. bot, scheduler and worker are
+# placeholder services that will be wired up by their respective vertical
+# slices — they are commented out for now and tracked as TODO. db and redis
+# are first-class services with healthchecks so the api can wait for them
+# to be ready via `condition: service_healthy`.
+
+name: apply-pilot
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: apply-pilot-db
+    environment:
+      POSTGRES_USER: apply_pilot
+      POSTGRES_PASSWORD: apply_pilot
+      POSTGRES_DB: apply_pilot
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U apply_pilot -d apply_pilot
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  redis:
+    image: redis:7-alpine
+    container_name: apply-pilot-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 3s
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: apply-pilot:local
+    container_name: apply-pilot-api
+    environment:
+      # asyncpg driver is preferred inside the container, but the SQLAlchemy
+      # URL itself is left to the application to compose from individual vars.
+      APP_DATABASE_URL: postgresql+asyncpg://apply_pilot:apply_pilot@db:5432/apply_pilot
+      APP_REDIS_URL: redis://redis:6379/0
+      APP_ENV: development
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # TODO(M0): bot / scheduler / worker entry points land in later vertical
+    # slices. Once `job_apply.runtime.process` exists, add services here that
+    # share the same image and depend on db/redis:
+    #
+    #   bot:
+    #     image: apply-pilot:local
+    #     command: ["python", "-m", "job_apply.runtime.process", "bot"]
+    #     depends_on:
+    #       api: { condition: service_started }
+    #       redis: { condition: service_healthy }
+    #
+    #   scheduler:
+    #     image: apply-pilot:local
+    #     command: ["python", "-m", "job_apply.runtime.process", "scheduler"]
+    #     depends_on:
+    #       api: { condition: service_started }
+    #       redis: { condition: service_healthy }
+    #
+    #   worker:
+    #     image: apply-pilot:local
+    #     command: ["python", "-m", "job_apply.runtime.process", "worker"]
+    #     depends_on:
+    #       api: { condition: service_started }
+    #       db: { condition: service_healthy }
+    #       redis: { condition: service_healthy }
+
+volumes:
+  db-data:
+  redis-data:
