@@ -11,6 +11,7 @@ requires-python = ">=3.13"
 dependencies = [
     "sqlalchemy>=2.0.31",
     "alembic>=1.13.2",
+    "redis[hiredis]>=8.0.0",
 ]
 
 [project.optional-dependencies]
