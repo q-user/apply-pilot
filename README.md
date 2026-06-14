@@ -36,7 +36,7 @@ uv sync --extra dev
 uv run pytest -v
 ```
 
-Dev tooling: **ruff** (lint + format) and **ty** for typing (no mypy). Pytest
+Dev tooling: **ruff** (lint + format) and **ty** for typing. Pytest
 runs with `pytest-xdist` (`-n auto`) and a **5s per-test timeout** via
 `pytest-timeout`; both are configured in `pyproject.toml` under
 `[tool.pytest.ini_options]`.
