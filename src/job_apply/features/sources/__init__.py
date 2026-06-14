@@ -12,12 +12,17 @@ Public surface
 * :class:`VacancyRepository` — the storage Protocol the service depends on.
 * :class:`InMemoryVacancyRepository` — test/dict-backed implementation.
 * :class:`SqlVacancyRepository` — production SQLAlchemy implementation.
-* :class:`SourceService` — the :meth:`SourceService.ingest_vacancy` use case.
+* :class:`VacancyDeduplicator` — content-hash cross-source dedup pre-write.
+* :class:`SourceService` — the ingest use case:
+  :meth:`SourceService.ingest_vacancy` (raw → upsert),
+  :meth:`SourceService.ingest_vacancy_deduped` (raw → dedup → upsert),
+  :meth:`SourceService.ingest_batch` (batched dedup → upsert).
 * :data:`router` — FastAPI router placeholder (full endpoints land later).
 """
 
 from __future__ import annotations
 
+from job_apply.features.sources.dedup import VacancyDeduplicator
 from job_apply.features.sources.models import Vacancy
 from job_apply.features.sources.normalizer import VacancyNormalizer
 from job_apply.features.sources.repository import (
@@ -32,6 +37,7 @@ __all__ = [
     "SourceService",
     "SqlVacancyRepository",
     "Vacancy",
+    "VacancyDeduplicator",
     "VacancyNormalizer",
     "VacancyRepository",
 ]
