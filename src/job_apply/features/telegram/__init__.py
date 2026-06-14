@@ -10,15 +10,25 @@ wrapper used by the dispatcher; cross-slice dependencies stay on
 from job_apply.features.telegram.bot import SendMessageRequest, TelegramBot, TelegramSettings
 from job_apply.features.telegram.linking import (
     InvalidLinkingTokenError,
+    TelegramAccountAlreadyLinkedError,
     TelegramLinkingService,
 )
 from job_apply.features.telegram.models import TelegramAccount
 from job_apply.features.telegram.process import TelegramBotProcess, main
+from job_apply.features.telegram.repository import (
+    InMemoryTelegramAccountRepository,
+    SqlAlchemyTelegramAccountRepository,
+    TelegramAccountRepository,
+)
 
 __all__ = [
+    "InMemoryTelegramAccountRepository",
     "InvalidLinkingTokenError",
     "SendMessageRequest",
+    "SqlAlchemyTelegramAccountRepository",
     "TelegramAccount",
+    "TelegramAccountAlreadyLinkedError",
+    "TelegramAccountRepository",
     "TelegramBot",
     "TelegramBotProcess",
     "TelegramLinkingService",

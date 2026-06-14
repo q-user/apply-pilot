@@ -12,6 +12,7 @@ can be injected at construction time for tests or alternative transports.
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -20,8 +21,10 @@ import httpx
 from job_apply.config import TelegramSettings
 from job_apply.features.telegram.linking import (
     InvalidLinkingTokenError,
+    TelegramAccountAlreadyLinkedError,
     TelegramLinkingService,
 )
+from job_apply.features.telegram.repository import TelegramAccountRepository
 
 # Telegram Bot API base URL. Token is appended per request, not baked into the
 # client, so the same client can be reused if the bot token is rotated
@@ -56,6 +59,7 @@ class TelegramBot:
         *,
         http_client: httpx.AsyncClient | None = None,
         linking_service: TelegramLinkingService | None = None,
+        telegram_account_repository: TelegramAccountRepository | None = None,
     ) -> None:
         self._settings = settings
         # Keep the injected reference but do not eagerly create a client:
@@ -66,6 +70,8 @@ class TelegramBot:
         # Optional linking service: when injected, /link command becomes
         # active; when None, /link returns a "not available" message.
         self._linking_service = linking_service
+        # Optional repository for persisting linked TelegramAccount rows.
+        self._telegram_account_repository = telegram_account_repository
 
     @property
     def settings(self) -> TelegramSettings:
@@ -177,6 +183,7 @@ class TelegramBot:
                 chat_id=chat_id,
                 telegram_user_id=message.get("from", {}).get("id", 0),
                 message_text=text,
+                telegram_username=(message.get("from") or {}).get("username"),
             )
         return SendMessageRequest(chat_id=chat_id, text=self._fallback_text())
 
@@ -230,7 +237,12 @@ class TelegramBot:
         )
 
     def _handle_link_command(
-        self, *, chat_id: int, telegram_user_id: int, message_text: str
+        self,
+        *,
+        chat_id: int,
+        telegram_user_id: int,
+        message_text: str,
+        telegram_username: str | None = None,
     ) -> SendMessageRequest:
         """Handle the /link command: validate and link a Telegram account."""
         if self._linking_service is None:
@@ -250,7 +262,17 @@ class TelegramBot:
             )
 
         try:
-            self._linking_service.link_account(token=args, telegram_user_id=telegram_user_id)
+            user_id_str = self._linking_service.link_account(
+                token=args, telegram_user_id=telegram_user_id
+            )
+        except TelegramAccountAlreadyLinkedError:
+            return SendMessageRequest(
+                chat_id=chat_id,
+                text=(
+                    "❌ This Telegram account is already linked to another user.\n\n"
+                    "Please contact support if you believe this is an error."
+                ),
+            )
         except InvalidLinkingTokenError:
             return SendMessageRequest(
                 chat_id=chat_id,
@@ -259,6 +281,23 @@ class TelegramBot:
                     "Please request a new code from the web app and try again."
                 ),
             )
+
+        # Persist the TelegramAccount row if a repository is available.
+        if self._telegram_account_repository is not None:
+            try:
+                self._telegram_account_repository.create(
+                    user_id=uuid.UUID(user_id_str),
+                    telegram_user_id=telegram_user_id,
+                    username=telegram_username,
+                )
+            except Exception:
+                return SendMessageRequest(
+                    chat_id=chat_id,
+                    text=(
+                        "❌ Failed to save your account link. "
+                        "Please try again later or contact support."
+                    ),
+                )
 
         return SendMessageRequest(
             chat_id=chat_id,
