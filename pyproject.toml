@@ -9,8 +9,10 @@ description = "Telegram-first assistant for finding, scoring, reviewing, and app
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "sqlalchemy>=2.0.31",
+    "sqlalchemy[asyncio]>=2.0.31",
     "alembic>=1.13.2",
+    "asyncpg>=0.31.0",
+    "pydantic-settings>=2.14.1",
 ]
 
 [project.optional-dependencies]
@@ -22,6 +24,7 @@ dev = [
     "ruff>=0.5.7",
     "ty>=0.0.1a16",
     "pre-commit>=4.0.1",
+    "aiosqlite>=0.22.1",
 ]
 
 [tool.setuptools.packages.find]
