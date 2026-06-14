@@ -41,6 +41,8 @@ class VacancyRepository(Protocol):
     def get_by_id(self, vacancy_id: uuid.UUID) -> Vacancy | None: ...
     def list_by_source(self, source: str) -> Sequence[Vacancy]: ...
     def list_recent(self, *, limit: int) -> Sequence[Vacancy]: ...
+    def find_by_source(self, source: str, source_id: str) -> list[Vacancy]: ...
+    def find_by_content_hash(self, content_hash: str) -> list[Vacancy]: ...
 
 
 # ---------------------------------------------------------------------------
@@ -114,6 +116,29 @@ class InMemoryVacancyRepository:
             reverse=True,
         )
         return ordered[:limit]
+
+    def find_by_source(self, source: str, source_id: str) -> list[Vacancy]:
+        """Return the (at most one) row matching ``(source, source_id)``.
+
+        The natural key is unique, so the result is either empty or a
+        single-element list. The list-typed return keeps the contract
+        symmetric with :meth:`find_by_content_hash` (which can return
+        multiple matches across sources).
+        """
+        vid = self._by_source_id.get((source, source_id))
+        if vid is None:
+            return []
+        row = self._by_id.get(vid)
+        return [row] if row is not None else []
+
+    def find_by_content_hash(self, content_hash: str) -> list[Vacancy]:
+        """Return all rows whose ``content_hash`` equals ``content_hash``.
+
+        ``content_hash`` is the cross-source dedup key (the same job
+        posted on hh and habr will share it), so this can return several
+        rows from different sources.
+        """
+        return [v for v in self._by_id.values() if v.content_hash == content_hash]
 
 
 # ---------------------------------------------------------------------------
@@ -259,6 +284,37 @@ class SqlVacancyRepository:
         session = self._scope()
         try:
             statement = select(Vacancy).order_by(Vacancy.created_at.desc()).limit(limit)
+            return list(session.execute(statement).scalars().all())
+        finally:
+            session.close()
+
+    def find_by_source(self, source: str, source_id: str) -> list[Vacancy]:
+        """Return the (at most one) row matching ``(source, source_id)``.
+
+        The natural key is unique, so the result is either empty or a
+        single-element list. The list-typed return keeps the contract
+        symmetric with :meth:`find_by_content_hash` (which can return
+        multiple matches across sources).
+        """
+        session = self._scope()
+        try:
+            statement = select(Vacancy).where(
+                Vacancy.source == source,
+                Vacancy.source_id == source_id,
+            )
+            return list(session.execute(statement).scalars().all())
+        finally:
+            session.close()
+
+    def find_by_content_hash(self, content_hash: str) -> list[Vacancy]:
+        """Return all rows whose ``content_hash`` equals ``content_hash``.
+
+        ``content_hash`` is the cross-source dedup key, so this can return
+        several rows from different sources reposting the same job.
+        """
+        session = self._scope()
+        try:
+            statement = select(Vacancy).where(Vacancy.content_hash == content_hash)
             return list(session.execute(statement).scalars().all())
         finally:
             session.close()
