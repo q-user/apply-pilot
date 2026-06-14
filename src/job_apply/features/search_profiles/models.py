@@ -9,43 +9,16 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
 
-from sqlalchemy import CHAR, Boolean, DateTime, ForeignKey, Integer, String, TypeDecorator, func
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
-from sqlalchemy.engine.interfaces import Dialect
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.sql.type_api import TypeEngine
 
 from job_apply.db import Base
+from job_apply.shared.types import GUID
 
-
-class GUID(TypeDecorator):
-    """Platform-independent UUID column."""
-
-    impl: type[CHAR] = CHAR
-    cache_ok = True
-
-    def load_dialect_impl(self, dialect: Dialect) -> TypeEngine[Any]:
-        if dialect.name == "postgresql":
-            return dialect.type_descriptor(PG_UUID(as_uuid=True))
-        return dialect.type_descriptor(CHAR(36))
-
-    def process_bind_param(self, value: object, dialect: Dialect) -> str | uuid.UUID | None:
-        if value is None:
-            return None
-        if not isinstance(value, uuid.UUID):
-            value = uuid.UUID(str(value))
-        if dialect.name == "postgresql":
-            return value
-        return str(value)
-
-    def process_result_value(self, value: object, dialect: Dialect) -> uuid.UUID | None:
-        if value is None:
-            return None
-        if isinstance(value, uuid.UUID):
-            return value
-        return uuid.UUID(str(value))
+# Re-exported for backward compatibility — ``GUID`` used to live in this
+# module. New code should import it from ``job_apply.shared``.
+__all__ = ["GUID", "SearchProfile"]
 
 
 class SearchProfile(Base):
@@ -76,6 +49,3 @@ class SearchProfile(Base):
 
     def __repr__(self) -> str:
         return f"SearchProfile(id={self.id!s}, title={self.title!r}, user_id={self.user_id!s})"
-
-
-__all__ = ["SearchProfile"]

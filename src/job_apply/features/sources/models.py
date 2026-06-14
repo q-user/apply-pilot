@@ -30,7 +30,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from job_apply.db import Base
-from job_apply.features.search_profiles.models import GUID
+from job_apply.shared.types import GUID
 
 
 class Vacancy(Base):

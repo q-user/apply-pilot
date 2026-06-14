@@ -121,10 +121,6 @@ class InMemoryVacancyRepository:
 # ---------------------------------------------------------------------------
 
 
-# Columns that are part of the natural key and must NOT be overwritten by
-# the upsert (otherwise the inserted id and created_at would be reset).
-_UPSERT_IMMUTABLE: frozenset[str] = frozenset({"id", "created_at"})
-
 # Defaults applied by the SQL upsert when a not-null column is left
 # ``None`` by the caller. The ORM machinery applies these defaults when
 # you ``session.add()`` an instance, but Core-level ``INSERT`` statements
