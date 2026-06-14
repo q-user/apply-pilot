@@ -31,6 +31,8 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from job_apply.db import get_db
+from job_apply.features.audit.models import AuditEventType
+from job_apply.features.audit.service import AuditService, get_audit_service
 from job_apply.features.telegram.linking import (
     TelegramLinkingService,
     get_linking_service,
@@ -113,10 +115,15 @@ def _http_error(status_code: int, code: str, message: str) -> HTTPException:
 def register(
     payload: UserCreate,
     service: AuthService = Depends(get_auth_service),  # noqa: B008
+    audit: AuditService = Depends(get_audit_service),  # noqa: B008
 ) -> UserRead:
     """Create a new user account."""
     try:
-        return service.register(payload)
+        result = service.register(payload)
+        audit.log_event(
+            AuditEventType.REGISTER, user_id=result.id, details={"email": payload.email}
+        )
+        return result
     except DuplicateEmailError as exc:
         _LOGGER.info("auth.register.conflict", extra={"email": payload.email})
         raise _http_error(status.HTTP_409_CONFLICT, exc.code, exc.message) from exc
@@ -133,10 +140,15 @@ def register(
 def login(
     payload: UserLogin,
     service: AuthService = Depends(get_auth_service),  # noqa: B008
+    audit: AuditService = Depends(get_audit_service),  # noqa: B008
 ) -> AuthenticatedUser:
     """Verify credentials and return a bearer token + user payload."""
     try:
-        return service.login(email=payload.email, password=payload.password)
+        result = service.login(email=payload.email, password=payload.password)
+        audit.log_event(
+            AuditEventType.LOGIN, user_id=result.user.id, details={"email": payload.email}
+        )
+        return result
     except AuthenticationError as exc:
         # 401 is the same code for unknown email, wrong password, or
         # inactive user; the response body never reveals which.

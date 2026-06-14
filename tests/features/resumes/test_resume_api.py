@@ -22,24 +22,7 @@ from job_apply.db import Base, get_db
 from job_apply.features.resumes.api import StubAuthDep
 from job_apply.features.resumes.api import router as resumes_router
 from job_apply.features.resumes.models import Resume
-
-
-class _StubUserForTest(Base):
-    """Test-only stub of the auth slice's ``User`` table.
-
-    The real ``User`` model is owned by the auth slice (issue #11) and
-    does not exist on ``origin/main`` at the time the resumes slice is
-    being built. To exercise the resumes routes against a real SQLAlchemy
-    session we need *some* ``users`` table to exist so the FK on
-    ``resumes.user_id`` resolves. This stub is intentionally never
-    imported by production code; it lives only in the test module.
-    """
-
-    __tablename__ = "users"
-
-    id = Column(String(length=36), primary_key=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
-
+from job_apply.features.users import models as _users_models  # noqa: F401  (register User)
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -55,9 +38,8 @@ def engine():
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    # Create the stub users table first so the FK on resumes.user_id
-    # can resolve at create-table time.
-    Base.metadata.create_all(eng, tables=[_StubUserForTest.__table__, Resume.__table__])
+    # Create all tables (including users, so the FK on resumes.user_id resolves)
+    Base.metadata.create_all(bind=eng)
     try:
         yield eng
     finally:

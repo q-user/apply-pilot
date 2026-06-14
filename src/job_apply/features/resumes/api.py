@@ -36,6 +36,8 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
 from sqlalchemy.orm import Session
 
 from job_apply.db import get_db
+from job_apply.features.audit.models import AuditEventType
+from job_apply.features.audit.service import AuditService, get_audit_service
 from job_apply.features.resumes.extractors import PlainTextExtractor
 from job_apply.features.resumes.repository import ResumesRepository
 from job_apply.features.resumes.schemas import ResumeDTO, ResumeListResponse, UploadedFile
@@ -227,6 +229,7 @@ async def upload_resume(
     request: Request,
     current_user_id: StubAuthDep,  # type: ignore[valid-type]
     db: Session = Depends(get_db),  # noqa: B008
+    audit: AuditService = Depends(get_audit_service),  # noqa: B008
 ) -> ResumeDTO:
     """Upload a single resume file and return the created record."""
     content_type = request.headers.get("content-type", "")
@@ -240,7 +243,13 @@ async def upload_resume(
     upload = _parse_multipart_upload(body, content_type)
     service = _build_service(db)
     try:
-        return service.upload_resume(user_id=current_user_id, upload=upload)
+        result = service.upload_resume(user_id=current_user_id, upload=upload)
+        audit.log_event(
+            AuditEventType.RESUME_UPLOAD,
+            user_id=current_user_id,
+            details={"filename": upload.filename, "content_type": upload.content_type},
+        )
+        return result
     except NotImplementedError as exc:
         # The extractor raised because the format is recognised but not
         # implemented yet (PDF/DOCX in the M1 skeleton).
