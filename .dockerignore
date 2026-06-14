@@ -1,0 +1,64 @@
+# VCS
+.git
+.gitignore
+.gitattributes
+
+# Worktrees and CI artefacts
+.worktrees/
+.github/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Python build/cache artefacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.ty_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# IDE and editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local runtime data and logs
+*.db
+*.sqlite3
+*.log
+
+# Documentation and design notes
+userstory/
+*.md
+!README.md
+
+# Docker self-reference (avoid copying the build definition into itself)
+Dockerfile
+docker-compose.yml
+.dockerignore
