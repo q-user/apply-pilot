@@ -23,6 +23,7 @@ dependencies = [
 
 [project.scripts]
 apply-pilot-api = "job_apply.app:run"
+apply-pilot-bot = "job_apply.features.telegram.process:main"
 
 [project.optional-dependencies]
 dev = [
