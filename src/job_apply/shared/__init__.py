@@ -14,10 +14,12 @@ from job_apply.shared.errors import (
 )
 from job_apply.shared.logging import configure_logging
 from job_apply.shared.schemas import IdentifiedSchema, TimestampedSchema
+from job_apply.shared.types import GUID
 
 __all__ = [
     "ConflictError",
     "DomainError",
+    "GUID",
     "IdentifiedSchema",
     "NotFoundError",
     "TimestampedSchema",

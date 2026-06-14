@@ -133,8 +133,6 @@ class SearchProfileService:
             profile.is_active = update_data["is_active"]
 
         # Salary fields: apply individually, then validate the pair.
-        new_min = update_data.get("salary_min", profile.salary_min)
-        new_max = update_data.get("salary_max", profile.salary_max)
         if "salary_min" in update_data:
             profile.salary_min = update_data["salary_min"]
         if "salary_max" in update_data:
