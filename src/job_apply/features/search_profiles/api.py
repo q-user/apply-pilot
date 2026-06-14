@@ -34,6 +34,7 @@ from job_apply.features.search_profiles.service import (
 )
 from job_apply.features.users.security import InvalidTokenError, default_token_store
 from job_apply.features.users.service import AuthService
+from job_apply.shared.errors import ValidationError
 
 _LOGGER = logging.getLogger("job_apply.features.search_profiles.api")
 
@@ -176,6 +177,8 @@ def update_profile(
         raise _http_error(status.HTTP_404_NOT_FOUND, exc.code, exc.message) from exc
     except ProfileOwnershipError as exc:
         raise _http_error(status.HTTP_403_FORBIDDEN, exc.code, exc.message) from exc
+    except ValidationError as exc:
+        raise _http_error(status.HTTP_422_UNPROCESSABLE_ENTITY, exc.code, exc.message) from exc
 
 
 @router.delete(

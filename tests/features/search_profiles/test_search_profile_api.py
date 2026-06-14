@@ -310,6 +310,24 @@ def test_update_profile_without_token_returns_401(client: TestClient) -> None:
     assert response.status_code == 401
 
 
+def test_update_invalid_salary_range_returns_422(token: str, client: TestClient) -> None:
+    """Updating salary_min above salary_max must return 422."""
+    created = client.post(
+        "/search-profiles",
+        json={"title": "salary-test", "salary_min": 30000, "salary_max": 50000},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    profile_id = created.json()["id"]
+
+    response = client.put(
+        f"/search-profiles/{profile_id}",
+        json={"salary_min": 100000},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 422
+
+
 # ---------------------------------------------------------------------------
 # DELETE /search-profiles/{id}
 # ---------------------------------------------------------------------------
