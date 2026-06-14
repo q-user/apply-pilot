@@ -21,6 +21,9 @@ dependencies = [
     "fakeredis>=2.36.1",
 ]
 
+[project.scripts]
+apply-pilot-api = "job_apply.app:run"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.3.2",
