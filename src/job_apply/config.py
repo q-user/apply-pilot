@@ -64,7 +64,6 @@ def get_database_settings() -> DatabaseSettings:
     return DatabaseSettings(database_url=os.getenv("DATABASE_URL", "sqlite:///./dev.db"))
 
 
-<<<<<<< HEAD
 @dataclass(frozen=True)
 class TelegramSettings:
     """Telegram bot configuration (M1, issue #14).
