@@ -8,13 +8,17 @@ constructor injection so tests can swap in the in-memory fake.
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
 from job_apply.db import get_db
+from job_apply.features.audit.models import AuditEventType
 from job_apply.features.audit.repository import AuditLogRepository, SqlAuditLogRepository
+
+_LOGGER = logging.getLogger("job_apply.features.audit.service")
 
 
 def get_audit_service(session: Session = Depends(get_db)) -> "AuditService":  # noqa: B008
@@ -39,7 +43,7 @@ class AuditService:
 
     def log_event(
         self,
-        event_type: str,
+        event_type: AuditEventType,
         user_id: uuid.UUID | None = None,
         details: dict[str, object] | None = None,
     ) -> None:
@@ -54,11 +58,14 @@ class AuditService:
         details_text: str | None = None
         if details:
             details_text = json.dumps(details, default=str, ensure_ascii=False)
-        self._audit_repo.insert(
-            event_type=event_type,
-            user_id=user_id,
-            details=details_text,
-        )
+        try:
+            self._audit_repo.insert(
+                event_type=event_type,
+                user_id=user_id,
+                details=details_text,
+            )
+        except Exception:
+            _LOGGER.exception("audit.log_event.failed", extra={"event_type": event_type})
 
     @property
     def audit_repo(self) -> AuditLogRepository:

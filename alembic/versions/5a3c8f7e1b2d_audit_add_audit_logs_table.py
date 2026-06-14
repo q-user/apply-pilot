@@ -5,9 +5,10 @@ Revises: a03366a19528
 Create Date: 2026-06-15 12:00:00.000000
 
 Adds the ``audit_logs`` table for append-only event tracking. The
-``user_id`` column is a nullable foreign key to ``users.id`` so that
-anonymous events (e.g. a failed login for an unknown email) can still
-be recorded.
+``user_id`` column references ``users.id`` logically but no
+``ForeignKey`` constraint is enforced so that audit history survives
+user deletion.  The column is nullable — anonymous events (e.g. a
+failed login for an unknown email) can still be recorded.
 
 The Alembic ``env.py`` registers the audit model module; this revision
 is hand-written because the model references ``users.id`` which exists

@@ -1,8 +1,11 @@
 """AuditLog ORM model.
 
 Each row represents a single business event (register, login, etc.).
-The ``user_id`` FK is nullable — anonymous events (e.g. a failed login
-for an unknown email) can still be recorded without a user row.
+The ``user_id`` column references ``users.id`` logically but no
+``ForeignKey`` constraint is enforced so that audit history survives
+user deletion.  The column is nullable — anonymous events (e.g. a
+failed login for an unknown email) can still be recorded without a
+user row.
 """
 
 from __future__ import annotations
