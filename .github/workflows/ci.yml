@@ -1,0 +1,92 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: lint, format, type-check, migrate, test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: apply_pilot
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d apply_pilot"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # Project reads DATABASE_URL / REDIS_URL (see job_apply.config). The
+      # disposable postgres + redis services are consumed by the migration
+      # step below; tests deliberately use sqlite for speed.
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/apply_pilot
+      REDIS_URL: redis://localhost:6379/0
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: |
+            uv.lock
+            pyproject.toml
+
+      - name: Sync dependencies
+        run: uv sync --extra dev
+
+      - name: Install postgres driver for alembic
+        # Project depends on asyncpg for async paths; alembic uses the sync
+        # engine, so we install psycopg in the venv at runtime to avoid
+        # touching pyproject.toml. This install is CI-only and does not
+        # modify the lockfile.
+        run: uv pip install "psycopg[binary]"
+
+      - name: Lint (ruff check)
+        run: uv run ruff check .
+
+      - name: Format check (ruff format --check)
+        run: uv run ruff format --check .
+
+      - name: Type check (ty)
+        run: uv run ty check src/
+
+      - name: Run migrations (alembic upgrade head)
+        run: uv run alembic upgrade head
+
+      - name: Run tests (pytest -n auto)
+        # Override DATABASE_URL so pytest uses a disposable sqlite file
+        # rather than the postgres service. The current test suite is
+        # sqlite-based; the postgres service is exercised by the
+        # migration step above.
+        run: uv run pytest -n auto
+        env:
+          DATABASE_URL: sqlite:///./app.db
