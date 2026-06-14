@@ -1,0 +1,209 @@
+"""Telegram bot dispatcher.
+
+A thin wrapper around the Telegram Bot API used to translate incoming
+``Update`` payloads into :class:`SendMessageRequest` responses. The
+dispatcher is intentionally a pure function — :meth:`TelegramBot.handle_update`
+does no I/O — so the rules of every command live in one place and can be
+exercised end-to-end from a unit test without touching the network.
+
+The HTTP transport (``httpx.AsyncClient``) is created lazily on first use and
+can be injected at construction time for tests or alternative transports.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, cast
+
+import httpx
+
+from job_apply.config import TelegramSettings
+
+# Telegram Bot API base URL. Token is appended per request, not baked into the
+# client, so the same client can be reused if the bot token is rotated
+# (mostly relevant for tests; production wiring is single-token).
+_TELEGRAM_API_BASE = "https://api.telegram.org"
+
+
+@dataclass(frozen=True)
+class SendMessageRequest:
+    """A minimal DTO describing a chat reply produced by the dispatcher.
+
+    Decoupling the dispatch decision from the HTTP transport keeps the
+    command rules testable in isolation. :class:`TelegramBotProcess` is the
+    only caller that turns these into actual ``sendMessage`` calls.
+    """
+
+    chat_id: int
+    text: str
+
+
+class TelegramBot:
+    """A thin dispatcher for the Telegram Bot API.
+
+    The class owns the bot's settings and an optional injected HTTP client.
+    HTTP access is centralised on :meth:`_get_client` so a future swap to
+    ``aiogram`` or a stubbed transport can be done in one place.
+    """
+
+    def __init__(
+        self,
+        settings: TelegramSettings,
+        *,
+        http_client: httpx.AsyncClient | None = None,
+    ) -> None:
+        self._settings = settings
+        # Keep the injected reference but do not eagerly create a client:
+        # ``handle_update`` is pure and tests construct ``TelegramBot``
+        # without intending to make any network calls.
+        self._injected_client = http_client
+        self._owned_client: httpx.AsyncClient | None = None
+
+    @property
+    def settings(self) -> TelegramSettings:
+        return self._settings
+
+    @property
+    def _api_base(self) -> str:
+        return f"{_TELEGRAM_API_BASE}/bot{self._settings.bot_token}"
+
+    def _method_url(self, method: str) -> str:
+        return f"{self._api_base}/{method}"
+
+    def _get_client(self) -> httpx.AsyncClient:
+        if self._injected_client is not None:
+            return self._injected_client
+        if self._owned_client is None:
+            # The HTTP timeout is a hair longer than the long-poll timeout
+            # so a slow Telegram server never aborts a healthy poll.
+            self._owned_client = httpx.AsyncClient(
+                timeout=httpx.Timeout(self._settings.polling_timeout + 5.0)
+            )
+        return self._owned_client
+
+    async def aclose(self) -> None:
+        """Close the bot's owned HTTP client, if any.
+
+        Safe to call multiple times. Injected clients are owned by the
+        caller and left untouched.
+        """
+        if self._owned_client is not None:
+            await self._owned_client.aclose()
+            self._owned_client = None
+
+    # ------------------------------------------------------------------
+    # HTTP transport (used by TelegramBotProcess)
+    # ------------------------------------------------------------------
+    async def get_updates(self, offset: int | None = None) -> list[dict[str, Any]]:
+        """Call ``getUpdates`` and return the ``result`` array.
+
+        Raises:
+            httpx.HTTPError: on any non-2xx response or transport error.
+        """
+        params: dict[str, Any] = {"timeout": self._settings.polling_timeout}
+        if offset is not None:
+            params["offset"] = offset
+        response = await self._get_client().get(self._method_url("getUpdates"), params=params)
+        response.raise_for_status()
+        payload = response.json()
+        result = payload.get("result", [])
+        # The Telegram API guarantees a list here, but the cast is needed
+        # because ``dict.get`` widens the value to ``Any`` and ``isinstance``
+        # alone does not narrow the element type for the type checker.
+        if isinstance(result, list):
+            return cast("list[dict[str, Any]]", result)
+        return []
+
+    async def send_message(self, chat_id: int, text: str) -> dict[str, Any]:
+        """Call ``sendMessage`` and return the result body.
+
+        Raises:
+            httpx.HTTPError: on any non-2xx response or transport error.
+        """
+        response = await self._get_client().post(
+            self._method_url("sendMessage"),
+            json={"chat_id": chat_id, "text": text},
+        )
+        response.raise_for_status()
+        payload = response.json()
+        result = payload.get("result", {})
+        return result if isinstance(result, dict) else {}
+
+    # ------------------------------------------------------------------
+    # Command dispatch
+    # ------------------------------------------------------------------
+    def handle_update(self, update: dict[str, Any]) -> SendMessageRequest | None:
+        """Parse an incoming ``Update`` and return the reply to send.
+
+        Returns ``None`` for updates the bot does not act on (non-message
+        updates, messages without text, messages without a chat id, ...)
+        so the caller can skip them without a special branch. The function
+        is intentionally side-effect free: it never touches the network and
+        never reads from the environment.
+        """
+        message = update.get("message") or update.get("edited_message")
+        if not isinstance(message, dict):
+            return None
+
+        text = (message.get("text") or "").strip()
+        if not text:
+            return None
+
+        chat = message.get("chat") or {}
+        chat_id = chat.get("id")
+        if not isinstance(chat_id, int):
+            return None
+
+        command = self._extract_command(text)
+        if command is None:
+            # Plain text is silently ignored by the skeleton. Future slices
+            # can route free-form input through a conversation handler.
+            return None
+
+        if command == "start":
+            return SendMessageRequest(chat_id=chat_id, text=self._welcome_text())
+        if command == "help":
+            return SendMessageRequest(chat_id=chat_id, text=self._help_text())
+        return SendMessageRequest(chat_id=chat_id, text=self._fallback_text())
+
+    @staticmethod
+    def _extract_command(text: str) -> str | None:
+        """Return the lower-cased command name from a text message.
+
+        Telegram commands look like ``/start`` or ``/start@botname`` in
+        group chats. Anything else is treated as plain text and ignored.
+        """
+        if not text.startswith("/"):
+            return None
+        # Split into command and trailing arguments, then strip the optional
+        # ``@botname`` suffix that Telegram appends in group contexts.
+        first_token = text[1:].split(maxsplit=1)[0]
+        command = first_token.split("@", 1)[0]
+        if not command:
+            return None
+        return command.lower()
+
+    @staticmethod
+    def _welcome_text() -> str:
+        return (
+            "Welcome to Apply Pilot! 👋\n\n"
+            "To link your Telegram account, open the web app and use the "
+            "one-time deep-link token from your settings page "
+            "(`<DEEP_LINK_TOKEN>` placeholder).\n\n"
+            "Type /help to see available commands."
+        )
+
+    @staticmethod
+    def _help_text() -> str:
+        return (
+            "Available commands:\n"
+            "/start — show welcome message and account-linking hint\n"
+            "/help — list available commands"
+        )
+
+    @staticmethod
+    def _fallback_text() -> str:
+        return "Sorry, I didn't recognise that command. Type /help to see what I can do."
+
+
+__all__ = ["SendMessageRequest", "TelegramBot", "TelegramSettings"]
