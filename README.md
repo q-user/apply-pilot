@@ -70,6 +70,10 @@ src/job_apply/
       repositories.py
       service.py
       schemas.py
+  shared/
+    errors.py
+    logging.py
+    schemas.py
 tests/features/orders/
 alembic/
 scripts/
@@ -77,6 +81,20 @@ scripts/
 userstory/
   README.md            # detailed user story and architecture vision
 ```
+
+### Vertical slice conventions
+
+For the full convention contract that every slice and the `shared/`
+package must follow, see [`docs/VSA.md`](docs/VSA.md). The short version:
+
+* Slices live under `src/job_apply/features/<slice>/` and own their
+  models, persistence, DTOs, and use cases.
+* Slices never import from another slice's private modules. The only
+  allowed cross-slice imports are the public re-exports.
+* `shared/` is a last resort: a primitive is promoted there only after
+  at least two slices need it.
+* Tests exercise use cases end-to-end with in-memory fakes; they do not
+  require a real database, Redis, or network.
 
 ## Docker
 
