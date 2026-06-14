@@ -9,19 +9,17 @@ slice that go through the multipart parser and the HTTP error mapping.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import Column, DateTime, String, create_engine
+from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from job_apply.db import Base, get_db
 from job_apply.features.resumes.api import StubAuthDep
 from job_apply.features.resumes.api import router as resumes_router
-from job_apply.features.resumes.models import Resume
 from job_apply.features.users import models as _users_models  # noqa: F401  (register User)
 
 # ---------------------------------------------------------------------------

@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class SearchProfileCreate(BaseModel):

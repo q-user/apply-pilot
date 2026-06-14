@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
@@ -33,7 +33,6 @@ from job_apply.features.search_profiles.service import (
     SearchProfileService,
 )
 from job_apply.features.users.security import InvalidTokenError, default_token_store
-from job_apply.features.users.service import AuthService
 from job_apply.shared.errors import ValidationError
 
 _LOGGER = logging.getLogger("job_apply.features.search_profiles.api")
@@ -61,12 +60,12 @@ def _resolve_user_id(
     tokens = default_token_store()
     try:
         return tokens.resolve(credentials.credentials)
-    except InvalidTokenError:
+    except InvalidTokenError as exc:
         raise _http_error(
             status.HTTP_401_UNAUTHORIZED,
             "invalid_token",
             "the supplied token is invalid or expired",
-        )
+        ) from exc
 
 
 def get_search_profile_service(
@@ -138,8 +137,8 @@ def get_profile(
 
     try:
         profile_uuid = uuid.UUID(profile_id)
-    except ValueError:
-        raise _http_error(status.HTTP_404_NOT_FOUND, "not_found", "invalid profile id")
+    except ValueError as exc:
+        raise _http_error(status.HTTP_404_NOT_FOUND, "not_found", "invalid profile id") from exc
     try:
         return service.get(profile_uuid, user_id=uuid.UUID(user_id_str))
     except ProfileNotFoundError as exc:
@@ -169,8 +168,8 @@ def update_profile(
 
     try:
         profile_uuid = uuid.UUID(profile_id)
-    except ValueError:
-        raise _http_error(status.HTTP_404_NOT_FOUND, "not_found", "invalid profile id")
+    except ValueError as exc:
+        raise _http_error(status.HTTP_404_NOT_FOUND, "not_found", "invalid profile id") from exc
     try:
         return service.update(profile_uuid, payload, user_id=uuid.UUID(user_id_str))
     except ProfileNotFoundError as exc:
@@ -200,8 +199,8 @@ def delete_profile(
 
     try:
         profile_uuid = uuid.UUID(profile_id)
-    except ValueError:
-        raise _http_error(status.HTTP_404_NOT_FOUND, "not_found", "invalid profile id")
+    except ValueError as exc:
+        raise _http_error(status.HTTP_404_NOT_FOUND, "not_found", "invalid profile id") from exc
     try:
         service.delete(profile_uuid, user_id=uuid.UUID(user_id_str))
     except ProfileNotFoundError as exc:

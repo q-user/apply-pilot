@@ -21,7 +21,7 @@ from job_apply.features.audit.repository import AuditLogRepository, SqlAuditLogR
 _LOGGER = logging.getLogger("job_apply.features.audit.service")
 
 
-def get_audit_service(session: Session = Depends(get_db)) -> "AuditService":  # noqa: B008
+def get_audit_service(session: Session = Depends(get_db)) -> AuditService:  # noqa: B008
     """FastAPI dependency: build an AuditService for the current request.
 
     Uses the request-scoped session from ``get_db``. Tests can override
