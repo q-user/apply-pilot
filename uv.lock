@@ -92,11 +92,11 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0.0" },
     { name = "pytest-timeout", marker = "extra == 'dev'", specifier = ">=2.3.1" },
     { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.6.1" },
-    { name = "redis", extras = ["hiredis"], specifier = ">=5.2" },
+    { name = "redis", extras = ["hiredis"], specifier = ">=8.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.5.7" },
-    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.31" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.50" },
     { name = "ty", marker = "extra == 'dev'", specifier = ">=0.0.1a16" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.32" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.49.0" },
 ]
 provides-extras = ["dev"]
 
