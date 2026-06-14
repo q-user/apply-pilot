@@ -21,7 +21,7 @@ from typing import Protocol
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from job_apply.features.users.models import User
+from job_apply.features.users.models import User, UserSession
 
 
 class UsersRepository(Protocol):
@@ -158,8 +158,150 @@ class SqlAlchemyUsersRepository:
                 session.close()
 
 
+# ---------------------------------------------------------------------------
+# UserSession repository (M1, issue #12)
+# ---------------------------------------------------------------------------
+
+
+class UserSessionRepository(Protocol):
+    """Minimal interface the AuthService relies on for session persistence."""
+
+    def create(
+        self, *, user_id: uuid.UUID, token_hash: str, expires_at: datetime
+    ) -> UserSession: ...
+    def get_by_token_hash(self, token_hash: str) -> UserSession | None: ...
+    def revoke(self, *, token_hash: str, revoked_at: datetime) -> None: ...
+    def list_by_user_id(self, user_id: uuid.UUID) -> list[UserSession]: ...
+
+
+# ---------------------------------------------------------------------------
+# In-memory UserSession implementation
+# ---------------------------------------------------------------------------
+
+
+class InMemoryUserSessionRepository:
+    """Dict-backed session repository for tests."""
+
+    def __init__(self) -> None:
+        self._by_id: dict[uuid.UUID, UserSession] = {}
+        self._by_token_hash: dict[str, uuid.UUID] = {}
+
+    def create(self, *, user_id: uuid.UUID, token_hash: str, expires_at: datetime) -> UserSession:
+        session = UserSession(
+            id=uuid.uuid4(),
+            user_id=user_id,
+            token_hash=token_hash,
+            expires_at=expires_at,
+        )
+        session.created_at = datetime.now(UTC)
+        self._by_id[session.id] = session
+        self._by_token_hash[token_hash] = session.id
+        return session
+
+    def get_by_token_hash(self, token_hash: str) -> UserSession | None:
+        session_id = self._by_token_hash.get(token_hash)
+        if session_id is None:
+            return None
+        return self._by_id.get(session_id)
+
+    def revoke(self, *, token_hash: str, revoked_at: datetime) -> None:
+        session = self.get_by_token_hash(token_hash)
+        if session is not None:
+            session.revoked_at = revoked_at
+
+    def list_by_user_id(self, user_id: uuid.UUID) -> list[UserSession]:
+        return [s for s in self._by_id.values() if s.user_id == user_id]
+
+
+# ---------------------------------------------------------------------------
+# SQLAlchemy UserSession implementation
+# ---------------------------------------------------------------------------
+
+
+class SqlAlchemyUserSessionRepository:
+    """SQLAlchemy-backed session repository.
+
+    Follows the same dual-construction pattern as
+    :class:`SqlAlchemyUsersRepository`: pass either a ``session``
+    (caller-managed) or a ``session_factory`` (per-operation lifecycle).
+    """
+
+    def __init__(
+        self,
+        session: Session | None = None,
+        *,
+        session_factory: Callable[[], Session] | None = None,
+    ) -> None:
+        if session is not None and session_factory is not None:
+            raise ValueError("pass either session or session_factory, not both")
+        self._session = session
+        self._session_factory = session_factory
+
+    def _scope(self) -> Session:
+        if self._session is not None:
+            return self._session
+        if self._session_factory is None:
+            raise RuntimeError("SqlAlchemyUserSessionRepository is not bound to a session")
+        return self._session_factory()
+
+    def create(self, *, user_id: uuid.UUID, token_hash: str, expires_at: datetime) -> UserSession:
+        scoped = self._scope()
+        try:
+            session = UserSession(
+                user_id=user_id,
+                token_hash=token_hash,
+                expires_at=expires_at,
+            )
+            scoped.add(session)
+            scoped.commit()
+            scoped.refresh(session)
+            return session
+        except Exception:
+            scoped.rollback()
+            raise
+        finally:
+            if self._session is None:
+                scoped.close()
+
+    def get_by_token_hash(self, token_hash: str) -> UserSession | None:
+        scoped = self._scope()
+        try:
+            statement = select(UserSession).where(UserSession.token_hash == token_hash)
+            return scoped.execute(statement).scalar_one_or_none()
+        finally:
+            if self._session is None:
+                scoped.close()
+
+    def revoke(self, *, token_hash: str, revoked_at: datetime) -> None:
+        scoped = self._scope()
+        try:
+            statement = select(UserSession).where(UserSession.token_hash == token_hash)
+            session = scoped.execute(statement).scalar_one_or_none()
+            if session is not None:
+                session.revoked_at = revoked_at
+                scoped.commit()
+        except Exception:
+            scoped.rollback()
+            raise
+        finally:
+            if self._session is None:
+                scoped.close()
+
+    def list_by_user_id(self, user_id: uuid.UUID) -> list[UserSession]:
+        scoped = self._scope()
+        try:
+            statement = select(UserSession).where(UserSession.user_id == user_id)
+            return list(scoped.execute(statement).scalars().all())
+        finally:
+            if self._session is None:
+                scoped.close()
+
+
 __all__ = [
+    "InMemoryUserSessionRepository",
     "InMemoryUsersRepository",
+    "SqlAlchemyUserSessionRepository",
     "SqlAlchemyUsersRepository",
+    "UserSessionRepository",
     "UsersRepository",
 ]

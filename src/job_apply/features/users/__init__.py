@@ -32,10 +32,13 @@ Security
 
 from __future__ import annotations
 
-from job_apply.features.users.models import User
+from job_apply.features.users.models import User, UserSession
 from job_apply.features.users.repository import (
+    InMemoryUserSessionRepository,
     InMemoryUsersRepository,
+    SqlAlchemyUserSessionRepository,
     SqlAlchemyUsersRepository,
+    UserSessionRepository,
     UsersRepository,
 )
 from job_apply.features.users.schemas import (
@@ -67,16 +70,21 @@ __all__ = [
     "AuthenticationError",
     "DuplicateEmailError",
     "InMemoryTokenStore",
+    "InMemoryUserSessionRepository",
     "InMemoryUsersRepository",
     "InvalidTokenError",
+    "SqlAlchemyUserSessionRepository",
     "SqlAlchemyUsersRepository",
     "TokenStore",
     "User",
     "UserCreate",
     "UserLogin",
     "UserRead",
+    "UserSession",
+    "UserSessionRepository",
     "UsersRepository",
     "hash_password",
+    "hash_token",
     "issue_token",
     "verify_password",
     "verify_token",
