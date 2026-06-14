@@ -83,6 +83,11 @@ def create_app(settings: FastAPISettings | None = None) -> FastAPI:
         lifespan=_build_lifespan(resolved),
     )
 
+    # Register feature routers.
+    from job_apply.features.search_profiles.api import router as search_profiles_router
+
+    app.include_router(search_profiles_router)
+
     @app.get("/healthz", include_in_schema=False)
     async def healthz() -> dict[str, str]:
         return {"status": "ok"}

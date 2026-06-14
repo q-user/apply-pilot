@@ -10,6 +10,9 @@ from job_apply.config import get_database_settings
 from job_apply.db import Base
 from job_apply.features.orders import models as _orders_models  # noqa: F401  (register Order)
 from job_apply.features.resumes import models as _resumes_models  # noqa: F401  (register Resume)
+from job_apply.features.search_profiles import (
+    models as _sp_models,  # noqa: F401  (register SearchProfile)
+)
 from job_apply.features.users import models as _users_models  # noqa: F401  (register User)
 
 config = context.config
