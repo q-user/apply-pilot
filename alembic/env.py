@@ -6,8 +6,9 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
+from job_apply.config import get_database_settings
 from job_apply.db import Base
-from job_apply.features.orders import models as _orders_models  # noqa: F401
+from job_apply.features.orders import models as _orders_models  # noqa: F401  (register Order)
 
 config = context.config
 
@@ -16,6 +17,10 @@ if config.config_file_name is not None:
 
 if database_url := os.getenv("DATABASE_URL"):
     config.set_main_option("sqlalchemy.url", database_url)
+else:
+    # Fall back to DatabaseSettings (env-driven via get_database_settings),
+    # and only after that to whatever `alembic.ini` declares.
+    config.set_main_option("sqlalchemy.url", get_database_settings().database_url)
 
 target_metadata = Base.metadata
 
