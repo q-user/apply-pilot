@@ -1,7 +1,7 @@
 """resumes: add resumes table
 
 Revision ID: a03366a19528
-Revises: c31323bea8d1
+Revises: 8c290cad3915
 Create Date: 2026-06-14 21:30:00.000000
 
 Adds the ``resumes`` table that stores user-uploaded resume files together
@@ -26,7 +26,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "a03366a19528"
-down_revision: str | Sequence[str] | None = "c31323bea8d1"
+down_revision: str | Sequence[str] | None = "8c290cad3915"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
