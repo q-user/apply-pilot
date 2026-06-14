@@ -133,13 +133,13 @@ create_issue() {
 
 # M0
 create_issue "M0: Initialize repository and project metadata" "type:task,area:foundation,priority:p0" "Add repository name, description, topics, and LICENSE." M0
-create_issue "M0: Configure uv, Python 3.13, ruff, ty, pytest (xdist, 5s timeout)" "type:task,area:foundation,priority:p0" "Pin Python 3.13 in pyproject.toml. Configure ruff (lint+format), ty as the type checker (no mypy), and pytest with pytest-xdist and a 5s per-test timeout via pytest-timeout. Add uv scripts and dev extras." M0
+create_issue "M0: Configure uv, Python 3.13, ruff, ty, pytest (xdist, 5s timeout)" "type:task,area:foundation,priority:p0" "Pin Python 3.13 in pyproject.toml. Configure ruff (lint+format) and ty as the sole type checker. Configure pytest with pytest-xdist and a 5s per-test timeout via pytest-timeout. Add uv scripts and dev extras." M0
 create_issue "M0: Add FastAPI app factory and health endpoint" "type:story,area:foundation,priority:p0" "Implement FastAPI app factory pattern and /healthz endpoint with structured logging." M0
 create_issue "M0: Add PostgreSQL, SQLAlchemy, Alembic baseline" "type:story,area:foundation,priority:p0" "Wire SQLAlchemy 2.x engine, Alembic baseline migration, and session scope." M0
 create_issue "M0: Add Redis and background runtime skeleton" "type:story,area:foundation,priority:p0" "Wire Redis client and a small runtime helper for scheduler/worker processes." M0
 create_issue "M0: Add Dockerfile and docker-compose for local stack" "type:task,area:foundation,priority:p0" "Provide Dockerfile and docker-compose with API, bot, scheduler, worker, postgres, redis." M0
-create_issue "M0: Add CI for lint, typing, tests, migrations" "type:task,area:foundation,priority:p0" "GitHub Actions workflow: ruff (lint+format), ty type check, pytest (xdist) with 5s timeout, alembic upgrade against disposable DB. No mypy anywhere." M0
-create_issue "M0: Add pre-commit hooks (ruff, ty)" "type:task,area:foundation,priority:p0" "Add .pre-commit-config.yaml with ruff (lint --fix, format) and ty type checks. Wire pre-commit install into dev onboarding. No mypy." M0
+create_issue "M0: Add CI for lint, typing, tests, migrations" "type:task,area:foundation,priority:p0" "GitHub Actions workflow: ruff (lint+format), ty type check, pytest (xdist) with 5s timeout, alembic upgrade against disposable DB." M0
+create_issue "M0: Add pre-commit hooks (ruff, ty)" "type:task,area:foundation,priority:p0" "Add .pre-commit-config.yaml with ruff (lint --fix, format) and ty type checks. Wire pre-commit install into dev onboarding." M0
 create_issue "M0: Define vertical slice conventions and shared utilities" "type:task,area:foundation,priority:p0" "Document VSA conventions and add shared schemas/errors/logging helpers." M0
 
 # M1
