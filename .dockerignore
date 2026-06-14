@@ -1,0 +1,65 @@
+# Local VCS / metadata — never copy into the image.
+.git/
+.gitignore
+.gitattributes
+.worktrees/
+.idea/
+.vscode/
+.opencode/
+.agents/
+.github/
+
+# Local secrets and config. The compose env_file already provides
+# .env at runtime, so the image never needs a copy.
+.env
+.env.*
+!.env.example
+
+# Python toolchain, caches, and build artefacts.
+.venv/
+venv/
+.python-version
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+.ty_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+*.egg-info/
+build/
+dist/
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+.installed.cfg
+*.egg
+
+# Test artefacts are not needed in the runtime image.
+tests/
+
+# Local databases and SQLite files.
+*.db
+*.sqlite3
+
+# OS junk.
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Docker meta — compose mounts these from the host, no need in the image.
+Dockerfile
+docker-compose.yml
+.dockerignore

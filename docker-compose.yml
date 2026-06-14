@@ -1,0 +1,159 @@
+# Local development stack for ApplyPilot.
+#
+# Services:
+#   - postgres:  stateful relational store (volume-backed)
+#   - redis:     cache + future broker (volume-backed)
+#   - api:       FastAPI monolith placeholder — runs the default CMD from
+#                the Dockerfile, which is a tiny HTTP server returning
+#                200 on /healthz. Will be replaced by uvicorn in M1+.
+#   - bot:       PLACEHOLDER — sleeps until the Telegram bot feature lands.
+#   - scheduler: PLACEHOLDER — sleeps until the scheduled-job runner lands.
+#   - worker:    PLACEHOLDER — sleeps until the background apply worker lands.
+#
+# Quick start:
+#   cp .env.example .env       # then edit secrets if needed
+#   docker compose up --build postgres redis api
+#
+# To bring up the placeholder processes as well (they will idle, not fail):
+#   docker compose up --build
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: apply-pilot-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-apply_pilot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-apply_pilot}
+      POSTGRES_DB: ${POSTGRES_DB:-apply_pilot}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$${POSTGRES_USER:-apply_pilot}" -d "$${POSTGRES_DB:-apply_pilot}"
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: apply-pilot-redis
+    restart: unless-stopped
+    # Snapshot every minute if at least 1 key changed, warn-level logging
+    # keeps the dev logs readable.
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: apply-pilot-api
+    restart: "no"
+    env_file:
+      - .env
+    environment:
+      # Re-derive DATABASE_URL/REDIS_URL in case the user only filled in
+      # the POSTGRES_* / REDIS_* keys above.
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-apply_pilot}:${POSTGRES_PASSWORD:-apply_pilot}@postgres:5432/${POSTGRES_DB:-apply_pilot}
+      REDIS_URL: redis://redis:6379/0
+      PORT: "8000"
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - app_data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-u", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz').read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ---------- Placeholders (commands will be replaced as features land) ----------
+  # These three services share the same image as `api` and are wired to
+  # the same env, network, and shared `app_data` volume. Their `command`
+  # is a 1-hour sleep so the containers stay up cleanly with `restart: "no"`
+  # and don't crash-loop. They will be replaced by `python -m job_apply.bot`
+  # (M1), the scheduler entrypoint (M3+), and `python -m job_apply.worker`
+  # (M5+) as those slices land. `restart: "no"` keeps the placeholders
+  # from auto-restarting on exit, matching the API policy.
+
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: apply-pilot-bot
+    restart: "no"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-apply_pilot}:${POSTGRES_PASSWORD:-apply_pilot}@postgres:5432/${POSTGRES_DB:-apply_pilot}
+      REDIS_URL: redis://redis:6379/0
+    command: ["python", "-c", "import time; time.sleep(3600)"]
+    depends_on:
+      api:
+        condition: service_started
+    volumes:
+      - app_data:/app/data
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: apply-pilot-scheduler
+    restart: "no"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-apply_pilot}:${POSTGRES_PASSWORD:-apply_pilot}@postgres:5432/${POSTGRES_DB:-apply_pilot}
+      REDIS_URL: redis://redis:6379/0
+    command: ["python", "-c", "import time; time.sleep(3600)"]
+    depends_on:
+      api:
+        condition: service_started
+    volumes:
+      - app_data:/app/data
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: apply-pilot-worker
+    restart: "no"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-apply_pilot}:${POSTGRES_PASSWORD:-apply_pilot}@postgres:5432/${POSTGRES_DB:-apply_pilot}
+      REDIS_URL: redis://redis:6379/0
+    command: ["python", "-c", "import time; time.sleep(3600)"]
+    depends_on:
+      api:
+        condition: service_started
+    volumes:
+      - app_data:/app/data
+
+volumes:
+  postgres_data:
+    name: apply-pilot-postgres-data
+  redis_data:
+    name: apply-pilot-redis-data
+  app_data:
+    name: apply-pilot-app-data
