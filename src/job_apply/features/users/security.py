@@ -170,6 +170,21 @@ class InMemoryTokenStore:
 
 
 # ---------------------------------------------------------------------------
+# Token hashing (for session persistence, issue #12)
+# ---------------------------------------------------------------------------
+
+
+def hash_token(token: str) -> str:
+    """Return the SHA-256 hex digest of a raw bearer token.
+
+    The raw token is a 32-byte random urlsafe string, so a fast
+    cryptographic hash is sufficient — we do not need a password-grade
+    KDF here because the input is already high-entropy.
+    """
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+# ---------------------------------------------------------------------------
 # Module-level default token store
 # ---------------------------------------------------------------------------
 
@@ -201,6 +216,7 @@ __all__ = [
     "TokenStore",
     "default_token_store",
     "hash_password",
+    "hash_token",
     "issue_token",
     "verify_password",
     "verify_token",

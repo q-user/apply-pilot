@@ -31,7 +31,10 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from job_apply.db import get_db
-from job_apply.features.users.repository import SqlAlchemyUsersRepository
+from job_apply.features.users.repository import (
+    SqlAlchemyUserSessionRepository,
+    SqlAlchemyUsersRepository,
+)
 from job_apply.features.users.schemas import (
     AuthenticatedUser,
     UserCreate,
@@ -75,12 +78,13 @@ def get_auth_service(
 ) -> AuthService:
     """Build an :class:`AuthService` for the current request.
 
-    The service owns a single repository backed by the request's
-    session. The session itself is closed by the ``get_db`` generator
-    once the response is sent.
+    The service owns user and session repositories backed by the
+    request's session. The session itself is closed by the ``get_db``
+    generator once the response is sent.
     """
     repo = SqlAlchemyUsersRepository(session=session)
-    return AuthService(users_repo=repo, tokens=tokens)
+    sessions_repo = SqlAlchemyUserSessionRepository(session=session)
+    return AuthService(users_repo=repo, sessions_repo=sessions_repo, tokens=tokens)
 
 
 def _http_error(status_code: int, code: str, message: str) -> HTTPException:
@@ -148,6 +152,7 @@ def login(
 def logout(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),  # noqa: B008
     tokens: TokenStore = Depends(get_token_store),  # noqa: B008
+    service: AuthService = Depends(get_auth_service),  # noqa: B008
 ) -> Response:
     """Invalidate the supplied bearer token.
 
@@ -160,8 +165,36 @@ def logout(
             "authentication_required",
             "bearer token is required",
         )
-    tokens.revoke(credentials.credentials)
+    service.logout(credentials.credentials)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/refresh",
+    response_model=AuthenticatedUser,
+    responses={
+        401: {"description": "Missing or invalid bearer token"},
+    },
+)
+def refresh(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),  # noqa: B008
+    service: AuthService = Depends(get_auth_service),  # noqa: B008
+) -> AuthenticatedUser:
+    """Issue a new bearer token from a still-valid existing token.
+
+    The old token is invalidated and a fresh session is created.
+    """
+    if credentials is None:
+        raise _http_error(
+            status.HTTP_401_UNAUTHORIZED,
+            "authentication_required",
+            "bearer token is required",
+        )
+    try:
+        return service.refresh_token(credentials.credentials)
+    except AuthenticationError as exc:
+        _LOGGER.info("auth.refresh.failed")
+        raise _http_error(status.HTTP_401_UNAUTHORIZED, exc.code, "invalid token") from exc
 
 
 @router.get(
