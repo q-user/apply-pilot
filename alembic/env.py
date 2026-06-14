@@ -9,6 +9,7 @@ from sqlalchemy import engine_from_config, pool
 from job_apply.config import get_database_settings
 from job_apply.db import Base
 from job_apply.features.orders import models as _orders_models  # noqa: F401  (register Order)
+from job_apply.features.resumes import models as _resumes_models  # noqa: F401  (register Resume)
 
 config = context.config
 
