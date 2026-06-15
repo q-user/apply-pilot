@@ -121,8 +121,14 @@ class InMemoryCoverLetterStyleRepository:
             style.length = "medium"
         # Normalise list columns to Python lists (decode any string the
         # caller happened to pass, e.g. the model's TEXT default).
-        style.focus_areas = _decode_list(style.focus_areas)
-        style.avoid_phrases = _decode_list(style.avoid_phrases)
+        # The model declares ``focus_areas``/``avoid_phrases`` as
+        # ``Mapped[str]`` (a JSON-encoded string on disk), but the
+        # in-memory repository stores them as ``list[str]`` by design
+        # (see module docstring). The ``ty: ignore`` suppresses the
+        # ``invalid-assignment`` diagnostic that arises from that
+        # intentional type mismatch at the descriptor boundary.
+        style.focus_areas = _decode_list(style.focus_areas)  # ty: ignore[invalid-assignment]
+        style.avoid_phrases = _decode_list(style.avoid_phrases)  # ty: ignore[invalid-assignment]
         style.created_at = datetime.now(UTC)
         self._by_id[style.id] = style
         self._by_user[style.user_id] = style.id
@@ -138,9 +144,10 @@ class InMemoryCoverLetterStyleRepository:
         # Preserve created_at when the caller forgot to pass it through.
         style.created_at = existing.created_at
         style.updated_at = datetime.now(UTC)
-        # Keep lists as lists in the in-memory store.
-        style.focus_areas = _decode_list(style.focus_areas)
-        style.avoid_phrases = _decode_list(style.avoid_phrases)
+        # Keep lists as lists in the in-memory store. See ``create`` for
+        # why ``ty: ignore`` is used here.
+        style.focus_areas = _decode_list(style.focus_areas)  # ty: ignore[invalid-assignment]
+        style.avoid_phrases = _decode_list(style.avoid_phrases)  # ty: ignore[invalid-assignment]
         self._by_id[style.id] = style
         self._by_user[style.user_id] = style.id
         return style
@@ -186,14 +193,24 @@ class SqlCoverLetterStyleRepository:
         return self._session_factory()
 
     def _ensure_list_columns(self, style: CoverLetterStyle) -> None:
-        """Re-encode the list columns to JSON text before persistence."""
+        """Re-encode the list columns to JSON text before persistence.
+
+        The result of ``_encode_list`` is a JSON string, so the
+        ``Mapped[str]`` type matches and no suppression is needed.
+        """
         style.focus_areas = _encode_list(_decode_list(style.focus_areas))
-        style.avoid_phrases = _encode_list(_decode_list(style.avoid_phrases))
+        style.avoid_phrases = (
+            _encode_list(_decode_list(style.avoid_phrases))
+        )
 
     def _decode_list_columns(self, style: CoverLetterStyle) -> CoverLetterStyle:
-        """Decode the JSON list columns back to Python lists."""
-        style.focus_areas = _decode_list(style.focus_areas)
-        style.avoid_phrases = _decode_list(style.avoid_phrases)
+        """Decode the JSON list columns back to Python lists.
+
+        See :meth:`_ensure_list_columns` for the rationale behind the
+        ``ty: ignore`` markers.
+        """
+        style.focus_areas = _decode_list(style.focus_areas)  # ty: ignore[invalid-assignment]
+        style.avoid_phrases = _decode_list(style.avoid_phrases)  # ty: ignore[invalid-assignment]
         return style
 
     def get_by_user(self, user_id: uuid.UUID) -> CoverLetterStyle | None:

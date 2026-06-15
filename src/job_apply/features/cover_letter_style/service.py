@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from typing import cast
 
 from job_apply.features.cover_letter_style.models import CoverLetterStyle
 from job_apply.features.cover_letter_style.repository import CoverLetterStyleRepository
@@ -23,6 +24,8 @@ from job_apply.features.cover_letter_style.schemas import (
     ALLOWED_TONES,
     CoverLetterStyleRead,
     CoverLetterStyleUpdate,
+    Length,
+    Tone,
 )
 
 # Default values applied when the user has no style yet. Used by
@@ -43,8 +46,8 @@ def _style_to_dto(style: CoverLetterStyle) -> CoverLetterStyleRead:
     return CoverLetterStyleRead(
         id=style.id,
         user_id=style.user_id,
-        tone=style.tone,
-        length=style.length,
+        tone=cast(Tone, style.tone),
+        length=cast(Length, style.length),
         focus_areas=list(style.focus_areas or []),
         avoid_phrases=list(style.avoid_phrases or []),
         extra_instructions=style.extra_instructions,
@@ -158,9 +161,9 @@ class CoverLetterStyleService:
             self._validate_length(payload.length)
             existing.length = payload.length
         if payload.focus_areas is not None:
-            existing.focus_areas = list(payload.focus_areas)
+            existing.focus_areas = list(payload.focus_areas)  # ty: ignore[invalid-assignment]
         if payload.avoid_phrases is not None:
-            existing.avoid_phrases = list(payload.avoid_phrases)
+            existing.avoid_phrases = list(payload.avoid_phrases)  # ty: ignore[invalid-assignment]
         if "extra_instructions" in payload.model_fields_set:
             existing.extra_instructions = payload.extra_instructions
         updated = self._repo.update(existing)
