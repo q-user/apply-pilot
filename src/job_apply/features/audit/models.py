@@ -33,6 +33,7 @@ class AuditEventType(StrEnum):
     TELEGRAM_LINK = "telegram_link"
     RESUME_UPLOAD = "resume_upload"
     PROFILE_UPDATE = "profile_update"
+    VACANCY_MATCH_REJECTED = "vacancy_match_rejected"
 
 
 class AuditLog(Base):

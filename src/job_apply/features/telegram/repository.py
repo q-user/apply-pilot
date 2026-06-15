@@ -36,6 +36,8 @@ class TelegramAccountRepository(Protocol):
 
     def list_all(self) -> Sequence[TelegramAccount]: ...
 
+    def find_by_telegram_user_id(self, telegram_user_id: int) -> TelegramAccount | None: ...
+
 
 # ---------------------------------------------------------------------------
 # In-memory implementation
@@ -85,6 +87,19 @@ class InMemoryTelegramAccountRepository:
         the broadcast is deterministic within a single process.
         """
         return list(self._by_id.values())
+
+    def find_by_telegram_user_id(self, telegram_user_id: int) -> TelegramAccount | None:
+        """Return the linked :class:`TelegramAccount` for ``telegram_user_id``.
+
+        Used by command handlers (e.g. ``/reject``) that receive the
+        Telegram user id from an incoming update and need to resolve
+        the local user behind it. Returns ``None`` if the Telegram id
+        is not linked.
+        """
+        account_id = self._by_telegram_user_id.get(telegram_user_id)
+        if account_id is None:
+            return None
+        return self._by_id.get(account_id)
 
 
 class _DuplicateTelegramAccountError(Exception):
@@ -168,6 +183,24 @@ class SqlAlchemyTelegramAccountRepository:
         try:
             statement = select(TelegramAccount).order_by(TelegramAccount.linked_at.asc())
             return list(scoped.execute(statement).scalars().all())
+        finally:
+            if self._session is None:
+                scoped.close()
+
+    def find_by_telegram_user_id(self, telegram_user_id: int) -> TelegramAccount | None:
+        """Return the linked :class:`TelegramAccount` for ``telegram_user_id``.
+
+        Used by command handlers (e.g. ``/reject``) that receive the
+        Telegram user id from an incoming update and need to resolve
+        the local user behind it. Returns ``None`` if the Telegram id
+        is not linked.
+        """
+        scoped = self._scope()
+        try:
+            statement = select(TelegramAccount).where(
+                TelegramAccount.telegram_user_id == telegram_user_id
+            )
+            return scoped.execute(statement).scalar_one_or_none()
         finally:
             if self._session is None:
                 scoped.close()

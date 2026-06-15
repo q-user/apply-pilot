@@ -13,12 +13,17 @@ can be injected at construction time for tests or alternative transports.
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
 from typing import Any, cast
 
 import httpx
 
 from job_apply.config import TelegramSettings
+from job_apply.features.telegram.actions.reject import (
+    REJECT_HELP_TEXT,
+    RejectActionHandler,
+    parse_reject_command,
+)
+from job_apply.features.telegram.dto import SendMessageRequest
 from job_apply.features.telegram.linking import (
     InvalidLinkingTokenError,
     TelegramAccountAlreadyLinkedError,
@@ -30,19 +35,6 @@ from job_apply.features.telegram.repository import TelegramAccountRepository
 # client, so the same client can be reused if the bot token is rotated
 # (mostly relevant for tests; production wiring is single-token).
 _TELEGRAM_API_BASE = "https://api.telegram.org"
-
-
-@dataclass(frozen=True)
-class SendMessageRequest:
-    """A minimal DTO describing a chat reply produced by the dispatcher.
-
-    Decoupling the dispatch decision from the HTTP transport keeps the
-    command rules testable in isolation. :class:`TelegramBotProcess` is the
-    only caller that turns these into actual ``sendMessage`` calls.
-    """
-
-    chat_id: int
-    text: str
 
 
 class TelegramBot:
@@ -60,6 +52,7 @@ class TelegramBot:
         http_client: httpx.AsyncClient | None = None,
         linking_service: TelegramLinkingService | None = None,
         telegram_account_repository: TelegramAccountRepository | None = None,
+        reject_handler: RejectActionHandler | None = None,
     ) -> None:
         self._settings = settings
         # Keep the injected reference but do not eagerly create a client:
@@ -72,6 +65,12 @@ class TelegramBot:
         self._linking_service = linking_service
         # Optional repository for persisting linked TelegramAccount rows.
         self._telegram_account_repository = telegram_account_repository
+        # Optional reject action handler. When None, the ``/reject``
+        # command returns a "not available" message; the link between
+        # the dispatcher and the action is dependency-injected so the
+        # bot stays usable in test rigs that only exercise
+        # non-action commands.
+        self._reject_handler = reject_handler
 
     @property
     def settings(self) -> TelegramSettings:
@@ -185,6 +184,12 @@ class TelegramBot:
                 message_text=text,
                 telegram_username=(message.get("from") or {}).get("username"),
             )
+        if command == "reject":
+            return self._handle_reject_command(
+                chat_id=chat_id,
+                telegram_user_id=message.get("from", {}).get("id", 0),
+                message_text=text,
+            )
         return SendMessageRequest(chat_id=chat_id, text=self._fallback_text())
 
     @staticmethod
@@ -233,6 +238,7 @@ class TelegramBot:
             "Available commands:\n"
             "/start — show welcome message and account-linking hint\n"
             "/link — link your Telegram account using the code from the web app\n"
+            "/reject <match_id> [reason] — mark one of your matches as rejected\n"
             "/help — list available commands"
         )
 
@@ -305,6 +311,36 @@ class TelegramBot:
                 "✅ Your Telegram account has been linked successfully! "
                 "You will now receive job alerts and updates here."
             ),
+        )
+
+    def _handle_reject_command(
+        self,
+        *,
+        chat_id: int,
+        telegram_user_id: int,
+        message_text: str,
+    ) -> SendMessageRequest:
+        """Handle the ``/reject <match_id> [reason]`` command.
+
+        The handler is collaborator-injected. When no handler is wired
+        (e.g. the bot is running with a stripped-down set of
+        dependencies for local hacking) the command returns a
+        "not available" message instead of crashing.
+        """
+        if self._reject_handler is None:
+            return SendMessageRequest(
+                chat_id=chat_id,
+                text=("Reject action is not available right now. Please try again later."),
+            )
+
+        command = parse_reject_command(message_text)
+        if command is None:
+            return SendMessageRequest(chat_id=chat_id, text=REJECT_HELP_TEXT)
+
+        return self._reject_handler.handle(
+            chat_id=chat_id,
+            telegram_user_id=telegram_user_id,
+            command=command,
         )
 
     @staticmethod
