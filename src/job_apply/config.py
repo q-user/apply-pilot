@@ -179,3 +179,70 @@ def get_resume_settings() -> ResumeSettings:
     if max_mb <= 0:
         raise ValueError(f"APP_RESUMES_MAX_FILE_SIZE_MB must be a positive integer; got {max_mb}")
     return ResumeSettings(max_file_size_mb=max_mb)
+
+
+# --- HH OAuth settings (M2, issue #19) --------------------------------------
+_HH_OAUTH_DEFAULT_REDIRECT_URI = "http://localhost:8000/hh/oauth/callback"
+
+
+@dataclass(frozen=True)
+class HhOAuthSettings:
+    """Configuration for the hh.ru OAuth2 authorization-code flow.
+
+    All three values are required at runtime for the OAuth endpoints to
+    be useful, but ``redirect_uri`` has a sensible default for local
+    development. ``client_id`` and ``client_secret`` must be set per
+    deployment via the environment.
+
+    Environment variables:
+
+    * ``APP_HH_CLIENT_ID`` (required) - the application id from the
+      hh.ru developer dashboard.
+    * ``APP_HH_CLIENT_SECRET`` (required) - the application secret.
+    * ``APP_HH_REDIRECT_URI`` (optional, default
+      ``http://localhost:8000/hh/oauth/callback``) - the URL hh.ru
+      redirects the user back to. Must match the value registered in
+      the developer dashboard.
+    """
+
+    client_id: str
+    client_secret: str
+    redirect_uri: str = _HH_OAUTH_DEFAULT_REDIRECT_URI
+
+    def __post_init__(self) -> None:
+        if not self.client_id:
+            raise ValueError(
+                "HhOAuthSettings.client_id must be a non-empty string; "
+                "set the APP_HH_CLIENT_ID environment variable."
+            )
+        if not self.client_secret:
+            raise ValueError(
+                "HhOAuthSettings.client_secret must be a non-empty string; "
+                "set the APP_HH_CLIENT_SECRET environment variable."
+            )
+        if not self.redirect_uri:
+            raise ValueError("HhOAuthSettings.redirect_uri must be a non-empty string")
+
+
+def get_hh_oauth_settings() -> HhOAuthSettings:
+    """Build :class:`HhOAuthSettings` from the environment.
+
+    Raises:
+        ValueError: If ``APP_HH_CLIENT_ID`` or ``APP_HH_CLIENT_SECRET``
+            is unset or empty. The check is eager so misconfiguration
+            surfaces at process start, not at the first failed OAuth
+            request.
+    """
+    client_id = os.getenv("APP_HH_CLIENT_ID", "").strip()
+    client_secret = os.getenv("APP_HH_CLIENT_SECRET", "").strip()
+    if not client_id:
+        raise ValueError("APP_HH_CLIENT_ID environment variable must be set to a non-empty value.")
+    if not client_secret:
+        raise ValueError(
+            "APP_HH_CLIENT_SECRET environment variable must be set to a non-empty value."
+        )
+    return HhOAuthSettings(
+        client_id=client_id,
+        client_secret=client_secret,
+        redirect_uri=os.getenv("APP_HH_REDIRECT_URI", _HH_OAUTH_DEFAULT_REDIRECT_URI).strip(),
+    )

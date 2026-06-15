@@ -9,6 +9,33 @@ from __future__ import annotations
 
 from job_apply.features.hh.encryption import CredentialEncryptor as CredentialEncryptor
 from job_apply.features.hh.models import HHCredential as HHCredential
+from job_apply.features.hh.oauth import (
+    HhAuthService as HhAuthService,
+)
+from job_apply.features.hh.oauth import (
+    HhHttpOAuthClient as HhHttpOAuthClient,
+)
+from job_apply.features.hh.oauth import (
+    HhOAuthClient as HhOAuthClient,
+)
+from job_apply.features.hh.oauth import (
+    HhOAuthStateStore as HhOAuthStateStore,
+)
+from job_apply.features.hh.oauth import (
+    HhTokenResponse as HhTokenResponse,
+)
+from job_apply.features.hh.oauth import (
+    InMemoryHhOAuthClient as InMemoryHhOAuthClient,
+)
+from job_apply.features.hh.oauth import (
+    InvalidOAuthStateError as InvalidOAuthStateError,
+)
+from job_apply.features.hh.oauth import (
+    MissingRefreshTokenError as MissingRefreshTokenError,
+)
+from job_apply.features.hh.oauth import (
+    OAuthExchangeError as OAuthExchangeError,
+)
 from job_apply.features.hh.schemas import (
     CredentialCheck as CredentialCheck,
 )
@@ -43,8 +70,17 @@ __all__ = [
     "HHVacancyNotFoundError",
     "HHVacancySearchClient",
     "HHVacancySearchError",
+    "HhAuthService",
+    "HhHttpOAuthClient",
     "HhHttpVacancySearchClient",
+    "HhOAuthClient",
+    "HhOAuthStateStore",
+    "HhTokenResponse",
+    "InMemoryHhOAuthClient",
     "InMemoryHhVacancySearchClient",
     "InternalCredentials",
+    "InvalidOAuthStateError",
+    "MissingRefreshTokenError",
+    "OAuthExchangeError",
     "RedactedCredentials",
 ]
