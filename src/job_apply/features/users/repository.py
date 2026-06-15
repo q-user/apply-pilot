@@ -14,7 +14,7 @@ Two repository implementations live here:
 from __future__ import annotations
 
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from typing import Protocol
 
@@ -25,11 +25,17 @@ from job_apply.features.users.models import User, UserSession
 
 
 class UsersRepository(Protocol):
-    """Minimal interface the AuthService relies on."""
+    """Minimal interface the auth slice relies on.
+
+    The protocol grew ``list_all`` for the daily digest broadcast: the
+    digest iterates every user that has linked a Telegram account, and
+    the stats service needs a single repository that owns that list.
+    """
 
     def create(self, *, email: str, hashed_password: str, is_active: bool) -> User: ...
     def get_by_id(self, user_id: uuid.UUID) -> User | None: ...
     def get_by_email(self, email: str) -> User | None: ...
+    def list_all(self) -> Sequence[User]: ...
 
 
 # ---------------------------------------------------------------------------
@@ -77,6 +83,16 @@ class InMemoryUsersRepository:
         if user_id is None:
             return None
         return self._by_id.get(user_id)
+
+    def list_all(self) -> Sequence[User]:
+        """Return every :class:`User` known to the repository.
+
+        Order is insertion order, which mirrors how production lists
+        users (e.g. ``SELECT * FROM users ORDER BY created_at`` in
+        the SQL implementation). Used by the daily digest broadcast
+        to enumerate the users that have linked a Telegram account.
+        """
+        return list(self._by_id.values())
 
 
 class _DuplicateEmailError(Exception):
@@ -153,6 +169,21 @@ class SqlAlchemyUsersRepository:
         try:
             statement = select(User).where(User.email == normalised)
             return session.execute(statement).scalar_one_or_none()
+        finally:
+            if self._session is None:
+                session.close()
+
+    def list_all(self) -> Sequence[User]:
+        """Return every :class:`User` known to the database.
+
+        Used by the daily digest broadcast to enumerate users; the
+        production ordering (``created_at``) keeps the broadcast
+        deterministic.
+        """
+        session = self._scope()
+        try:
+            statement = select(User).order_by(User.created_at.asc())
+            return list(session.execute(statement).scalars().all())
         finally:
             if self._session is None:
                 session.close()

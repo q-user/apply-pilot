@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "apply-pilot"
-version = "0.6.0"
+version = "0.7.0"
 description = "Telegram-first assistant for finding, scoring, reviewing, and applying to jobs."
 readme = "README.md"
 requires-python = ">=3.13"
@@ -59,6 +59,7 @@ pythonpath = ["src"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+asyncio_mode = "auto"
 addopts = "-v -n auto --cov=src --cov-report=term-missing"
 timeout = 5
 
