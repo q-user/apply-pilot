@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass
+from typing import Any
 
 from job_apply.features.sources.service import SourceService
 
@@ -60,22 +61,23 @@ class VacancySearchService:
     def __init__(
         self,
         *,
-        client: object,
+        client: Any,
         source_service: SourceService,
     ) -> None:
-        # ``client`` is typed as ``object`` because the protocol is
-        # declared on the source slice (HH). Importing the protocol
-        # here would invert the dependency direction (sources → hh).
-        # The structural type is checked at call time via ``search`` /
-        # ``fetch_one`` being async callables; tests use a duck-typed
-        # fake to keep the seam clear.
+        # ``client`` is typed as :class:`Any` because the structural
+        # contract lives in the source slice (e.g.
+        # :class:`job_apply.features.hh.search.HHVacancySearchClient`).
+        # Importing the protocol here would invert the dependency
+        # direction (sources → hh); the duck-typed contract is
+        # documented in the class docstring and asserted by the
+        # in-memory test fake.
         self._client = client
         self._source_service = source_service
 
     async def search_and_ingest(
         self,
         user_id: uuid.UUID,
-        query: object,
+        query: Any,
     ) -> IngestResult:
         """Fetch a batch from the source and persist what is new.
 
