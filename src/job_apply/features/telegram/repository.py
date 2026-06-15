@@ -11,7 +11,7 @@ Two repository implementations live here:
 from __future__ import annotations
 
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from typing import Protocol
 
@@ -22,11 +22,19 @@ from job_apply.features.telegram.models import TelegramAccount
 
 
 class TelegramAccountRepository(Protocol):
-    """Minimal interface the linking flow relies on."""
+    """Minimal interface the telegram slice relies on.
+
+    The protocol is intentionally narrow: every method listed here is
+    used by at least one in-tree consumer, and the
+    :class:`StatsService` (digest slice) only needs ``list_all`` to
+    enumerate the users that have linked a Telegram account.
+    """
 
     def create(
         self, *, user_id: uuid.UUID, telegram_user_id: int, username: str | None = None
     ) -> TelegramAccount: ...
+
+    def list_all(self) -> Sequence[TelegramAccount]: ...
 
 
 # ---------------------------------------------------------------------------
@@ -68,6 +76,15 @@ class InMemoryTelegramAccountRepository:
         self._by_user_id[user_id] = account.id
         self._by_telegram_user_id[telegram_user_id] = account.id
         return account
+
+    def list_all(self) -> Sequence[TelegramAccount]:
+        """Return every linked :class:`TelegramAccount`.
+
+        The digest slice iterates the result to compute per-user stats
+        and broadcast a Telegram message; order is insertion order so
+        the broadcast is deterministic within a single process.
+        """
+        return list(self._by_id.values())
 
 
 class _DuplicateTelegramAccountError(Exception):
@@ -137,6 +154,20 @@ class SqlAlchemyTelegramAccountRepository:
         except Exception:
             scoped.rollback()
             raise
+        finally:
+            if self._session is None:
+                scoped.close()
+
+    def list_all(self) -> Sequence[TelegramAccount]:
+        """Return every linked :class:`TelegramAccount`.
+
+        Read-only and side-effect free; used by the digest slice to
+        enumerate the users that should receive a daily digest.
+        """
+        scoped = self._scope()
+        try:
+            statement = select(TelegramAccount).order_by(TelegramAccount.linked_at.asc())
+            return list(scoped.execute(statement).scalars().all())
         finally:
             if self._session is None:
                 scoped.close()

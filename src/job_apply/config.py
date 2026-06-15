@@ -246,3 +246,46 @@ def get_hh_oauth_settings() -> HhOAuthSettings:
         client_secret=client_secret,
         redirect_uri=os.getenv("APP_HH_REDIRECT_URI", _HH_OAUTH_DEFAULT_REDIRECT_URI).strip(),
     )
+
+
+# --- Digest settings (M4, issue #35) ----------------------------------------
+_DIGEST_DEFAULT_HOUR_UTC = 9
+
+
+@dataclass(frozen=True)
+class DigestSettings:
+    """Configuration for the daily Telegram digest slice.
+
+    Attributes:
+        digest_hour_utc: Hour of the day (UTC, 0-23) at which the
+            digest runner fires. Defaults to 9 to match the documented
+            behaviour ("daily Telegram statistics digest" sent in the
+            morning UTC).
+
+    Environment variables:
+
+    * ``APP_DIGEST_HOUR_UTC`` (optional, default ``9``) — see
+      :attr:`digest_hour_utc`.
+    """
+
+    digest_hour_utc: int = _DIGEST_DEFAULT_HOUR_UTC
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.digest_hour_utc <= 23:
+            raise ValueError(
+                f"DigestSettings.digest_hour_utc must be in [0, 23]; got {self.digest_hour_utc}"
+            )
+
+
+def get_digest_settings() -> DigestSettings:
+    """Build :class:`DigestSettings` from the environment.
+
+    Surfaces a clear error when the configured hour is out of range
+    so a typo (e.g. ``24``) fails fast at process start.
+    """
+    raw = os.getenv("APP_DIGEST_HOUR_UTC", str(_DIGEST_DEFAULT_HOUR_UTC))
+    try:
+        hour = int(raw)
+    except ValueError as exc:
+        raise ValueError(f"APP_DIGEST_HOUR_UTC must be an integer; got {raw!r}") from exc
+    return DigestSettings(digest_hour_utc=hour)
