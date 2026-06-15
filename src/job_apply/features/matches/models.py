@@ -28,6 +28,7 @@ from enum import StrEnum
 
 from sqlalchemy import (
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -96,6 +97,16 @@ class VacancyMatch(Base):
     )
     score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     match_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: LLM prompt template version that produced the score, when one
+    #: is known. Populated by the scoring pipeline (issue #29); kept
+    #: here so a match row carries the full provenance of its score.
+    prompt_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    #: The LLM's confidence in the score, in ``[0.0, 1.0]``. ``None``
+    #: until the scoring pipeline has run.
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    #: When the scoring pipeline last produced a verdict for this
+    #: match. ``None`` while the match is still in the ``"new"`` or
+    #: ``"review"`` state.
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -103,6 +114,7 @@ class VacancyMatch(Base):
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), onupdate=func.now(), nullable=True
     )
+    scored_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return (

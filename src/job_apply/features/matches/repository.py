@@ -27,7 +27,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
-from job_apply.features.matches.models import VacancyMatch
+from job_apply.features.matches.models import MatchStatus, VacancyMatch
 from job_apply.features.search_profiles.models import SearchProfile
 from job_apply.shared.errors import NotFoundError
 
@@ -64,6 +64,21 @@ class VacancyMatchRepository(Protocol):
         *,
         score: int | None = None,
     ) -> VacancyMatch: ...
+    def update_scoring(
+        self,
+        match_id: uuid.UUID,
+        *,
+        score: int,
+        explanation: str,
+        prompt_version: str,
+        confidence: float,
+        scored_at: datetime,
+    ) -> VacancyMatch: ...
+    def list_pending(
+        self,
+        *,
+        limit: int = 50,
+    ) -> Sequence[VacancyMatch]: ...
 
 
 # ---------------------------------------------------------------------------
@@ -161,6 +176,56 @@ class InMemoryVacancyMatchRepository:
         match.updated_at = datetime.now(UTC)
         return match
 
+    def update_scoring(
+        self,
+        match_id: uuid.UUID,
+        *,
+        score: int,
+        explanation: str,
+        prompt_version: str,
+        confidence: float,
+        scored_at: datetime,
+    ) -> VacancyMatch:
+        """Persist the LLM scoring outcome for ``match_id``.
+
+        The repository writes the full ``(score, explanation,
+        prompt_version, confidence, scored_at)`` quartet in a single
+        call so the orchestrator never holds partial state. The
+        ``status`` is *not* updated here — callers that want to flip
+        to ``"scored"`` should follow up with :meth:`update_status`
+        or build a dedicated ``mark_scored`` helper.
+        """
+        match = self._by_id.get(match_id)
+        if match is None:
+            raise NotFoundError(f"vacancy match {match_id} not found")
+        match.score = score
+        match.match_reason = explanation
+        match.prompt_version = prompt_version
+        match.confidence = confidence
+        match.scored_at = scored_at
+        match.updated_at = datetime.now(UTC)
+        return match
+
+    def list_pending(
+        self,
+        *,
+        limit: int = 50,
+    ) -> Sequence[VacancyMatch]:
+        """Return matches that need scoring: ``status`` is ``"new"`` or
+        ``"review"`` and the ``score`` column is still unset.
+
+        The implementation is a linear scan over the dict; the
+        in-memory fake is for tests, not for production load.
+        """
+        out: list[VacancyMatch] = []
+        for m in self._by_id.values():
+            if m.score is not None:
+                continue
+            if m.status in (MatchStatus.NEW.value, MatchStatus.REVIEW.value):
+                out.append(m)
+        out.sort(key=lambda m: m.created_at)
+        return out[:limit]
+
 
 # ---------------------------------------------------------------------------
 # SQLAlchemy implementation
@@ -235,6 +300,70 @@ class SqlVacancyMatchRepository:
         except Exception:
             session.rollback()
             raise
+        finally:
+            session.close()
+
+    def update_scoring(
+        self,
+        match_id: uuid.UUID,
+        *,
+        score: int,
+        explanation: str,
+        prompt_version: str,
+        confidence: float,
+        scored_at: datetime,
+    ) -> VacancyMatch:
+        """Persist the LLM scoring outcome for ``match_id``.
+
+        Mirrors the in-memory implementation: writes the full
+        ``(score, explanation, prompt_version, confidence,
+        scored_at)`` quartet in a single transaction.
+        """
+        session = self._scope()
+        try:
+            match = session.get(VacancyMatch, match_id)
+            if match is None:
+                raise NotFoundError(f"vacancy match {match_id} not found")
+            match.score = score
+            match.match_reason = explanation
+            match.prompt_version = prompt_version
+            match.confidence = confidence
+            match.scored_at = scored_at
+            session.commit()
+            session.refresh(match)
+            return match
+        except NotFoundError:
+            session.rollback()
+            raise
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    def list_pending(
+        self,
+        *,
+        limit: int = 50,
+    ) -> Sequence[VacancyMatch]:
+        """Return up to ``limit`` matches that need scoring.
+
+        "Pending" matches are those in ``"new"`` or ``"review"``
+        status with a ``NULL`` score. Results are ordered by
+        ``created_at`` so the oldest matches are scored first.
+        """
+        session = self._scope()
+        try:
+            statement = (
+                select(VacancyMatch)
+                .where(
+                    VacancyMatch.status.in_([MatchStatus.NEW.value, MatchStatus.REVIEW.value]),
+                    VacancyMatch.score.is_(None),
+                )
+                .order_by(VacancyMatch.created_at.asc())
+                .limit(limit)
+            )
+            return list(session.execute(statement).scalars().all())
         finally:
             session.close()
 
