@@ -9,6 +9,12 @@ from sqlalchemy import engine_from_config, pool
 from job_apply.config import get_database_settings
 from job_apply.db import Base
 from job_apply.features.audit import models as _audit_models  # noqa: F401  (register AuditLog)
+from job_apply.features.cover_letter import (
+    models as _cover_letter_models,  # noqa: F401  (register CoverLetterDraft)
+)
+from job_apply.features.cover_letter_style import (
+    models as _cover_letter_style_models,  # noqa: F401  (register CoverLetterStyle)
+)
 from job_apply.features.hh import models as _hh_models  # noqa: F401  (register HHCredential)
 from job_apply.features.matches import (
     models as _matches_models,  # noqa: F401  (register VacancyMatch)
