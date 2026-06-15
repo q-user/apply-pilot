@@ -1,4 +1,4 @@
-"""HH credentials vertical slice.
+"""HH vertical slice.
 
 Exports the public surface of the ``features/hh`` package so other
 slices can reference ``HHCredential``, ``HHCredentialService``, etc.
@@ -48,20 +48,36 @@ from job_apply.features.hh.schemas import (
 from job_apply.features.hh.schemas import (
     RedactedCredentials as RedactedCredentials,
 )
+from job_apply.features.hh.search import HhHttpVacancySearchClient as HhHttpVacancySearchClient
+from job_apply.features.hh.search import HHQuery as HHQuery
+from job_apply.features.hh.search import HHRateLimitError as HHRateLimitError
+from job_apply.features.hh.search import HHVacancyNotFoundError as HHVacancyNotFoundError
+from job_apply.features.hh.search import HHVacancySearchClient as HHVacancySearchClient
+from job_apply.features.hh.search import HHVacancySearchError as HHVacancySearchError
+from job_apply.features.hh.search import (
+    InMemoryHhVacancySearchClient as InMemoryHhVacancySearchClient,
+)
 from job_apply.features.hh.service import HHCredentialService as HHCredentialService
 
 __all__ = [
     "CredentialCheck",
     "CredentialEncryptor",
     "CredentialsStoreRequest",
+    "HHQuery",
+    "HHRateLimitError",
     "HHCredential",
     "HHCredentialService",
+    "HHVacancyNotFoundError",
+    "HHVacancySearchClient",
+    "HHVacancySearchError",
     "HhAuthService",
     "HhHttpOAuthClient",
+    "HhHttpVacancySearchClient",
     "HhOAuthClient",
     "HhOAuthStateStore",
     "HhTokenResponse",
     "InMemoryHhOAuthClient",
+    "InMemoryHhVacancySearchClient",
     "InternalCredentials",
     "InvalidOAuthStateError",
     "MissingRefreshTokenError",
