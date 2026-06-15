@@ -30,14 +30,20 @@ from job_apply.features.sources.repository import (
     SqlVacancyRepository,
     VacancyRepository,
 )
+from job_apply.features.sources.search_service import IngestResult as IngestResult
+from job_apply.features.sources.search_service import (
+    VacancySearchService as VacancySearchService,
+)
 from job_apply.features.sources.service import SourceService
 
 __all__ = [
     "InMemoryVacancyRepository",
+    "IngestResult",
     "SourceService",
     "SqlVacancyRepository",
     "Vacancy",
     "VacancyDeduplicator",
     "VacancyNormalizer",
     "VacancyRepository",
+    "VacancySearchService",
 ]

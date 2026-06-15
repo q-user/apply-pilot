@@ -244,8 +244,13 @@ class MatchService:
         through to the per-row :meth:`create` path.
         """
         repo = self._match_repo
-        if hasattr(repo, "bulk_create_ignore_conflicts"):
-            repo.bulk_create_ignore_conflicts(matches)  # type: ignore[attr-defined]
+        # ``getattr`` with a default is the standard Python idiom for
+        # optional capability detection. It also keeps strict type
+        # checkers (``ty``) from falling back to ``object`` after
+        # ``hasattr`` on a Protocol-typed value.
+        bulk_method = getattr(repo, "bulk_create_ignore_conflicts", None)
+        if bulk_method is not None:
+            bulk_method(matches)
             return
         for match in matches:
             repo.create(match)
