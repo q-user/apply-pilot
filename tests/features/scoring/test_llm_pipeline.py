@@ -35,6 +35,10 @@ from job_apply.features.scoring.llm import (
     parse_score_response,
 )
 from job_apply.features.scoring.prompts import build_vacancy_scoring_prompt
+from job_apply.features.scoring.registry import (
+    InMemoryPromptVersionRegistry,
+    PromptVersion,
+)
 from job_apply.features.scoring.service import ScoringService
 from job_apply.features.search_profiles.models import SearchProfile
 from job_apply.features.sources.models import Vacancy
@@ -402,6 +406,117 @@ class TestLLMScorer:
         await scorer.score(vacancy, profile, resume_text="ResumeText123")
 
         assert any("ResumeText123" in p for p in seen_prompts)
+
+    @pytest.mark.asyncio
+    async def test_prompt_version_comes_from_registry_when_provided(
+        self, vacancy: Vacancy, profile: SearchProfile
+    ) -> None:
+        """An injected registry overrides the hardcoded fallback version stamp."""
+        from datetime import UTC, datetime
+
+        registry = InMemoryPromptVersionRegistry()
+        registry.register(
+            PromptVersion(
+                name="vacancy_scoring",
+                version="1.2.3",
+                template="custom template body",
+                is_active=True,
+                created_at=datetime(2026, 6, 16, 0, 0, 0, tzinfo=UTC),
+            )
+        )
+        client = InMemoryLLMClient(
+            responses={
+                WILDCARD_PROMPT: json.dumps(
+                    {"score": 88, "explanation": "great", "confidence": 0.9}
+                )
+            }
+        )
+        scorer = LLMScorer(llm=client, registry=registry)
+
+        result = await scorer.score(vacancy, profile, resume_text=None)
+
+        assert result.prompt_version == "vacancy_scoring@1.2.3"
+
+    @pytest.mark.asyncio
+    async def test_prompt_version_falls_back_to_hardcoded_when_registry_is_none(
+        self, vacancy: Vacancy, profile: SearchProfile
+    ) -> None:
+        """No registry -> the canonical constant is used."""
+        client = InMemoryLLMClient(
+            responses={
+                WILDCARD_PROMPT: json.dumps(
+                    {"score": 88, "explanation": "great", "confidence": 0.9}
+                )
+            }
+        )
+        scorer = LLMScorer(llm=client)
+
+        result = await scorer.score(vacancy, profile, resume_text=None)
+
+        assert result.prompt_version == "vacancy_scoring@1.0.0"
+
+    @pytest.mark.asyncio
+    async def test_prompt_version_falls_back_when_registry_has_no_active(
+        self, vacancy: Vacancy, profile: SearchProfile
+    ) -> None:
+        """An empty registry falls back to the hardcoded constant."""
+        registry = InMemoryPromptVersionRegistry()
+        client = InMemoryLLMClient(
+            responses={
+                WILDCARD_PROMPT: json.dumps(
+                    {"score": 88, "explanation": "great", "confidence": 0.9}
+                )
+            }
+        )
+        scorer = LLMScorer(llm=client, registry=registry)
+
+        result = await scorer.score(vacancy, profile, resume_text=None)
+
+        assert result.prompt_version == "vacancy_scoring@1.0.0"
+
+    @pytest.mark.asyncio
+    async def test_prompt_version_uses_active_version_after_set_active(
+        self, vacancy: Vacancy, profile: SearchProfile
+    ) -> None:
+        """The scorer tracks ``set_active`` flips on the registry."""
+        from datetime import UTC, datetime
+
+        registry = InMemoryPromptVersionRegistry()
+        registry.register(
+            PromptVersion(
+                name="vacancy_scoring",
+                version="1.0.0",
+                template="v1",
+                is_active=True,
+                created_at=datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC),
+            )
+        )
+        registry.register(
+            PromptVersion(
+                name="vacancy_scoring",
+                version="2.0.0",
+                template="v2",
+                is_active=False,
+                created_at=datetime(2026, 6, 1, 0, 0, 0, tzinfo=UTC),
+            )
+        )
+        client = InMemoryLLMClient(
+            responses={
+                WILDCARD_PROMPT: json.dumps(
+                    {"score": 88, "explanation": "great", "confidence": 0.9}
+                )
+            }
+        )
+        scorer = LLMScorer(llm=client, registry=registry)
+
+        # Before flip: v1 is active.
+        result_v1 = await scorer.score(vacancy, profile, resume_text=None)
+        assert result_v1.prompt_version == "vacancy_scoring@1.0.0"
+
+        # Flip to v2 and re-score.
+        registry.set_active("vacancy_scoring", "2.0.0")
+        result_v2 = await scorer.score(vacancy, profile, resume_text=None)
+        assert result_v2.prompt_version == "vacancy_scoring@2.0.0"
 
 
 # ---------------------------------------------------------------------------

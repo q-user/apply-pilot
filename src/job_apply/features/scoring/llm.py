@@ -36,6 +36,18 @@ from job_apply.features.scoring.prompts import (
     VACANCY_SCORING_PROMPT_VERSION,
     build_vacancy_scoring_prompt,
 )
+from job_apply.features.scoring.registry import PromptVersionRegistry
+
+#: The prompt name the LLM scoring pipeline looks up in the registry.
+#: Stored as a module constant so the scorer and its tests agree on the
+#: key without repeating the literal everywhere.
+LLM_SCORING_PROMPT_NAME: str = "vacancy_scoring"
+
+#: Default version stamp applied when the scorer has no registry or the
+#: registry has no active version for ``LLM_SCORING_PROMPT_NAME``. Mirrors
+#: the canonical ``vacancy_scoring@1.0.0`` template in
+#: :mod:`job_apply.features.scoring.prompts`.
+DEFAULT_VACANCY_SCORING_PROMPT_VERSION: str = VACANCY_SCORING_PROMPT_VERSION
 
 # ---------------------------------------------------------------------------
 # Settings
@@ -166,13 +178,19 @@ class InMemoryLLMClient:
         temperature: float = 0.2,
         max_tokens: int = 1024,
     ) -> str:
-        value = self._responses.get(WILDCARD_PROMPT)
-        if value is not None:
-            return value(prompt) if callable(value) else value
+        wildcard = self._responses.get(WILDCARD_PROMPT)
+        if wildcard is not None:
+            # ``isinstance`` narrowing keeps ``ty`` happy: a ``str`` cannot
+            # be called, only the callable branch can invoke ``wildcard(prompt)``.
+            if isinstance(wildcard, str):
+                return wildcard
+            return wildcard(prompt)
         if prompt not in self._responses:
             raise KeyError(f"InMemoryLLMClient has no response for prompt: {prompt[:80]!r}...")
         value = self._responses[prompt]
-        return value(prompt) if callable(value) else value
+        if isinstance(value, str):
+            return value
+        return value(prompt)
 
 
 # ---------------------------------------------------------------------------
@@ -389,12 +407,43 @@ class LLMScorer:
     a concrete implementation, so tests can swap in
     :class:`InMemoryLLMClient` and production wires
     :class:`HttpLLMClient`.
+
+    The optional :class:`PromptVersionRegistry` is the source of truth
+    for the ``prompt_version`` stamp on the produced :class:`ScoreResult`:
+    when one is injected, the scorer looks up the active
+    :data:`LLM_SCORING_PROMPT_NAME` (``"vacancy_scoring"``) row and uses
+    ``f"{name}@{version}"`` as the stamp. When the registry is ``None``
+    or has no active version for that name, the scorer falls back to
+    :data:`VACANCY_SCORING_PROMPT_VERSION`. The fallback keeps the
+    scorer usable in tests and in the CLI script before the registry
+    has been seeded.
     """
 
-    __slots__ = ("_llm",)
+    __slots__ = ("_llm", "_registry")
 
-    def __init__(self, llm: LLMClient) -> None:
+    def __init__(
+        self,
+        llm: LLMClient,
+        *,
+        registry: PromptVersionRegistry | None = None,
+    ) -> None:
         self._llm = llm
+        self._registry = registry
+
+    def _resolve_prompt_version(self) -> str:
+        """Return the ``prompt_version`` stamp to apply to the next result.
+
+        Prefers the active row in :attr:`_registry`; falls back to
+        :data:`VACANCY_SCORING_PROMPT_VERSION` when no registry is
+        injected or the registry has no active version for the
+        :data:`LLM_SCORING_PROMPT_NAME` prompt family.
+        """
+        if self._registry is None:
+            return VACANCY_SCORING_PROMPT_VERSION
+        active = self._registry.get_active(LLM_SCORING_PROMPT_NAME)
+        if active is None:
+            return VACANCY_SCORING_PROMPT_VERSION
+        return f"{active.name}@{active.version}"
 
     async def score(
         self,
@@ -407,9 +456,11 @@ class LLMScorer:
 
         The LLM is expected to return a strict JSON object that
         :func:`parse_score_response` can decode. The scorer's
-        ``prompt_version`` is set from the canonical
+        ``prompt_version`` is resolved from the injected
+        :class:`PromptVersionRegistry` when one is available; otherwise
+        it falls back to the canonical
         :data:`~job_apply.features.scoring.prompts.VACANCY_SCORING_PROMPT_VERSION`
-        constant — the LLM's own ``prompt_version`` field, if any, is
+        constant. The LLM's own ``prompt_version`` field, if any, is
         discarded.
         """
         prompt = build_vacancy_scoring_prompt(vacancy, profile, resume_text=resume_text)
@@ -418,14 +469,16 @@ class LLMScorer:
         return ScoreResult(
             score=result.score,
             explanation=result.explanation,
-            prompt_version=VACANCY_SCORING_PROMPT_VERSION,
+            prompt_version=self._resolve_prompt_version(),
             confidence=result.confidence,
         )
 
 
 __all__ = [
+    "DEFAULT_VACANCY_SCORING_PROMPT_VERSION",
     "HttpLLMClient",
     "InMemoryLLMClient",
+    "LLM_SCORING_PROMPT_NAME",
     "LLMClient",
     "LLMScoreParseError",
     "LLMScorer",

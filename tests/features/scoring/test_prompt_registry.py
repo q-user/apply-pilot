@@ -29,6 +29,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from job_apply.db import Base
 from job_apply.features.scoring import models as _scoring_models  # noqa: F401
+from job_apply.features.scoring.models import PromptVersionRow
 from job_apply.features.scoring.registry import (
     InMemoryPromptVersionRegistry,
     PromptVersion,
@@ -219,9 +220,20 @@ def test_in_memory_set_active_raises_for_unknown_version(
 
 @pytest.fixture
 def engine() -> Iterator[Engine]:
-    """Yield a fresh in-memory sqlite engine with all tables created."""
+    """Yield a fresh in-memory sqlite engine with the ``prompt_versions`` table.
+
+    Only the :class:`PromptVersionRow` table is created — the registry tests
+    do not depend on any other slice's schema, and scoping ``create_all`` to
+    a single table makes the fixture robust against cross-test model
+    registration. Other test modules in the scoring directory import
+    ``search_profiles`` / ``vacancies`` etc. (via ``service.py`` /
+    ``llm.py``); those models live in ``Base.metadata`` once any test file
+    is collected, and creating them here would fail their FK constraints
+    (``search_profiles`` references ``users``) without dragging the whole
+    schema in.
+    """
     eng = create_engine("sqlite:///:memory:")
-    Base.metadata.create_all(bind=eng)
+    Base.metadata.create_all(bind=eng, tables=[PromptVersionRow.__table__])
     try:
         yield eng
     finally:
