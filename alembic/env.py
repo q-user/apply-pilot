@@ -15,6 +15,9 @@ from job_apply.features.matches import (
 )
 from job_apply.features.orders import models as _orders_models  # noqa: F401  (register Order)
 from job_apply.features.resumes import models as _resumes_models  # noqa: F401  (register Resume)
+from job_apply.features.scoring import (
+    models as _scoring_models,  # noqa: F401  (register PromptVersionRow)
+)
 from job_apply.features.search_profiles import (
     models as _sp_models,  # noqa: F401  (register SearchProfile)
 )
