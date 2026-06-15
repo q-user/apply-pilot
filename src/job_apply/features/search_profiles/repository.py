@@ -28,6 +28,7 @@ class SearchProfileRepository(Protocol):
     def create(self, profile: SearchProfile) -> SearchProfile: ...
     def get_by_id(self, profile_id: uuid.UUID) -> SearchProfile | None: ...
     def list_by_user(self, user_id: uuid.UUID) -> Sequence[SearchProfile]: ...
+    def list_active(self) -> Sequence[SearchProfile]: ...
     def update(self, profile: SearchProfile) -> SearchProfile: ...
     def delete(self, profile: SearchProfile) -> None: ...
 
@@ -60,6 +61,14 @@ class InMemorySearchProfileRepository:
     def list_by_user(self, user_id: uuid.UUID) -> Sequence[SearchProfile]:
         ids = self._by_user.get(user_id, ())
         return [self._by_id[pid] for pid in ids]
+
+    def list_active(self) -> Sequence[SearchProfile]:
+        """Return every profile flagged ``is_active=True``.
+
+        Used by the matches slice to fan out an ingest batch across
+        every active search profile; inactive profiles are skipped.
+        """
+        return [p for p in self._by_id.values() if p.is_active]
 
     def update(self, profile: SearchProfile) -> SearchProfile:
         profile.updated_at = datetime.now(UTC)
@@ -123,6 +132,18 @@ class SqlSearchProfileRepository:
             statement = (
                 select(SearchProfile)
                 .where(SearchProfile.user_id == user_id)
+                .order_by(SearchProfile.created_at.desc())
+            )
+            return list(session.execute(statement).scalars().all())
+        finally:
+            session.close()
+
+    def list_active(self) -> Sequence[SearchProfile]:
+        session = self._scope()
+        try:
+            statement = (
+                select(SearchProfile)
+                .where(SearchProfile.is_active.is_(True))
                 .order_by(SearchProfile.created_at.desc())
             )
             return list(session.execute(statement).scalars().all())
