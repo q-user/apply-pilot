@@ -7,7 +7,8 @@ wrapper used by the dispatcher; cross-slice dependencies stay on
 :mod:`job_apply.runtime.process` and :mod:`job_apply.config`.
 """
 
-from job_apply.features.telegram.bot import SendMessageRequest, TelegramBot, TelegramSettings
+from job_apply.features.telegram.bot import TelegramBot, TelegramSettings
+from job_apply.features.telegram.dto import SendMessageRequest
 from job_apply.features.telegram.linking import (
     InvalidLinkingTokenError,
     TelegramAccountAlreadyLinkedError,
