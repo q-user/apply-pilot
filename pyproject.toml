@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "apply-pilot"
-version = "0.3.0"
+version = "0.4.0"
 description = "Telegram-first assistant for finding, scoring, reviewing, and applying to jobs."
 readme = "README.md"
 requires-python = ">=3.13"
@@ -20,6 +20,8 @@ dependencies = [
     "httpx>=0.28.1",
     "fakeredis>=2.36.1",
     "cryptography>=46.0.0",
+    "pypdf>=4.0.0",
+    "python-docx>=1.0.0",
 ]
 
 [project.scripts]

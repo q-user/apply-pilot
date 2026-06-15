@@ -9,7 +9,9 @@ slice itself.
 from __future__ import annotations
 
 from job_apply.features.resumes.extractors import (
+    DocxTextExtractor,
     ExtractionNotSupportedError,
+    PdfTextExtractor,
     PlainTextExtractor,
     TextExtractor,
 )
@@ -19,7 +21,9 @@ from job_apply.features.resumes.schemas import ResumeDTO, ResumeListResponse, Up
 from job_apply.features.resumes.service import ResumesService
 
 __all__ = [
+    "DocxTextExtractor",
     "ExtractionNotSupportedError",
+    "PdfTextExtractor",
     "PlainTextExtractor",
     "Resume",
     "ResumeDTO",

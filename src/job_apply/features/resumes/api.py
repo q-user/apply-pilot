@@ -38,7 +38,11 @@ from sqlalchemy.orm import Session
 from job_apply.db import get_db
 from job_apply.features.audit.models import AuditEventType
 from job_apply.features.audit.service import AuditService, get_audit_service
-from job_apply.features.resumes.extractors import PlainTextExtractor
+from job_apply.features.resumes.extractors import (
+    DocxTextExtractor,
+    PdfTextExtractor,
+    PlainTextExtractor,
+)
 from job_apply.features.resumes.repository import ResumesRepository
 from job_apply.features.resumes.schemas import ResumeDTO, ResumeListResponse, UploadedFile
 from job_apply.features.resumes.service import ResumesService
@@ -88,9 +92,20 @@ StubAuthDep = Annotated[uuid.UUID, Depends(_stub_current_user)]
 
 def _build_service(db: Session) -> ResumesService:
     """Build a fully-wired :class:`ResumesService` for a single request."""
+    # ``extractor`` accepts either a single :class:`TextExtractor` or a
+    # ``Mapping[str, TextExtractor]``. The production wiring uses the
+    # mapping form so every supported MIME type is registered explicitly
+    # and dispatch is auditable in one place.
     return ResumesService(
         repository=ResumesRepository(db),
-        extractor=PlainTextExtractor(),
+        extractor={
+            "text/plain": PlainTextExtractor(),
+            "text/markdown": PlainTextExtractor(),
+            "application/pdf": PdfTextExtractor(),
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document": (
+                DocxTextExtractor()
+            ),
+        },
     )
 
 

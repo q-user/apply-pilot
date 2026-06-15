@@ -17,6 +17,7 @@ repository for an in-memory fake and the extractor for a stub.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Mapping
 
 from job_apply.config import ResumeSettings, get_resume_settings
 from job_apply.features.resumes.extractors import (
@@ -36,9 +37,10 @@ from job_apply.shared.errors import NotFoundError, ValidationError
 class ResumesService:
     """Use cases for the resumes slice."""
 
-    #: MIME types the API will accept. PDF and DOCX pass the allow-list
-    #: at the service layer but are rejected by the extractor with a
-    #: ``NotImplementedError`` until ``pypdf`` / ``python-docx`` land.
+    #: MIME types the API will accept. Each one is dispatched to the
+    #: matching :class:`TextExtractor` registered in ``_extractors``;
+    #: unknown types are rejected by :meth:`_validate_upload` with
+    #: :class:`ValidationError` *before* extraction is attempted.
     ALLOWED_CONTENT_TYPES: tuple[str, ...] = (
         "text/plain",
         "text/markdown",
@@ -49,11 +51,26 @@ class ResumesService:
     def __init__(
         self,
         repository: ResumesRepository,
-        extractor: TextExtractor,
+        extractor: TextExtractor | Mapping[str, TextExtractor],
         settings: ResumeSettings | None = None,
     ) -> None:
         self._repository = repository
-        self._extractor = extractor
+        # Build a content-type -> extractor registry. Two shapes are supported:
+        #
+        # * a single :class:`TextExtractor` instance — auto-registered for
+        #   every MIME type in its ``SUPPORTED_CONTENT_TYPES`` tuple. This
+        #   keeps the M1 test fixtures (one extractor per test) working
+        #   without forcing them to assemble a full mapping.
+        # * a ``Mapping[str, TextExtractor]`` — the production wiring
+        #   registers every format the API accepts (text, markdown, PDF,
+        #   DOCX) explicitly so dispatch is auditable in one place.
+        if isinstance(extractor, TextExtractor):
+            # All keys map to the same instance; extractors are stateless.
+            self._extractors: dict[str, TextExtractor] = dict.fromkeys(
+                extractor.SUPPORTED_CONTENT_TYPES, extractor
+            )
+        else:
+            self._extractors = dict(extractor)
         self._settings = settings or get_resume_settings()
 
     # ------------------------------------------------------------------
@@ -125,10 +142,29 @@ class ResumesService:
             )
 
     def _extract_text(self, upload: UploadedFile) -> str:
-        """Run the configured extractor, wrapping unsupported content in NotImplementedError."""
+        """Dispatch to the registered extractor for ``upload.content_type``.
+
+        If no extractor is registered for the upload's MIME type — either
+        because the caller injected a single :class:`TextExtractor` that
+        does not cover the format, or because the content type is genuinely
+        unsupported — we surface a clean :class:`ExtractionNotSupportedError`
+        that the FastAPI handler renders as a 501. The chained
+        ``NotImplementedError`` keeps the existing service-layer tests
+        (``pytest.raises(NotImplementedError)``) passing without a
+        signature change.
+        """
+        handler = self._extractors.get(upload.content_type)
+        if handler is None:
+            raise ExtractionNotSupportedError(
+                f"No extractor registered for content type {upload.content_type!r}; "
+                f"supported types: {sorted(self._extractors)}",
+                content_type=upload.content_type,
+            )
         try:
-            return self._extractor.extract(
-                upload.content, content_type=upload.content_type, filename=upload.filename
+            return handler.extract(
+                upload.content,
+                content_type=upload.content_type,
+                filename=upload.filename,
             )
         except ExtractionNotSupportedError as exc:
             # Surface as a generic NotImplementedError so the FastAPI handler
