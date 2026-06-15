@@ -80,6 +80,9 @@ def _match_to_dto(match: VacancyMatch) -> VacancyMatchRead:
         status=match.status,
         score=match.score,
         match_reason=match.match_reason,
+        explanation=match.explanation,
+        prompt_version=match.prompt_version,
+        scored_at=match.scored_at,
         created_at=match.created_at,
         updated_at=match.updated_at,
     )

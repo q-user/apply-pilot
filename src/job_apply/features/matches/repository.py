@@ -259,6 +259,9 @@ class SqlVacancyMatchRepository:
                     "status": m.status or "new",
                     "score": m.score,
                     "match_reason": m.match_reason,
+                    "explanation": m.explanation,
+                    "prompt_version": m.prompt_version,
+                    "scored_at": m.scored_at,
                 }
                 for m in matches
             ]

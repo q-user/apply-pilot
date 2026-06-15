@@ -26,6 +26,9 @@ class VacancyMatchRead(BaseModel):
     status: str
     score: int | None = None
     match_reason: str | None = None
+    explanation: str | None = None
+    prompt_version: str | None = None
+    scored_at: datetime | None = None
     created_at: datetime
     updated_at: datetime | None = None
 
