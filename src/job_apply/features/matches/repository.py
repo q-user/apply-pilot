@@ -27,7 +27,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
-from job_apply.features.matches.models import VacancyMatch
+from job_apply.features.matches.models import MatchStatus, VacancyMatch
 from job_apply.features.search_profiles.models import SearchProfile
 from job_apply.shared.errors import NotFoundError
 
@@ -64,6 +64,17 @@ class VacancyMatchRepository(Protocol):
         *,
         score: int | None = None,
     ) -> VacancyMatch: ...
+    def update_scoring(
+        self,
+        match_id: uuid.UUID,
+        *,
+        score: int,
+        explanation: str,
+        prompt_version: str,
+        confidence: float,
+        scored_at: datetime,
+    ) -> VacancyMatch: ...
+    def list_pending(self, *, limit: int = 50) -> Sequence[VacancyMatch]: ...
 
 
 # ---------------------------------------------------------------------------
@@ -161,6 +172,49 @@ class InMemoryVacancyMatchRepository:
         match.updated_at = datetime.now(UTC)
         return match
 
+    def update_scoring(
+        self,
+        match_id: uuid.UUID,
+        *,
+        score: int,
+        explanation: str,
+        prompt_version: str,
+        confidence: float,
+        scored_at: datetime,
+    ) -> VacancyMatch:
+        """Persist the LLM scoring outcome on a match.
+
+        Also moves the row to :attr:`MatchStatus.SCORED` so the
+        "scored" queue can be filtered without re-querying on score
+        alone. Raises :class:`NotFoundError` if the match does not
+        exist.
+        """
+        match = self._by_id.get(match_id)
+        if match is None:
+            raise NotFoundError(f"vacancy match {match_id} not found")
+        match.score = score
+        match.explanation = explanation
+        match.prompt_version = prompt_version
+        match.confidence = confidence
+        match.scored_at = scored_at
+        match.status = MatchStatus.SCORED.value
+        match.updated_at = datetime.now(UTC)
+        return match
+
+    def list_pending(self, *, limit: int = 50) -> Sequence[VacancyMatch]:
+        """Return matches in ``new``/``review`` with no score yet.
+
+        The slice's :class:`ScoringService` drains this list to keep
+        the queue shallow. Ordering is ``created_at`` ascending so the
+        oldest match is scored first.
+        """
+        pending_statuses = {MatchStatus.NEW.value, MatchStatus.REVIEW.value}
+        matches = [
+            m for m in self._by_id.values() if m.status in pending_statuses and m.score is None
+        ]
+        matches.sort(key=lambda m: m.created_at)
+        return matches[:limit]
+
 
 # ---------------------------------------------------------------------------
 # SQLAlchemy implementation
@@ -235,6 +289,57 @@ class SqlVacancyMatchRepository:
         except Exception:
             session.rollback()
             raise
+        finally:
+            session.close()
+
+    def update_scoring(
+        self,
+        match_id: uuid.UUID,
+        *,
+        score: int,
+        explanation: str,
+        prompt_version: str,
+        confidence: float,
+        scored_at: datetime,
+    ) -> VacancyMatch:
+        """Persist the LLM scoring outcome and move the row to ``scored``."""
+        session = self._scope()
+        try:
+            match = session.get(VacancyMatch, match_id)
+            if match is None:
+                raise NotFoundError(f"vacancy match {match_id} not found")
+            match.score = score
+            match.explanation = explanation
+            match.prompt_version = prompt_version
+            match.confidence = confidence
+            match.scored_at = scored_at
+            match.status = MatchStatus.SCORED.value
+            session.commit()
+            session.refresh(match)
+            return match
+        except NotFoundError:
+            session.rollback()
+            raise
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    def list_pending(self, *, limit: int = 50) -> Sequence[VacancyMatch]:
+        """Return ``new``/``review`` matches that have not been scored yet."""
+        session = self._scope()
+        try:
+            statement = (
+                select(VacancyMatch)
+                .where(
+                    VacancyMatch.status.in_([MatchStatus.NEW.value, MatchStatus.REVIEW.value]),
+                    VacancyMatch.score.is_(None),
+                )
+                .order_by(VacancyMatch.created_at.asc())
+                .limit(limit)
+            )
+            return list(session.execute(statement).scalars().all())
         finally:
             session.close()
 

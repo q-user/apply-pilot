@@ -28,6 +28,7 @@ from enum import StrEnum
 
 from sqlalchemy import (
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -97,12 +98,16 @@ class VacancyMatch(Base):
     score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     match_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # -- LLM scoring fields (M3, issue #30) -------------------------------
+    # -- LLM scoring fields (M3, issues #29 + #30) ------------------------
     # ``explanation`` and ``prompt_version`` are populated together with
     # ``score`` by the LLM scoring pipeline (issue #29). All three are
     # NULL on freshly-ingested matches so the migration is additive.
+    # ``confidence`` (issue #29) carries the LLM's self-reported
+    # certainty in [0.0, 1.0]. ``scored_at`` is the UTC timestamp of
+    # the scoring call.
     explanation: Mapped[str | None] = mapped_column(Text, nullable=True)
     prompt_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     scored_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
