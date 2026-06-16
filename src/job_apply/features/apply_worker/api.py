@@ -14,6 +14,10 @@ Endpoints
 * ``POST /apply-jobs/enqueue/{match_id}`` — idempotently enqueue an
   apply job for an accepted match.
 * ``POST /apply-jobs/{id}/cancel`` — cancel a queued job.
+* ``GET /apply-history`` — combined view of the caller's apply
+  history across all of their apply jobs (M6, issue #54); supports
+  ``job_id`` and ``status`` filters plus ``limit`` / ``offset``
+  pagination.
 
 All endpoints require a valid bearer token, resolved through the
 ``default_token_store`` configured by the ``users`` slice. The service
@@ -26,8 +30,9 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Sequence
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
@@ -37,6 +42,7 @@ from job_apply.features.apply_worker.limits import (
     RateLimiter,
     SqlRateLimiter,
 )
+from job_apply.features.apply_worker.models import ApplyStatusHistory
 from job_apply.features.apply_worker.repository import (
     SqlApplyJobRepository,
     SqlApplyStatusHistoryRepository,
@@ -44,9 +50,11 @@ from job_apply.features.apply_worker.repository import (
 from job_apply.features.apply_worker.schemas import (
     ApplyJobRead,
     ApplyRateLimitRead,
+    ApplyStatusHistoryList,
     ApplyStatusHistoryRead,
     apply_job_to_dto,
     apply_rate_limit_to_dto,
+    apply_status_history_list_to_dto,
     apply_status_history_to_dto,
 )
 from job_apply.features.apply_worker.service import (
@@ -60,6 +68,16 @@ from job_apply.features.apply_worker.service import (
 from job_apply.features.matches.repository import SqlVacancyMatchRepository
 from job_apply.features.search_profiles.repository import SqlSearchProfileRepository
 from job_apply.features.users.security import InvalidTokenError, default_token_store
+
+#: Maximum value the dashboard may request for ``GET /apply-history?limit=``.
+#: The cap protects the database from a pathologically large page size
+#: while still being generous enough for an interactive UI.
+APPLY_HISTORY_MAX_LIMIT: int = 200
+
+#: Default page size for ``GET /apply-history`` when the caller does not
+#: supply one. Matches the ``list_user_jobs`` default so the dashboard
+#: can treat the two endpoints uniformly.
+APPLY_HISTORY_DEFAULT_LIMIT: int = 50
 
 _LOGGER = logging.getLogger("job_apply.features.apply_worker.api")
 
@@ -342,4 +360,79 @@ def cancel_apply_job(
     return apply_job_to_dto(job)
 
 
-__all__ = ["get_apply_job_service", "router"]
+# ---------------------------------------------------------------------------
+# Combined apply-history view (M6, issue #54)
+# ---------------------------------------------------------------------------
+#
+# The dashboard wants a flat, paginated view of every status transition
+# across all of the caller's apply jobs. The endpoint lives in its own
+# ``APIRouter`` (no prefix) so the public path is ``/apply-history``
+# rather than ``/apply-jobs/apply-history``; the rest of the slice's
+# per-job endpoints keep their ``/apply-jobs`` prefix. Both routers
+# share the same ``get_apply_job_service`` dependency so a single
+# override in tests wires the in-memory fakes into both.
+
+
+apply_history_router = APIRouter(tags=["apply-history"])
+
+
+@apply_history_router.get(
+    "/apply-history",
+    response_model=ApplyStatusHistoryList,
+    responses={
+        401: {"description": "Missing or invalid bearer token"},
+    },
+)
+def list_apply_history(
+    user_id_str: str = Depends(_resolve_user_id),  # noqa: B008
+    service: ApplyJobService = Depends(get_apply_job_service),  # noqa: B008
+    job_id: uuid.UUID | None = Query(  # noqa: B008
+        default=None,
+        description="Optional job_id filter; narrows the result to a single apply job.",
+    ),
+    status_filter: str | None = Query(  # noqa: B008
+        default=None,
+        alias="status",
+        description="Optional to_status filter; accepts any ApplyJobStatus value.",
+    ),
+    limit: int = Query(  # noqa: B008
+        default=APPLY_HISTORY_DEFAULT_LIMIT,
+        ge=1,
+        le=APPLY_HISTORY_MAX_LIMIT,
+        description=(
+            f"Page size; capped at {APPLY_HISTORY_MAX_LIMIT} so the database is "
+            "protected from a pathologically large request."
+        ),
+    ),
+    offset: int = Query(  # noqa: B008
+        default=0,
+        ge=0,
+        description="Number of rows to skip before returning the page.",
+    ),
+) -> ApplyStatusHistoryList:
+    """Return the caller's combined apply history (M6, #54).
+
+    The response is scoped to ``apply_jobs.user_id`` so a caller can
+    only ever see their own rows. ``job_id`` and ``status`` are
+    optional filters; ``limit`` / ``offset`` paginate the result. The
+    total row count is returned alongside the page so the dashboard
+    can render a paginator without a second round-trip.
+    """
+    rows: Sequence[ApplyStatusHistory]
+    rows, total = service.list_user_history(
+        uuid.UUID(user_id_str),
+        job_id=job_id,
+        to_status=status_filter,
+        limit=limit,
+        offset=offset,
+    )
+    return apply_status_history_list_to_dto(rows, total)
+
+
+__all__ = [
+    "APPLY_HISTORY_DEFAULT_LIMIT",
+    "APPLY_HISTORY_MAX_LIMIT",
+    "apply_history_router",
+    "get_apply_job_service",
+    "router",
+]

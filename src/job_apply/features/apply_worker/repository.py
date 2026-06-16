@@ -93,12 +93,23 @@ class ApplyStatusHistoryRepository(Protocol):
 
     The slice's contract is that history is written but never mutated
     or deleted through this protocol; the only writer is :meth:`create`
-    and the only reader is :meth:`list_by_job`. Both implementations
-    mirror this contract: no update or delete methods are exposed.
+    and the readers are :meth:`list_by_job` (per-job timeline) and
+    :meth:`list_by_user` (M6, #54 combined dashboard view across all of
+    a user's apply jobs). All implementations mirror this contract: no
+    update or delete methods are exposed.
     """
 
     def create(self, row: ApplyStatusHistory) -> ApplyStatusHistory: ...
     def list_by_job(self, job_id: uuid.UUID) -> Sequence[ApplyStatusHistory]: ...
+    def list_by_user(
+        self,
+        user_id: uuid.UUID,
+        *,
+        job_id: uuid.UUID | None = None,
+        to_status: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[Sequence[ApplyStatusHistory], int]: ...
 
 
 # ---------------------------------------------------------------------------
@@ -250,11 +261,24 @@ class InMemoryApplyStatusHistoryRepository:
     without scanning every row. Insertion order is preserved so two
     rows written within the same clock tick still return in the order
     the service appended them.
+
+    The optional ``get_job_user_id`` callable powers the M6 #54
+    cross-job ``list_by_user`` query: the in-memory implementation has
+    no foreign-key metadata on history rows, so it asks the caller to
+    resolve the owning user for a given job id. When the callable is
+    not wired (legacy test fixtures that pre-date #54) ``list_by_user``
+    returns an empty page so a misconfigured test fails loudly instead
+    of leaking rows from every user.
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        get_job_user_id: Callable[[uuid.UUID], uuid.UUID | None] | None = None,
+    ) -> None:
         self._rows: list[ApplyStatusHistory] = []
         self._by_job: dict[uuid.UUID, list[ApplyStatusHistory]] = {}
+        self._get_job_user_id = get_job_user_id
 
     def create(self, row: ApplyStatusHistory) -> ApplyStatusHistory:
         if row.id is None:
@@ -270,6 +294,41 @@ class InMemoryApplyStatusHistoryRepository:
         rows = list(self._by_job.get(job_id, ()))
         rows.sort(key=lambda r: (r.created_at, r.id))
         return rows
+
+    def list_by_user(
+        self,
+        user_id: uuid.UUID,
+        *,
+        job_id: uuid.UUID | None = None,
+        to_status: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[Sequence[ApplyStatusHistory], int]:
+        """Return the caller's history across all of their apply jobs.
+
+        Rows are sorted newest-first (``created_at`` desc, ``id`` desc)
+        so the dashboard can render the most recent transition at the
+        top of the list. The total count is returned alongside the
+        page so the HTTP layer can build a paginator without a second
+        round-trip.
+        """
+        if self._get_job_user_id is None:
+            # A misconfigured test (legacy fixture without the
+            # user-resolver wiring) would otherwise return every row
+            # in the fake, which is the worst possible failure mode
+            # for a user-scoped query. Returning an empty page makes
+            # the test fail loudly on the first assertion that
+            # expects at least one row.
+            return (), 0
+        rows = [r for r in self._rows if self._get_job_user_id(r.job_id) == user_id]
+        if job_id is not None:
+            rows = [r for r in rows if r.job_id == job_id]
+        if to_status is not None:
+            rows = [r for r in rows if r.to_status == to_status]
+        rows.sort(key=lambda r: (r.created_at, r.id), reverse=True)
+        total = len(rows)
+        page = rows[offset : offset + limit]
+        return page, total
 
 
 # ---------------------------------------------------------------------------
@@ -537,6 +596,66 @@ class SqlApplyStatusHistoryRepository:
                 .order_by(ApplyStatusHistory.created_at.asc(), ApplyStatusHistory.id.asc())
             )
             return list(session.scalars(statement).all())
+        finally:
+            self._close_if_ephemeral(session)
+
+    def list_by_user(
+        self,
+        user_id: uuid.UUID,
+        *,
+        job_id: uuid.UUID | None = None,
+        to_status: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[Sequence[ApplyStatusHistory], int]:
+        """Return the caller's history across all of their apply jobs.
+
+        The query JOINs ``apply_status_history`` with ``apply_jobs`` so
+        the ``user_id`` filter does not need to be denormalised onto the
+        history table. Both the ``COUNT(*)`` and the page are issued in
+        the same transaction so the dashboard's ``total`` always
+        matches the page contents.
+
+        The optional ``job_id`` and ``to_status`` filters are appended
+        to the ``WHERE`` clause only when supplied so the planner can
+        pick the best index for the common "list everything" case.
+        """
+        from sqlalchemy import func
+
+        from job_apply.features.apply_worker.models import ApplyJob
+
+        session = self._scope()
+        try:
+            # The shared filter conditions are applied to both the
+            # ``COUNT(*)`` and the page query so a change to the filter
+            # contract only needs to be made in one place.
+            conditions = [ApplyJob.user_id == user_id]
+            if job_id is not None:
+                conditions.append(ApplyStatusHistory.job_id == job_id)
+            if to_status is not None:
+                conditions.append(ApplyStatusHistory.to_status == to_status)
+
+            count_statement = (
+                select(func.count())
+                .select_from(ApplyStatusHistory)
+                .join(ApplyJob, ApplyStatusHistory.job_id == ApplyJob.id)
+                .where(*conditions)
+            )
+            total = int(session.scalar(count_statement) or 0)
+
+            page_statement = (
+                select(ApplyStatusHistory)
+                .join(ApplyJob, ApplyStatusHistory.job_id == ApplyJob.id)
+                .where(*conditions)
+                .order_by(
+                    ApplyStatusHistory.created_at.desc(),
+                    ApplyStatusHistory.id.desc(),
+                )
+                .limit(limit)
+                .offset(offset)
+            )
+            items = list(session.scalars(page_statement).all())
+            return items, total
         finally:
             self._close_if_ephemeral(session)
 
