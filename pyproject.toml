@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "apply-pilot"
-version = "0.11.0"
+version = "0.12.0"
 description = "Telegram-first assistant for finding, scoring, reviewing, and applying to jobs."
 readme = "README.md"
 requires-python = ">=3.13"
@@ -70,4 +70,7 @@ prepend_sys_path = ["src"]
 [dependency-groups]
 dev = [
     "pytest-asyncio>=1.4.0",
+    "pytest-cov>=7.1.0",
+    "pytest-timeout>=2.4.0",
+    "pytest-xdist>=3.8.0",
 ]
