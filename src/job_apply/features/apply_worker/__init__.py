@@ -1,4 +1,4 @@
-"""Apply worker vertical slice (M5, issue #43).
+"""Apply worker vertical slice (M5, issue #43 + #44).
 
 Public surface
 --------------
@@ -19,11 +19,15 @@ Public surface
 * :class:`ApplyJobService` — business logic.
 * :class:`ApplyJobRead` — public DTO.
 * :class:`ApplyStatusHistoryRead` — public DTO for history rows.
+* :class:`ApplyResult` — adapter return shape.
+* :class:`ApplyAdapter` — Protocol the apply worker dispatches to.
+* :class:`ApplyWorker` — per-iteration worker that drains the queue.
+* :class:`ApplyWorkerProcess` — long-running process driving the worker.
 
 The slice is consumed by:
 
-* the apply worker process (background runner, not yet implemented in
-  M5) which calls :meth:`ApplyJobService.claim_next`,
+* the apply worker process (:class:`ApplyWorkerProcess`, issue #44)
+  which calls :meth:`ApplyJobService.claim_next`,
   :meth:`~ApplyJobService.complete`, and
   :meth:`~ApplyJobService.fail`;
 * the ``/accept`` Telegram action (M4, issue #41) which calls
@@ -49,6 +53,15 @@ from job_apply.features.apply_worker.repository import (
     SqlApplyJobRepository,
     SqlApplyStatusHistoryRepository,
 )
+from job_apply.features.apply_worker.runtime import (
+    DEFAULT_MAX_ATTEMPTS,
+    NO_ADAPTER_ERROR,
+    VACANCY_NOT_FOUND_ERROR,
+    ApplyAdapter,
+    ApplyResult,
+    ApplyWorker,
+    ApplyWorkerProcess,
+)
 from job_apply.features.apply_worker.schemas import (
     ApplyJobRead,
     ApplyStatusHistoryRead,
@@ -65,7 +78,11 @@ from job_apply.features.apply_worker.service import (
 )
 
 __all__ = [
+    "DEFAULT_MAX_ATTEMPTS",
     "DEFAULT_RETRY_BACKOFF",
+    "NO_ADAPTER_ERROR",
+    "VACANCY_NOT_FOUND_ERROR",
+    "ApplyAdapter",
     "ApplyJob",
     "ApplyJobAlreadyTerminalError",
     "ApplyJobDependencyMissingError",
@@ -78,6 +95,9 @@ __all__ = [
     "ApplyStatusHistory",
     "ApplyStatusHistoryRead",
     "ApplyStatusHistoryRepository",
+    "ApplyResult",
+    "ApplyWorker",
+    "ApplyWorkerProcess",
     "InMemoryApplyJobRepository",
     "InMemoryApplyStatusHistoryRepository",
     "SqlApplyJobRepository",
