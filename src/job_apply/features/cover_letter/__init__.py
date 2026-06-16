@@ -1,68 +1,54 @@
-"""Cover letter vertical slice.
+"""Cover letter vertical slice (M3, issue #31).
 
 Public surface
 --------------
 
-* :class:`CoverLetterDraft` — ORM model (one row per draft version).
-* :class:`CoverLetterService` — business logic (generate, regenerate,
-  read latest, read history).
+* :class:`CoverLetterDraft` — ORM model (one row per match, the
+  ``UNIQUE(match_id)`` constraint is the M3 #31 contract).
+* :class:`CoverLetterDraftStatus` — lifecycle enum.
 * :class:`CoverLetterDraftRepository` — Protocol contract.
 * :class:`InMemoryCoverLetterDraftRepository` — fake for tests.
 * :class:`SqlCoverLetterDraftRepository` — production implementation.
-* :class:`CoverLetterGenerator` — Protocol the service depends on.
-* :class:`StubCoverLetterGenerator` — network-free default.
-* :class:`CoverLetterDraftRead` / :class:`CoverLetterRegenerateRequest` —
-  public DTOs.
+* :class:`CoverLetterService` — business logic.
+* :func:`build_cover_letter_prompt` — pure prompt-rendering function.
+* :data:`COVER_LETTER_PROMPT_V1` / :data:`DEFAULT_PROMPT_VERSION` —
+  the canonical prompt template and its ``<name>@<semver>`` stamp.
 
-Endpoints
----------
-
-* ``GET /cover-letters/by-match/{match_id}`` — latest draft for match.
-* ``GET /cover-letters/by-match/{match_id}/history`` — every version
-  (newest first).
-* ``POST /cover-letters/regenerate/{match_id}`` — create a new version
-  (or the first one when no drafts exist).
-
-The slice keeps every version of a cover letter for a match
-(``CoverLetterDraft.match_id`` is not unique). The
-``(match_id, version)`` composite index on the table keeps
-``get_latest_for_match`` and ``list_by_match`` cheap. The
-``parent_draft_id`` / ``replaced_by_id`` pair forms a doubly-linked
-list that callers can walk in either direction.
+The slice covers exactly one use case: given a :class:`VacancyMatch`,
+generate the very first :class:`CoverLetterDraft` using the user's
+resume and the vacancy / search-profile / style context. The
+version-history / regenerate workflow (issue #32) and the HTTP API
+(#32 follow-up) are intentionally out of scope here.
 """
 
 from __future__ import annotations
 
-from job_apply.features.cover_letter.generator import (
-    CoverLetterGenerator,
-    StubCoverLetterGenerator,
-    compute_prompt_hash,
+from job_apply.features.cover_letter.models import (
+    CoverLetterDraft,
+    CoverLetterDraftStatus,
 )
-from job_apply.features.cover_letter.models import CoverLetterDraft
 from job_apply.features.cover_letter.repository import (
     CoverLetterDraftRepository,
     InMemoryCoverLetterDraftRepository,
     SqlCoverLetterDraftRepository,
 )
-from job_apply.features.cover_letter.schemas import (
-    CoverLetterDraftRead,
-    CoverLetterRegenerateRequest,
-)
 from job_apply.features.cover_letter.service import (
-    CoverLetterNotFoundError,
+    COVER_LETTER_PROMPT_V1,
+    DEFAULT_PROMPT_VERSION,
+    CoverLetterDependencyMissingError,
     CoverLetterService,
+    build_cover_letter_prompt,
 )
 
 __all__ = [
+    "COVER_LETTER_PROMPT_V1",
+    "DEFAULT_PROMPT_VERSION",
+    "CoverLetterDependencyMissingError",
     "CoverLetterDraft",
-    "CoverLetterDraftRead",
     "CoverLetterDraftRepository",
-    "CoverLetterGenerator",
-    "CoverLetterNotFoundError",
-    "CoverLetterRegenerateRequest",
+    "CoverLetterDraftStatus",
     "CoverLetterService",
     "InMemoryCoverLetterDraftRepository",
     "SqlCoverLetterDraftRepository",
-    "StubCoverLetterGenerator",
-    "compute_prompt_hash",
+    "build_cover_letter_prompt",
 ]

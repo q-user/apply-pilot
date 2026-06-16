@@ -1,4 +1,4 @@
-"""Persistence gateway for the ``cover_letter`` slice (M3, issue #32).
+"""Persistence gateway for the ``cover_letter`` slice (M3, issue #31).
 
 Three implementations live here, mirroring the convention used by the
 ``cover_letter_style`` and ``matches`` slices:
@@ -10,24 +10,10 @@ Three implementations live here, mirroring the convention used by the
 * :class:`SqlCoverLetterDraftRepository` — production implementation
   backed by a SQLAlchemy ``Session``.
 
-History semantics
------------------
-
-The repository owns three read paths that the service relies on:
-
-* :meth:`get_latest_for_match` — returns the highest-``version`` draft
-  for a match, or ``None`` if there is none.
-* :meth:`list_by_match` — returns every draft for a match, ordered by
-  ``version`` descending (newest first).
-* :meth:`get_by_match_and_version` — returns the specific draft for a
-  given ``(match_id, version)`` pair, used by the service to
-  back-link a new draft to its parent.
-
-The two write paths are :meth:`create` (used for the very first draft
-and for every regeneration) and :meth:`update_replaced_by` (used after
-a regeneration to point the previous draft at its successor). The
-:func:`compute_prompt_hash` helper from the generator module is the
-only place that knows how to derive the audit hash.
+The ``match_id`` UNIQUE constraint is the M3 #31 contract: one draft
+per match. The follow-up issue (#32) introduces the version-history
+workflow that lifts this constraint; until then, the service is
+expected to upsert the existing row's ``content`` on repeat calls.
 """
 
 from __future__ import annotations
@@ -47,21 +33,28 @@ from job_apply.features.cover_letter.models import CoverLetterDraft
 class CoverLetterDraftRepository(Protocol):
     """Minimal interface :class:`CoverLetterService` relies on.
 
-    Read methods take match and draft ids as plain UUIDs. Write methods
-    accept fully-constructed ORM rows; the service is the only place
-    that decides which fields to populate.
+    The slice is intentionally tiny:
+
+    * :meth:`create` — insert the first (and only, under #31) draft.
+    * :meth:`get_by_match` — fetch the single draft for a match.
+    * :meth:`get_by_id` — fetch a draft by its primary key.
+    * :meth:`list_by_user` — list drafts owned by a user, optionally
+      filtered by status.
+    * :meth:`update_status` — move a draft through the lifecycle
+      (e.g. ``draft`` → ``final`` → ``sent``).
     """
 
     def create(self, draft: CoverLetterDraft) -> CoverLetterDraft: ...
+    def get_by_match(self, match_id: uuid.UUID) -> CoverLetterDraft | None: ...
     def get_by_id(self, draft_id: uuid.UUID) -> CoverLetterDraft | None: ...
-    def get_by_match_and_version(
-        self, match_id: uuid.UUID, version: int
-    ) -> CoverLetterDraft | None: ...
-    def get_latest_for_match(self, match_id: uuid.UUID) -> CoverLetterDraft | None: ...
-    def list_by_match(self, match_id: uuid.UUID) -> Sequence[CoverLetterDraft]: ...
-    def update_replaced_by(
-        self, draft_id: uuid.UUID, replaced_by_id: uuid.UUID
-    ) -> CoverLetterDraft: ...
+    def list_by_user(
+        self,
+        user_id: uuid.UUID,
+        *,
+        status: str | None = None,
+        limit: int = 20,
+    ) -> Sequence[CoverLetterDraft]: ...
+    def update_status(self, draft_id: uuid.UUID, status: str) -> CoverLetterDraft: ...
 
 
 # ---------------------------------------------------------------------------
@@ -72,16 +65,20 @@ class CoverLetterDraftRepository(Protocol):
 class InMemoryCoverLetterDraftRepository:
     """Dict-backed repository for tests.
 
-    Stores drafts in a single ``_by_id`` dict plus a ``_by_match`` list
-    so the history queries can be answered without a full scan. The
-    list keeps drafts in insertion order, and the read methods sort by
-    ``version`` descending so the behaviour matches the SQL
-    implementation regardless of insertion order.
+    Two indices back the read paths:
+
+    * ``_by_id`` — primary key lookup.
+    * ``_by_match`` — match → draft id, used by :meth:`get_by_match`.
+
+    ``list_by_user`` scans the in-memory store and filters by the
+    supplied ``user_id`` / ``status``. The result is ordered by
+    ``created_at`` descending (newest first) so the behaviour matches
+    the SQL implementation.
     """
 
     def __init__(self) -> None:
         self._by_id: dict[uuid.UUID, CoverLetterDraft] = {}
-        self._by_match: dict[uuid.UUID, list[uuid.UUID]] = {}
+        self._by_match: dict[uuid.UUID, uuid.UUID] = {}
 
     # -- writers --------------------------------------------------------
 
@@ -90,17 +87,22 @@ class InMemoryCoverLetterDraftRepository:
             draft.id = uuid.uuid4()
         if draft.created_at is None:
             draft.created_at = datetime.now(UTC)
+        # The SQL default is ``"draft"``; the in-memory repo mirrors it
+        # so ``create`` produces a row with the same status the SQL
+        # insert would. Without this, an in-memory unit test that
+        # doesn't set ``status`` would see ``None`` and diverge from
+        # the production behaviour.
+        if draft.status is None:
+            draft.status = "draft"
         self._by_id[draft.id] = draft
-        self._by_match.setdefault(draft.match_id, []).append(draft.id)
+        self._by_match[draft.match_id] = draft.id
         return draft
 
-    def update_replaced_by(
-        self, draft_id: uuid.UUID, replaced_by_id: uuid.UUID
-    ) -> CoverLetterDraft:
+    def update_status(self, draft_id: uuid.UUID, status: str) -> CoverLetterDraft:
         existing = self._by_id.get(draft_id)
         if existing is None:
             raise KeyError(f"cover letter draft {draft_id} not found")
-        existing.replaced_by_id = replaced_by_id
+        existing.status = status
         existing.updated_at = datetime.now(UTC)
         return existing
 
@@ -109,24 +111,24 @@ class InMemoryCoverLetterDraftRepository:
     def get_by_id(self, draft_id: uuid.UUID) -> CoverLetterDraft | None:
         return self._by_id.get(draft_id)
 
-    def get_by_match_and_version(
-        self, match_id: uuid.UUID, version: int
-    ) -> CoverLetterDraft | None:
-        for draft_id in self._by_match.get(match_id, []):
-            draft = self._by_id.get(draft_id)
-            if draft is not None and draft.version == version:
-                return draft
-        return None
+    def get_by_match(self, match_id: uuid.UUID) -> CoverLetterDraft | None:
+        draft_id = self._by_match.get(match_id)
+        if draft_id is None:
+            return None
+        return self._by_id.get(draft_id)
 
-    def get_latest_for_match(self, match_id: uuid.UUID) -> CoverLetterDraft | None:
-        drafts = list(self.list_by_match(match_id))
-        return drafts[0] if drafts else None
-
-    def list_by_match(self, match_id: uuid.UUID) -> Sequence[CoverLetterDraft]:
-        ids = self._by_match.get(match_id, [])
-        drafts = [self._by_id[i] for i in ids if i in self._by_id]
-        drafts.sort(key=lambda d: d.version, reverse=True)
-        return drafts
+    def list_by_user(
+        self,
+        user_id: uuid.UUID,
+        *,
+        status: str | None = None,
+        limit: int = 20,
+    ) -> Sequence[CoverLetterDraft]:
+        drafts = [d for d in self._by_id.values() if d.user_id == user_id]
+        if status is not None:
+            drafts = [d for d in drafts if d.status == status]
+        drafts.sort(key=lambda d: (d.created_at, d.id), reverse=True)
+        return drafts[:limit]
 
 
 # ---------------------------------------------------------------------------
@@ -163,6 +165,10 @@ class SqlCoverLetterDraftRepository:
             raise RuntimeError("SqlCoverLetterDraftRepository is not bound to a session")
         return self._session_factory()
 
+    def _close_if_ephemeral(self, session: Session) -> None:
+        if self._session is None:
+            session.close()
+
     # -- writers --------------------------------------------------------
 
     def create(self, draft: CoverLetterDraft) -> CoverLetterDraft:
@@ -176,18 +182,15 @@ class SqlCoverLetterDraftRepository:
             session.rollback()
             raise
         finally:
-            if self._session_factory is not None:
-                session.close()
+            self._close_if_ephemeral(session)
 
-    def update_replaced_by(
-        self, draft_id: uuid.UUID, replaced_by_id: uuid.UUID
-    ) -> CoverLetterDraft:
+    def update_status(self, draft_id: uuid.UUID, status: str) -> CoverLetterDraft:
         session = self._scope()
         try:
             existing = session.get(CoverLetterDraft, draft_id)
             if existing is None:
                 raise KeyError(f"cover letter draft {draft_id} not found")
-            existing.replaced_by_id = replaced_by_id
+            existing.status = status
             session.commit()
             session.refresh(existing)
             return existing
@@ -195,8 +198,7 @@ class SqlCoverLetterDraftRepository:
             session.rollback()
             raise
         finally:
-            if self._session_factory is not None:
-                session.close()
+            self._close_if_ephemeral(session)
 
     # -- readers --------------------------------------------------------
 
@@ -205,53 +207,36 @@ class SqlCoverLetterDraftRepository:
         try:
             return session.get(CoverLetterDraft, draft_id)
         finally:
-            if self._session_factory is not None:
-                session.close()
+            self._close_if_ephemeral(session)
 
-    def get_by_match_and_version(
-        self, match_id: uuid.UUID, version: int
-    ) -> CoverLetterDraft | None:
+    def get_by_match(self, match_id: uuid.UUID) -> CoverLetterDraft | None:
+        session = self._scope()
+        try:
+            statement = select(CoverLetterDraft).where(CoverLetterDraft.match_id == match_id)
+            return session.scalars(statement).first()
+        finally:
+            self._close_if_ephemeral(session)
+
+    def list_by_user(
+        self,
+        user_id: uuid.UUID,
+        *,
+        status: str | None = None,
+        limit: int = 20,
+    ) -> Sequence[CoverLetterDraft]:
         session = self._scope()
         try:
             statement = (
                 select(CoverLetterDraft)
-                .where(
-                    CoverLetterDraft.match_id == match_id,
-                    CoverLetterDraft.version == version,
-                )
-                .limit(1)
+                .where(CoverLetterDraft.user_id == user_id)
+                .order_by(CoverLetterDraft.created_at.desc(), CoverLetterDraft.id.desc())
+                .limit(limit)
             )
-            return session.execute(statement).scalar_one_or_none()
+            if status is not None:
+                statement = statement.where(CoverLetterDraft.status == status)
+            return list(session.scalars(statement).all())
         finally:
-            if self._session_factory is not None:
-                session.close()
-
-    def get_latest_for_match(self, match_id: uuid.UUID) -> CoverLetterDraft | None:
-        session = self._scope()
-        try:
-            statement = (
-                select(CoverLetterDraft)
-                .where(CoverLetterDraft.match_id == match_id)
-                .order_by(CoverLetterDraft.version.desc())
-                .limit(1)
-            )
-            return session.execute(statement).scalar_one_or_none()
-        finally:
-            if self._session_factory is not None:
-                session.close()
-
-    def list_by_match(self, match_id: uuid.UUID) -> Sequence[CoverLetterDraft]:
-        session = self._scope()
-        try:
-            statement = (
-                select(CoverLetterDraft)
-                .where(CoverLetterDraft.match_id == match_id)
-                .order_by(CoverLetterDraft.version.desc())
-            )
-            return list(session.execute(statement).scalars().all())
-        finally:
-            if self._session_factory is not None:
-                session.close()
+            self._close_if_ephemeral(session)
 
 
 __all__ = [

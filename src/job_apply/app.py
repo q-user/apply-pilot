@@ -84,9 +84,6 @@ def create_app(settings: FastAPISettings | None = None) -> FastAPI:
     )
 
     # Register feature routers.
-    from job_apply.features.cover_letter.api import (
-        router as cover_letter_router,
-    )
     from job_apply.features.cover_letter_style.api import (
         router as cover_letter_style_router,
     )
@@ -96,7 +93,6 @@ def create_app(settings: FastAPISettings | None = None) -> FastAPI:
     from job_apply.features.sources.api import router as sources_router
     from job_apply.features.telegram.digest.api import router as digest_router
 
-    app.include_router(cover_letter_router)
     app.include_router(cover_letter_style_router)
     app.include_router(hh_router)
     app.include_router(matches_router)
