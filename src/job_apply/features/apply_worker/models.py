@@ -73,7 +73,7 @@ from __future__ import annotations
 
 import hashlib
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
@@ -220,4 +220,88 @@ class ApplyJob(Base):
         )
 
 
-__all__ = ["ApplyJob", "ApplyJobStatus", "compute_idempotency_key"]
+class ApplyStatusHistory(Base):
+    """An append-only record of a single :class:`ApplyJob` status transition.
+
+    Every status-changing operation the apply worker performs (enqueue,
+    claim, complete, fail, cancel) writes one row. Rows are immutable
+    from the slice's perspective — the storage layer enforces this
+    contract by exposing only :meth:`ApplyStatusHistoryRepository.create`
+    and the read methods.
+
+    Fields
+    ------
+
+    * ``id``            — UUID primary key.
+    * ``job_id``        — FK to ``apply_jobs.id``. ``CASCADE`` delete so
+                          a hard-deleted job takes its history with it.
+    * ``from_status``   — the status the job transitioned *from*; ``NULL``
+                          for the initial creation row (no prior state).
+    * ``to_status``     — the status the job transitioned *to*; one of
+                          :class:`ApplyJobStatus`.
+    * ``error``         — error message for the transition; ``NULL`` for
+                          successful transitions.
+    * ``metadata_json`` — JSON-encoded extra context (retry attempt
+                          number, retryable flag, etc.). ``NULL`` when no
+                          extra context is relevant.
+    * ``created_at``    — server-side timestamp.
+
+    Indexes
+    -------
+
+    * ``ix_apply_status_history_job_id_created_at`` composite on
+      ``(job_id, created_at)`` backs ``list_by_job`` and keeps the
+      per-job timeline query cheap as the table grows.
+    """
+
+    __tablename__ = "apply_status_history"
+    __table_args__ = (
+        Index(
+            "ix_apply_status_history_job_id_created_at",
+            "job_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+
+    job_id: Mapped[uuid.UUID] = mapped_column(
+        GUID(),
+        ForeignKey("apply_jobs.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    from_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    to_status: Mapped[str] = mapped_column(String(50), nullable=False)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    def __init__(self, **kwargs: Any) -> None:
+        if "id" not in kwargs or kwargs["id"] is None:
+            kwargs["id"] = uuid.uuid4()
+        if "created_at" not in kwargs or kwargs["created_at"] is None:
+            # The SQL column carries a ``server_default`` for the flush
+            # path, but freshly-constructed Python instances need an
+            # in-memory value too so callers can read ``row.created_at``
+            # before the row is persisted. This mirrors the convention
+            # used by the in-memory repository for :class:`ApplyJob`.
+            kwargs["created_at"] = datetime.now(UTC)
+        super().__init__(**kwargs)
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return (
+            f"ApplyStatusHistory(id={self.id!s}, job_id={self.job_id!s}, "
+            f"from_status={self.from_status!r}, to_status={self.to_status!r})"
+        )
+
+
+__all__ = [
+    "ApplyJob",
+    "ApplyJobStatus",
+    "ApplyStatusHistory",
+    "compute_idempotency_key",
+]

@@ -123,10 +123,19 @@ def _make_world() -> _World:
     profile_repo.add(profile)
 
     job_repo = InMemoryApplyJobRepository()
+    # M5 #49 — every test world also wires the history repo so the
+    # slice's status transitions get logged. The repo is the in-memory
+    # fake, matching the rest of the collaborator-injected fakes.
+    from job_apply.features.apply_worker.repository import (
+        InMemoryApplyStatusHistoryRepository,
+    )
+
+    history_repo = InMemoryApplyStatusHistoryRepository()
     service = ApplyJobService(
         job_repo=job_repo,
         match_repo=match_repo,  # type: ignore[arg-type]
         profile_repo=profile_repo,  # type: ignore[arg-type]
+        history_repo=history_repo,
     )
 
     return _World(

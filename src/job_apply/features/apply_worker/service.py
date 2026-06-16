@@ -30,17 +30,22 @@ in :mod:`api` plugs in the SQLAlchemy-backed implementations.
 
 from __future__ import annotations
 
+import json
 import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
-from typing import Protocol
+from typing import Any, Protocol
 
 from job_apply.features.apply_worker.models import (
     ApplyJob,
     ApplyJobStatus,
+    ApplyStatusHistory,
     compute_idempotency_key,
 )
-from job_apply.features.apply_worker.repository import ApplyJobRepository
+from job_apply.features.apply_worker.repository import (
+    ApplyJobRepository,
+    ApplyStatusHistoryRepository,
+)
 from job_apply.features.apply_worker.retry import RetryPolicy
 from job_apply.features.matches.models import VacancyMatch
 from job_apply.features.search_profiles.models import SearchProfile
@@ -184,12 +189,14 @@ class ApplyJobService:
         job_repo: ApplyJobRepository,
         match_repo: _MatchLookup,
         profile_repo: _ProfileLookup,
+        history_repo: ApplyStatusHistoryRepository,
         retry_policy: RetryPolicy | None = None,
         retry_backoff: timedelta = DEFAULT_RETRY_BACKOFF,
     ) -> None:
         self._job_repo = job_repo
         self._match_repo = match_repo
         self._profile_repo = profile_repo
+        self._history_repo = history_repo
         # The ``RetryPolicy`` is the modern entry point; ``retry_backoff``
         # is the legacy knob that predates issue #47. When the caller
         # passes an explicit policy we use it as-is. When the caller
@@ -213,6 +220,11 @@ class ApplyJobService:
     def job_repo(self) -> ApplyJobRepository:
         """Expose the repository for tests that need to assert state."""
         return self._job_repo
+
+    @property
+    def history_repo(self) -> ApplyStatusHistoryRepository:
+        """Expose the history repository for tests that inspect transitions."""
+        return self._history_repo
 
     @property
     def retry_backoff(self) -> timedelta:
@@ -242,6 +254,8 @@ class ApplyJobService:
            one is found — the UNIQUE constraint makes this idempotent.
         3. Otherwise insert a new row with ``status=queued`` and a
            fresh ``idempotency_key``.
+        4. Write the initial :class:`ApplyStatusHistory` row (the only
+           row with ``from_status=None``).
         """
         match = self._match_repo.get_by_id(match_id)
         if match is None:
@@ -262,7 +276,13 @@ class ApplyJobService:
             vacancy_id=match.vacancy_id,
             idempotency_key=compute_idempotency_key(profile.user_id, match.vacancy_id, match_id),
         )
-        return self._job_repo.create(job)
+        created = self._job_repo.create(job)
+        self._record_transition(
+            job=created,
+            from_status=None,
+            to_status=ApplyJobStatus.QUEUED.value,
+        )
+        return created
 
     # ------------------------------------------------------------------
     # Read
@@ -286,6 +306,18 @@ class ApplyJobService:
         """List the caller's jobs, newest first."""
         return self._job_repo.list_by_user(user_id, limit=limit)
 
+    def list_history(
+        self, job_id: uuid.UUID, *, user_id: uuid.UUID
+    ) -> Sequence[ApplyStatusHistory]:
+        """Return the caller's job history in chronological order.
+
+        Ownership is enforced by re-using :meth:`get` so the HTTP layer
+        can map a missing job to 404 and a foreign job to 403 with the
+        same errors as the other endpoints.
+        """
+        self.get(job_id, user_id=user_id)
+        return self._history_repo.list_by_job(job_id)
+
     # ------------------------------------------------------------------
     # Cancel
     # ------------------------------------------------------------------
@@ -299,11 +331,18 @@ class ApplyJobService:
         """
         job = self.get(job_id, user_id=user_id)
         _assert_cancellable(job)
-        return self._job_repo.update_status(
+        from_status = job.status
+        updated = self._job_repo.update_status(
             job_id,
             ApplyJobStatus.CANCELLED.value,
             finished_at=datetime.now(UTC),
         )
+        self._record_transition(
+            job=updated,
+            from_status=from_status,
+            to_status=ApplyJobStatus.CANCELLED.value,
+        )
+        return updated
 
     # ------------------------------------------------------------------
     # Worker-facing transitions
@@ -313,11 +352,19 @@ class ApplyJobService:
         """Atomically claim the oldest claimable row.
 
         Returns ``None`` when the queue is empty. The repository is
-        responsible for the actual transition; the service is just a
-        thin wrapper that lets the worker depend on the service type
-        instead of the repository.
+        responsible for the actual transition; the service writes the
+        matching :class:`ApplyStatusHistory` row so the timeline stays
+        consistent with the row's ``status`` field.
         """
-        return self._job_repo.claim_next()
+        claimed = self._job_repo.claim_next()
+        if claimed is None:
+            return None
+        self._record_transition(
+            job=claimed,
+            from_status=ApplyJobStatus.QUEUED.value,
+            to_status=ApplyJobStatus.RUNNING.value,
+        )
+        return claimed
 
     def complete(self, job_id: uuid.UUID, *, external_application_id: str) -> ApplyJob:
         """Record a successful hh submission.
@@ -328,11 +375,18 @@ class ApplyJobService:
         """
         job = self._require_exists(job_id)
         _assert_not_terminal(job)
-        return self._finish(
+        from_status = job.status
+        updated = self._finish(
             job_id,
             status=ApplyJobStatus.SUCCEEDED.value,
             external_application_id=external_application_id,
         )
+        self._record_transition(
+            job=updated,
+            from_status=from_status,
+            to_status=ApplyJobStatus.SUCCEEDED.value,
+        )
+        return updated
 
     def fail(
         self,
@@ -355,6 +409,7 @@ class ApplyJobService:
         """
         job = self._require_exists(job_id)
         _assert_not_terminal(job)
+        from_status = job.status
         self._job_repo.mark_attempt(job_id, error)
         # Re-read so ``attempts`` reflects the value just persisted by
         # ``mark_attempt``. The repository's write is synchronous (in
@@ -365,15 +420,35 @@ class ApplyJobService:
         attempts = fresh.attempts if fresh is not None else job.attempts
         if retryable and self._retry_policy.should_retry(attempts):
             next_run_at = self._retry_policy.compute_next_run_at(attempts)
-            return self._job_repo.update_status(
+            updated = self._job_repo.update_status(
                 job_id,
                 ApplyJobStatus.QUEUED.value,
                 next_run_at=next_run_at,
             )
-        return self._finish(
+            self._record_transition(
+                job=updated,
+                from_status=from_status,
+                to_status=ApplyJobStatus.QUEUED.value,
+                error=error,
+                metadata={
+                    "retryable": True,
+                    "attempts": updated.attempts,
+                    "next_run_at": next_run_at.isoformat(),
+                },
+            )
+            return updated
+        updated = self._finish(
             job_id,
             status=ApplyJobStatus.DEAD_LETTER.value,
         )
+        self._record_transition(
+            job=updated,
+            from_status=from_status,
+            to_status=ApplyJobStatus.DEAD_LETTER.value,
+            error=error,
+            metadata={"retryable": False, "attempts": updated.attempts},
+        )
+        return updated
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -405,6 +480,32 @@ class ApplyJobService:
             external_application_id=external_application_id,
             finished_at=datetime.now(UTC),
         )
+
+    def _record_transition(
+        self,
+        *,
+        job: ApplyJob,
+        from_status: str | None,
+        to_status: str,
+        error: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        """Append one :class:`ApplyStatusHistory` row for a status change.
+
+        The helper centralises the (from_status, to_status, error,
+        metadata_json) shape so every transition in the service writes
+        a row that the dashboard can read uniformly. ``metadata`` is
+        JSON-encoded into the ``metadata_json`` column; callers pass
+        the dict and the storage layer takes the string.
+        """
+        row = ApplyStatusHistory(
+            job_id=job.id,
+            from_status=from_status,
+            to_status=to_status,
+            error=error,
+            metadata_json=json.dumps(metadata) if metadata is not None else None,
+        )
+        self._history_repo.create(row)
 
 
 __all__ = [

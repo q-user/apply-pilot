@@ -37,7 +37,11 @@ from typing import Protocol, runtime_checkable
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from job_apply.features.apply_worker.models import ApplyJob, ApplyJobStatus
+from job_apply.features.apply_worker.models import (
+    ApplyJob,
+    ApplyJobStatus,
+    ApplyStatusHistory,
+)
 
 # ---------------------------------------------------------------------------
 # Protocol
@@ -76,6 +80,25 @@ class ApplyJobRepository(Protocol):
         finished_at: datetime | None = None,
     ) -> ApplyJob: ...
     def mark_attempt(self, job_id: uuid.UUID, error: str) -> ApplyJob: ...
+
+
+# ---------------------------------------------------------------------------
+# History Protocol
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class ApplyStatusHistoryRepository(Protocol):
+    """Append-only gateway for :class:`ApplyStatusHistory` rows (M5, #49).
+
+    The slice's contract is that history is written but never mutated
+    or deleted through this protocol; the only writer is :meth:`create`
+    and the only reader is :meth:`list_by_job`. Both implementations
+    mirror this contract: no update or delete methods are exposed.
+    """
+
+    def create(self, row: ApplyStatusHistory) -> ApplyStatusHistory: ...
+    def list_by_job(self, job_id: uuid.UUID) -> Sequence[ApplyStatusHistory]: ...
 
 
 # ---------------------------------------------------------------------------
@@ -212,6 +235,41 @@ class InMemoryApplyJobRepository:
         target.started_at = datetime.now(UTC)
         target.updated_at = target.started_at
         return target
+
+
+# ---------------------------------------------------------------------------
+# In-memory history implementation
+# ---------------------------------------------------------------------------
+
+
+class InMemoryApplyStatusHistoryRepository:
+    """List-backed fake for :class:`ApplyStatusHistory`.
+
+    The repository keeps a single ``_rows`` list and a ``_by_job`` index
+    so ``list_by_job`` can resolve the chronological slice for a job
+    without scanning every row. Insertion order is preserved so two
+    rows written within the same clock tick still return in the order
+    the service appended them.
+    """
+
+    def __init__(self) -> None:
+        self._rows: list[ApplyStatusHistory] = []
+        self._by_job: dict[uuid.UUID, list[ApplyStatusHistory]] = {}
+
+    def create(self, row: ApplyStatusHistory) -> ApplyStatusHistory:
+        if row.id is None:
+            row.id = uuid.uuid4()
+        if row.created_at is None:
+            row.created_at = datetime.now(UTC)
+        self._rows.append(row)
+        self._by_job.setdefault(row.job_id, []).append(row)
+        return row
+
+    def list_by_job(self, job_id: uuid.UUID) -> Sequence[ApplyStatusHistory]:
+        """Return the rows for ``job_id`` in chronological order."""
+        rows = list(self._by_job.get(job_id, ()))
+        rows.sort(key=lambda r: (r.created_at, r.id))
+        return rows
 
 
 # ---------------------------------------------------------------------------
@@ -419,8 +477,75 @@ class SqlApplyJobRepository:
             self._close_if_ephemeral(session)
 
 
+# ---------------------------------------------------------------------------
+# SQLAlchemy history implementation
+# ---------------------------------------------------------------------------
+
+
+class SqlApplyStatusHistoryRepository:
+    """SQLAlchemy-backed :class:`ApplyStatusHistory` repository.
+
+    Mirrors the in-memory implementation: ``create`` appends a row,
+    ``list_by_job`` returns the rows for a job in chronological order.
+    Constructed with a fixed ``Session`` (caller-managed lifetime) or
+    a ``session_factory`` callable (FastAPI's ``get_db`` pattern).
+    """
+
+    def __init__(
+        self,
+        *,
+        session: Session | None = None,
+        session_factory: Callable[[], Session] | None = None,
+    ) -> None:
+        if session is None and session_factory is None:
+            raise RuntimeError(
+                "SqlApplyStatusHistoryRepository requires a Session or session_factory"
+            )
+        self._session = session
+        self._session_factory = session_factory
+
+    def _scope(self) -> Session:
+        if self._session is not None:
+            return self._session
+        if self._session_factory is None:
+            raise RuntimeError("SqlApplyStatusHistoryRepository is not bound to a session")
+        return self._session_factory()
+
+    def _close_if_ephemeral(self, session: Session) -> None:
+        if self._session is None:
+            session.close()
+
+    def create(self, row: ApplyStatusHistory) -> ApplyStatusHistory:
+        session = self._scope()
+        try:
+            session.add(row)
+            session.commit()
+            session.refresh(row)
+            return row
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            self._close_if_ephemeral(session)
+
+    def list_by_job(self, job_id: uuid.UUID) -> Sequence[ApplyStatusHistory]:
+        session = self._scope()
+        try:
+            statement = (
+                select(ApplyStatusHistory)
+                .where(ApplyStatusHistory.job_id == job_id)
+                .order_by(ApplyStatusHistory.created_at.asc(), ApplyStatusHistory.id.asc())
+            )
+            return list(session.scalars(statement).all())
+        finally:
+            self._close_if_ephemeral(session)
+
+
 __all__ = [
     "ApplyJobRepository",
+    "ApplyStatusHistoryRepository",
     "InMemoryApplyJobRepository",
+    "InMemoryApplyStatusHistoryRepository",
     "SqlApplyJobRepository",
+    "SqlApplyStatusHistoryRepository",
 ]

@@ -6,12 +6,19 @@ Public surface
 * :class:`ApplyJob` — ORM model (one row per accepted vacancy match,
   ``UNIQUE(match_id)`` is the slice's contract).
 * :class:`ApplyJobStatus` — lifecycle enum.
+* :class:`ApplyStatusHistory` — append-only record of every status
+  transition (M5, issue #49).
 * :func:`compute_idempotency_key` — SHA-256 of ``(user, vacancy, match)``.
 * :class:`ApplyJobRepository` — Protocol contract.
+* :class:`ApplyStatusHistoryRepository` — Protocol contract for the
+  append-only history stream.
 * :class:`InMemoryApplyJobRepository` — fake for tests.
+* :class:`InMemoryApplyStatusHistoryRepository` — fake for tests.
 * :class:`SqlApplyJobRepository` — production implementation.
+* :class:`SqlApplyStatusHistoryRepository` — production implementation.
 * :class:`ApplyJobService` — business logic.
 * :class:`ApplyJobRead` — public DTO.
+* :class:`ApplyStatusHistoryRead` — public DTO for history rows.
 * :class:`ApplyResult` — adapter return shape.
 * :class:`ApplyAdapter` — Protocol the apply worker dispatches to.
 * :class:`ApplyWorker` — per-iteration worker that drains the queue.
@@ -27,7 +34,7 @@ The slice is consumed by:
   :meth:`ApplyJobService.enqueue_for_match` after the user accepts a
   match;
 * the HTTP API (:mod:`api`) which exposes the dashboard / cancel /
-  enqueue endpoints.
+  enqueue / history endpoints.
 """
 
 from __future__ import annotations
@@ -35,12 +42,16 @@ from __future__ import annotations
 from job_apply.features.apply_worker.models import (
     ApplyJob,
     ApplyJobStatus,
+    ApplyStatusHistory,
     compute_idempotency_key,
 )
 from job_apply.features.apply_worker.repository import (
     ApplyJobRepository,
+    ApplyStatusHistoryRepository,
     InMemoryApplyJobRepository,
+    InMemoryApplyStatusHistoryRepository,
     SqlApplyJobRepository,
+    SqlApplyStatusHistoryRepository,
 )
 from job_apply.features.apply_worker.runtime import (
     DEFAULT_MAX_ATTEMPTS,
@@ -51,7 +62,12 @@ from job_apply.features.apply_worker.runtime import (
     ApplyWorker,
     ApplyWorkerProcess,
 )
-from job_apply.features.apply_worker.schemas import ApplyJobRead, apply_job_to_dto
+from job_apply.features.apply_worker.schemas import (
+    ApplyJobRead,
+    ApplyStatusHistoryRead,
+    apply_job_to_dto,
+    apply_status_history_to_dto,
+)
 from job_apply.features.apply_worker.service import (
     DEFAULT_RETRY_BACKOFF,
     ApplyJobAlreadyTerminalError,
@@ -76,11 +92,17 @@ __all__ = [
     "ApplyJobRepository",
     "ApplyJobService",
     "ApplyJobStatus",
+    "ApplyStatusHistory",
+    "ApplyStatusHistoryRead",
+    "ApplyStatusHistoryRepository",
     "ApplyResult",
     "ApplyWorker",
     "ApplyWorkerProcess",
     "InMemoryApplyJobRepository",
+    "InMemoryApplyStatusHistoryRepository",
     "SqlApplyJobRepository",
+    "SqlApplyStatusHistoryRepository",
     "apply_job_to_dto",
+    "apply_status_history_to_dto",
     "compute_idempotency_key",
 ]
