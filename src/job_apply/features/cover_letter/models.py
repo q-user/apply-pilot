@@ -1,44 +1,35 @@
-"""ORM model for the ``cover_letter`` slice (M3, issues #31 + #32).
+"""ORM model for the ``cover_letter`` slice (M3, issue #31).
 
-A :class:`CoverLetterDraft` is one version of a cover letter for a
-:class:`VacancyMatch`. Each ``match_id`` can have **many** drafts — the
-version-history feature added in issue #32 stores every regeneration
-as a new row rather than mutating the previous one in place. The
-``(match_id, version)`` composite index accelerates the "latest
-version" lookup that powers the Telegram / web review surface.
+A :class:`CoverLetterDraft` is the **first** cover letter generated for
+a :class:`VacancyMatch`. The ``match_id`` column is ``UNIQUE`` — there
+is exactly one draft per match. The follow-up issue (#32) introduces
+the version-history workflow that lifts this uniqueness constraint;
+until then, re-generating a draft mutates the existing row in place.
 
 Fields
 ------
 
-* ``id``               — UUID primary key.
-* ``match_id``         — FK to :class:`vacancy_matches.id`. **Not
-                        unique** on its own; the version-history is
-                        keyed by ``(match_id, version)``.
-* ``user_id``          — FK to :class:`users.id`. Duplicated for cheap
-                        ownership checks (the API never needs to join
+* ``id``              — UUID primary key.
+* ``match_id``        — FK to :class:`vacancy_matches.id`. ``UNIQUE``:
+                        one draft per match. Cascades on delete so a
+                        removed match leaves no orphan drafts.
+* ``user_id``         — FK to :class:`users.id`. Duplicated for cheap
+                        ownership checks; the slice never has to join
                         through ``vacancy_matches`` to decide whether
-                        the caller can see a draft).
-* ``version``          — 1 for the first draft, increments by one with
-                        every regeneration. Stable for the lifetime of
-                        the row.
-* ``text``             — the generated cover-letter body (markdown is
+                        the caller can see a draft.
+* ``content``         — the generated cover-letter body (markdown is
                         allowed; the renderer lives downstream).
-* ``style``            — the style key the generator was invoked with
-                        (e.g. ``"friendly"``). ``None`` means the
-                        generator used its default.
-* ``user_comment``     — the human hint that triggered a regeneration
-                        (e.g. ``"make it warmer"``). ``None`` on the
-                        first draft.
-* ``parent_draft_id``  — FK to :class:`cover_letter_drafts.id`. The
-                        draft this one was regenerated from. ``None``
-                        on version 1.
-* ``replaced_by_id``   — FK to :class:`cover_letter_drafts.id`. The
-                        draft that replaced this one. ``None`` on the
-                        latest version.
-* ``generation_prompt_hash`` — SHA-256 hex of the (style, comment,
-                        match-scoped facts) tuple that produced the
-                        text. For audit / debugging when the generator
-                        is upgraded.
+* ``prompt_version``  — the ``<name>@<semver>`` stamp from the
+                        :class:`PromptVersionRegistry` (or the
+                        service-level default when no registry is
+                        injected).
+* ``model_used``      — the LLM model name that produced ``content``.
+                        ``None`` when the client does not expose a
+                        model attribute.
+* ``status``          — one of :class:`CoverLetterDraftStatus`. The
+                        slice always creates rows in ``"draft"``;
+                        downstream slices can move them through
+                        ``"final"`` / ``"sent"`` / ``"archived"``.
 * ``created_at`` / ``updated_at`` — server-side timestamps.
 """
 
@@ -46,37 +37,50 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from enum import StrEnum
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from job_apply.db import Base
 from job_apply.shared.types import GUID
 
 
-class CoverLetterDraft(Base):
-    """A single version of a cover letter for a ``VacancyMatch``.
+class CoverLetterDraftStatus(StrEnum):
+    """Lifecycle states for a :class:`CoverLetterDraft`.
 
-    See module docstring for field semantics. The
-    ``(match_id, version desc)`` composite index keeps the
-    "latest for this match" and "history for this match" queries cheap
-    as the table grows.
+    The set is intentionally stable: new states are additive, and
+    renaming a state is a breaking change for any consumer that
+    matches the string value.
+
+    The M3 #31 slice only ever creates rows in :attr:`DRAFT`. The
+    follow-up issue (#32) flips the status to :attr:`REGENERATING`
+    while a regeneration is in flight; the other states
+    (:attr:`FINAL`, :attr:`SENT`, :attr:`ARCHIVED`) are reserved for
+    the review / apply pipeline.
+    """
+
+    DRAFT = "draft"
+    REGENERATING = "regenerating"
+    FINAL = "final"
+    SENT = "sent"
+    ARCHIVED = "archived"
+
+
+class CoverLetterDraft(Base):
+    """The first — and for #31, only — cover letter for a match.
+
+    See the module docstring for field semantics.
     """
 
     __tablename__ = "cover_letter_drafts"
-    __table_args__ = (
-        Index(
-            "ix_cover_letter_drafts_match_version",
-            "match_id",
-            "version",
-        ),
-    )
 
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
     match_id: Mapped[uuid.UUID] = mapped_column(
         GUID(),
         ForeignKey("vacancy_matches.id", ondelete="CASCADE"),
         nullable=False,
+        unique=True,
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
         GUID(),
@@ -85,21 +89,14 @@ class CoverLetterDraft(Base):
         index=True,
     )
 
-    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    text: Mapped[str] = mapped_column(Text, nullable=False)
-    style: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    user_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
-    generation_prompt_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
-
-    parent_draft_id: Mapped[uuid.UUID | None] = mapped_column(
-        GUID(),
-        ForeignKey("cover_letter_drafts.id", ondelete="SET NULL"),
-        nullable=True,
-    )
-    replaced_by_id: Mapped[uuid.UUID | None] = mapped_column(
-        GUID(),
-        ForeignKey("cover_letter_drafts.id", ondelete="SET NULL"),
-        nullable=True,
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    prompt_version: Mapped[str] = mapped_column(String(50), nullable=False)
+    model_used: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default=CoverLetterDraftStatus.DRAFT.value,
+        server_default=CoverLetterDraftStatus.DRAFT.value,
     )
 
     created_at: Mapped[datetime] = mapped_column(
@@ -111,10 +108,8 @@ class CoverLetterDraft(Base):
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return (
-            f"CoverLetterDraft(id={self.id!s}, match_id={self.match_id!s}, "
-            f"version={self.version}, parent={self.parent_draft_id!s}, "
-            f"replaced_by={self.replaced_by_id!s})"
+            f"CoverLetterDraft(id={self.id!s}, match_id={self.match_id!s}, status={self.status!r})"
         )
 
 
-__all__ = ["CoverLetterDraft"]
+__all__ = ["CoverLetterDraft", "CoverLetterDraftStatus"]
