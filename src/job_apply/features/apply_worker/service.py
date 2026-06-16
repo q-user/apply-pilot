@@ -49,6 +49,7 @@ from job_apply.features.apply_worker.models import (
     ApplyStatusHistory,
     compute_idempotency_key,
 )
+from job_apply.features.apply_worker.notifications import ApplyNotifier
 from job_apply.features.apply_worker.repository import (
     ApplyJobRepository,
     ApplyStatusHistoryRepository,
@@ -200,11 +201,20 @@ class ApplyJobService:
         retry_policy: RetryPolicy | None = None,
         retry_backoff: timedelta = DEFAULT_RETRY_BACKOFF,
         rate_limiter: RateLimiter | None = None,
+        notifier: ApplyNotifier | None = None,
     ) -> None:
         self._job_repo = job_repo
         self._match_repo = match_repo
         self._profile_repo = profile_repo
         self._history_repo = history_repo
+        # M5 #50 — outbound notifier. When ``None`` (the default) the
+        # service preserves its pre-#50 behaviour so callers that
+        # have not yet wired a notifier (production runtime, HTTP API
+        # before the bot is configured) keep working. When injected,
+        # ``complete`` / ``fail`` / ``cancel`` invoke it after the
+        # history row is written so the user always sees the final
+        # status regardless of which code path produced it.
+        self._notifier: ApplyNotifier | None = notifier
         # The ``RateLimiter`` (M5, issue #46) gates ``enqueue_for_match``
         # on a per-user hourly / daily cap so a runaway script (or a
         # user click-spamming ``/accept``) cannot flood hh.ru with
@@ -378,7 +388,11 @@ class ApplyJobService:
 
         Ownership is enforced. The row is also stamped with
         ``finished_at`` so the dashboard can show the cancellation
-        time without re-reading the audit log.
+        time without re-reading the audit log. The notifier (when
+        injected) is invoked after the history row is written so the
+        user gets a "🚫 Application cancelled." message regardless
+        of whether the transition came from the HTTP layer or the
+        worker's reconciliation loop.
         """
         job = self.get(job_id, user_id=user_id)
         _assert_cancellable(job)
@@ -393,6 +407,7 @@ class ApplyJobService:
             from_status=from_status,
             to_status=ApplyJobStatus.CANCELLED.value,
         )
+        self._maybe_notify(updated, ApplyJobStatus.CANCELLED.value)
         return updated
 
     # ------------------------------------------------------------------
@@ -423,6 +438,8 @@ class ApplyJobService:
         The row transitions to ``succeeded`` and the application id is
         stored for traceability. ``last_error`` is cleared so a row
         that was retried successfully does not carry stale error text.
+        The notifier (when injected) fires after the history row is
+        written so the user always gets the ✅ confirmation.
         """
         job = self._require_exists(job_id)
         _assert_not_terminal(job)
@@ -437,6 +454,7 @@ class ApplyJobService:
             from_status=from_status,
             to_status=ApplyJobStatus.SUCCEEDED.value,
         )
+        self._maybe_notify(updated, ApplyJobStatus.SUCCEEDED.value)
         return updated
 
     def fail(
@@ -456,7 +474,10 @@ class ApplyJobService:
         ``dead_letter`` for manual inspection. ``retryable=False``
         short-circuits straight to ``dead_letter``. In all branches
         ``mark_attempt`` increments ``attempts`` and stores
-        ``last_error``.
+        ``last_error``. The notifier (when injected) is invoked after
+        the history row is written: ``failed`` for the retryable
+        branch (so the user sees the ❌ retry hint) and
+        ``dead_letter`` for the exhausted branch.
         """
         job = self._require_exists(job_id)
         _assert_not_terminal(job)
@@ -487,6 +508,7 @@ class ApplyJobService:
                     "next_run_at": next_run_at.isoformat(),
                 },
             )
+            self._maybe_notify(updated, ApplyJobStatus.FAILED.value)
             return updated
         updated = self._finish(
             job_id,
@@ -499,6 +521,7 @@ class ApplyJobService:
             error=error,
             metadata={"retryable": False, "attempts": updated.attempts},
         )
+        self._maybe_notify(updated, ApplyJobStatus.DEAD_LETTER.value)
         return updated
 
     # ------------------------------------------------------------------
@@ -557,6 +580,22 @@ class ApplyJobService:
             metadata_json=json.dumps(metadata) if metadata is not None else None,
         )
         self._history_repo.create(row)
+
+    def _maybe_notify(self, job: ApplyJob, status: str) -> None:
+        """Fire the notifier for a terminal transition, if one is wired.
+
+        Centralising the ``is not None`` guard here keeps the three
+        transition methods (``complete`` / ``fail`` / ``cancel``) free
+        of an extra branch and means a future caller that wants the
+        same notification can just invoke this helper. A notifier
+        that raises is allowed to bubble up — failing to deliver a
+        Telegram message must not silently mask a buggy integration,
+        and the upstream worker / request handler logs and surfaces
+        the exception to the operator.
+        """
+        if self._notifier is None:
+            return
+        self._notifier.notify(job.user_id, job=job, status=status)
 
 
 __all__ = [
