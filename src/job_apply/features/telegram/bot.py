@@ -28,6 +28,11 @@ from job_apply.features.telegram.actions.reject import (
     RejectActionHandler,
     parse_reject_command,
 )
+from job_apply.features.telegram.actions.review import (
+    REVIEW_HELP_TEXT,
+    ReviewActionHandler,
+    parse_review_command,
+)
 from job_apply.features.telegram.dto import SendMessageRequest
 from job_apply.features.telegram.linking import (
     InvalidLinkingTokenError,
@@ -59,6 +64,7 @@ class TelegramBot:
         telegram_account_repository: TelegramAccountRepository | None = None,
         accept_handler: AcceptActionHandler | None = None,
         reject_handler: RejectActionHandler | None = None,
+        review_handler: ReviewActionHandler | None = None,
     ) -> None:
         self._settings = settings
         # Keep the injected reference but do not eagerly create a client:
@@ -83,6 +89,12 @@ class TelegramBot:
         # bot stays usable in test rigs that only exercise
         # non-action commands.
         self._reject_handler = reject_handler
+        # Optional review action handler. When None, the ``/review``
+        # command returns a "not available" message; the link between
+        # the dispatcher and the action is dependency-injected so the
+        # bot stays usable in test rigs that only exercise
+        # non-action commands.
+        self._review_handler = review_handler
 
     @property
     def settings(self) -> TelegramSettings:
@@ -208,6 +220,12 @@ class TelegramBot:
                 telegram_user_id=message.get("from", {}).get("id", 0),
                 message_text=text,
             )
+        if command == "review":
+            return self._handle_review_command(
+                chat_id=chat_id,
+                telegram_user_id=message.get("from", {}).get("id", 0),
+                message_text=text,
+            )
         return SendMessageRequest(chat_id=chat_id, text=self._fallback_text())
 
     @staticmethod
@@ -258,6 +276,7 @@ class TelegramBot:
             "/link — link your Telegram account using the code from the web app\n"
             "/accept <match_id> — mark one of your matches as accepted\n"
             "/reject <match_id> [reason] — mark one of your matches as rejected\n"
+            "/review <match_id> — render a vacancy review card for one of your matches\n"
             "/help — list available commands"
         )
 
@@ -390,6 +409,36 @@ class TelegramBot:
             chat_id=chat_id,
             telegram_user_id=telegram_user_id,
             command=command,
+        )
+
+    def _handle_review_command(
+        self,
+        *,
+        chat_id: int,
+        telegram_user_id: int,
+        message_text: str,
+    ) -> SendMessageRequest:
+        """Handle the ``/review <match_id>`` command.
+
+        The handler is collaborator-injected. When no handler is wired
+        (e.g. the bot is running with a stripped-down set of
+        dependencies for local hacking) the command returns a
+        "not available" message instead of crashing.
+        """
+        if self._review_handler is None:
+            return SendMessageRequest(
+                chat_id=chat_id,
+                text=("Review action is not available right now. Please try again later."),
+            )
+
+        command = parse_review_command(message_text)
+        if command is None:
+            return SendMessageRequest(chat_id=chat_id, text=REVIEW_HELP_TEXT)
+
+        return self._review_handler.handle(
+            chat_id=chat_id,
+            telegram_user_id=telegram_user_id,
+            match_id=command.match_id,
         )
 
     @staticmethod
