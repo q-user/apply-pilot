@@ -25,12 +25,10 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Sequence
-from typing import Protocol
 
 import pytest
 
 from job_apply.features.resumes.models import Resume
-from job_apply.features.resumes.repository import ResumesRepository
 from job_apply.features.scoring.llm import InMemoryLLMClient
 from job_apply.features.screening.models import (
     ScreeningQuestion,
@@ -45,29 +43,9 @@ from job_apply.features.screening.service import (
     ScreeningServiceError,
 )
 from job_apply.features.sources.models import Vacancy
-from job_apply.features.sources.repository import (
-    InMemoryVacancyRepository,
-    SqlVacancyRepository,
-)
+from job_apply.features.sources.repository import InMemoryVacancyRepository
 from job_apply.features.users.models import User
 from job_apply.features.users.repository import InMemoryUsersRepository
-
-# ---------------------------------------------------------------------------
-# Minimal Protocol types for the cross-slice fakes
-# ---------------------------------------------------------------------------
-
-
-class _UserRepoLike(Protocol):
-    def get_by_id(self, user_id: uuid.UUID) -> User | None: ...
-
-
-class _VacancyRepoLike(Protocol):
-    def get_by_id(self, vacancy_id: uuid.UUID) -> Vacancy | None: ...
-
-
-class _ResumeRepoLike(Protocol):
-    def list_for_user(self, user_id: uuid.UUID) -> Sequence[Resume]: ...
-
 
 # ---------------------------------------------------------------------------
 # Fakes
@@ -75,7 +53,7 @@ class _ResumeRepoLike(Protocol):
 
 
 class _FakeResumeRepository:
-    """Mimic :class:`ResumesRepository` for the service tests."""
+    """Mimic the resume repository's ``list_for_user`` contract for tests."""
 
     def __init__(self, resume: Resume | None = None) -> None:
         self._resume = resume
@@ -394,12 +372,3 @@ class TestListUserAnswers:
 
         only_v1 = service.list_user_answers(user.id, vacancy_id=vacancy.id)
         assert [a.question_id for a in only_v1] == [q1.id]
-
-
-# Silence unused-import warnings for cross-slice fakes kept available
-# for follow-up tests.
-_ = SqlVacancyRepository
-_ = ResumesRepository
-_ = _UserRepoLike
-_ = _VacancyRepoLike
-_ = _ResumeRepoLike

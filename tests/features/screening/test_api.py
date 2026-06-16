@@ -32,9 +32,7 @@ from job_apply.features.screening.service import ScreeningService
 from job_apply.features.sources.models import Vacancy
 from job_apply.features.users import models as _users_models  # noqa: F401
 from job_apply.features.users.api import router as auth_router
-from job_apply.features.users.models import User
 from job_apply.features.users.repository import InMemoryUsersRepository
-from job_apply.features.users.security import hash_password
 
 
 def _register_and_login(client: TestClient, email: str, password: str) -> str:
@@ -381,8 +379,6 @@ def _add_one_question(client: TestClient, token: str, vacancy_id: uuid.UUID, tex
     return response.json()[0]["id"]
 
 
-# Silence unused-import warnings for symbols kept available for follow-up
-# tests but not used in this module.
-_ = User
-_ = hash_password
+# Silence unused-import warnings for the screening_router fixture
+# parameter — the router is mounted inside the FastAPI app.
 _ = screening_router  # re-exported via fixtures

@@ -26,7 +26,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from job_apply.db import Base
-from job_apply.features.resumes.models import Resume
 from job_apply.features.screening import models as _screening_models  # noqa: F401
 from job_apply.features.screening.models import (
     ScreeningQuestion,
@@ -419,8 +418,3 @@ class TestSqlScreeningAnswerRepository:
 
         a_answers = list(answer_repo.list_by_user(user_a_id))
         assert [a.answer_text for a in a_answers] == ["A"]
-
-
-# Silence unused-import warnings for the Resume import (kept so the test
-# can later reuse the same fixture pattern as the service tests).
-_ = Resume
