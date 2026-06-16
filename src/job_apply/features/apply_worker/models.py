@@ -299,9 +299,81 @@ class ApplyStatusHistory(Base):
         )
 
 
+class ApplyRateLimitEvent(Base):
+    """An append-only record of a rate-limited operation (M5, issue #46).
+
+    Every successful :meth:`ApplyJobService.enqueue_for_match` call
+    appends one :class:`ApplyRateLimitEvent` row so the hourly / daily
+    windows can be computed by counting the rows that fall inside
+    ``[now - window, now]``. Rows are never updated or deleted through
+    the slice's storage gateway — the rate-limiter's repository owns
+    the read path, the service owns the write path, and cleanup is a
+    background concern that is intentionally out of scope for M5.
+
+    Fields
+    ------
+
+    * ``id``          — UUID primary key.
+    * ``user_id``     — FK to ``users.id`` (``ondelete=CASCADE`` so a
+                       hard-deleted user takes their rate-limit events
+                       with it).
+    * ``key``         — the operation the event guards. M5 ships a
+                       single key, ``"apply"``; the column is wide
+                       enough to support additional keys (e.g.
+                       ``"regenerate"``) without a schema change.
+    * ``occurred_at`` — server-side timestamp; the SQL implementation
+                       lets the database fill this in at insert time
+                       so clock skew between application processes
+                       cannot double-count events.
+    """
+
+    __tablename__ = "apply_rate_limit_events"
+    __table_args__ = (
+        Index(
+            "ix_apply_rate_limit_events_user_id_key_occurred_at",
+            "user_id",
+            "key",
+            "occurred_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        GUID(),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    key: Mapped[str] = mapped_column(String(50), nullable=False)
+
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    def __init__(self, **kwargs: Any) -> None:
+        if "id" not in kwargs or kwargs["id"] is None:
+            kwargs["id"] = uuid.uuid4()
+        if "occurred_at" not in kwargs or kwargs["occurred_at"] is None:
+            # The SQL column carries a ``server_default`` for the flush
+            # path, but freshly-constructed Python instances need an
+            # in-memory value too so callers can read ``row.occurred_at``
+            # before the row is persisted. This mirrors the convention
+            # used by the other append-only models in the slice.
+            kwargs["occurred_at"] = datetime.now(UTC)
+        super().__init__(**kwargs)
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return (
+            f"ApplyRateLimitEvent(id={self.id!s}, user_id={self.user_id!s}, "
+            f"key={self.key!r}, occurred_at={self.occurred_at.isoformat()!s})"
+        )
+
+
 __all__ = [
     "ApplyJob",
     "ApplyJobStatus",
+    "ApplyRateLimitEvent",
     "ApplyStatusHistory",
     "compute_idempotency_key",
 ]

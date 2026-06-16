@@ -319,6 +319,12 @@ class ApplyWorkerSettings:
       perturb each delay with ±10% jitter. Accepted truthy values
       match the convention used by :class:`FastAPISettings`:
       ``1``, ``true``, ``yes``, ``on`` (case-insensitive).
+    * ``APP_APPLY_HOURLY_LIMIT`` (int, default ``10``) — maximum
+      number of :meth:`ApplyJobService.enqueue_for_match` calls per
+      user per rolling 1-hour window. M5, issue #46.
+    * ``APP_APPLY_DAILY_LIMIT`` (int, default ``30``) — maximum number
+      of enqueue calls per user per rolling 24-hour window. M5, issue
+      #46.
     """
 
     max_attempts: int = 3
@@ -326,6 +332,8 @@ class ApplyWorkerSettings:
     max_delay_seconds: float = 300.0
     backoff_multiplier: float = 2.0
     jitter: bool = True
+    hourly_limit: int = 10
+    daily_limit: int = 30
 
     def __post_init__(self) -> None:
         if self.max_attempts < 1:
@@ -352,6 +360,16 @@ class ApplyWorkerSettings:
             raise ValueError(
                 "ApplyWorkerSettings.max_delay_seconds must be >= base_delay_seconds; "
                 f"got max={self.max_delay_seconds}, base={self.base_delay_seconds}"
+            )
+        if self.hourly_limit < 1:
+            raise ValueError(
+                f"ApplyWorkerSettings.hourly_limit must be a positive integer; "
+                f"got {self.hourly_limit}"
+            )
+        if self.daily_limit < 1:
+            raise ValueError(
+                f"ApplyWorkerSettings.daily_limit must be a positive integer; "
+                f"got {self.daily_limit}"
             )
 
     def to_retry_policy(self) -> "RetryPolicy":
@@ -424,6 +442,8 @@ def get_apply_worker_settings() -> ApplyWorkerSettings:
     max_delay_raw = os.getenv("APP_APPLY_MAX_DELAY_SECONDS", "300.0")
     multiplier_raw = os.getenv("APP_APPLY_BACKOFF_MULTIPLIER", "2.0")
     jitter_raw = os.getenv("APP_APPLY_JITTER", "true")
+    hourly_raw = os.getenv("APP_APPLY_HOURLY_LIMIT", "10")
+    daily_raw = os.getenv("APP_APPLY_DAILY_LIMIT", "30")
 
     return ApplyWorkerSettings(
         max_attempts=_parse_positive_int(max_attempts_raw, env_var="APP_APPLY_MAX_ATTEMPTS"),
@@ -437,4 +457,6 @@ def get_apply_worker_settings() -> ApplyWorkerSettings:
             multiplier_raw, env_var="APP_APPLY_BACKOFF_MULTIPLIER"
         ),
         jitter=_parse_bool(jitter_raw, env_var="APP_APPLY_JITTER"),
+        hourly_limit=_parse_positive_int(hourly_raw, env_var="APP_APPLY_HOURLY_LIMIT"),
+        daily_limit=_parse_positive_int(daily_raw, env_var="APP_APPLY_DAILY_LIMIT"),
     )

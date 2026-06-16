@@ -4,6 +4,8 @@ Endpoints
 ---------
 
 * ``GET /apply-jobs`` — list the caller's apply jobs.
+* ``GET /apply-jobs/limits`` — current per-user rate-limit snapshot
+  (M5, issue #46).
 * ``GET /apply-jobs/{id}`` — fetch a single apply job (ownership
   enforced).
 * ``GET /apply-jobs/{id}/history`` — list the caller's apply job
@@ -31,14 +33,20 @@ from sqlalchemy.orm import Session
 
 from job_apply.config import get_apply_worker_settings
 from job_apply.db import get_db
+from job_apply.features.apply_worker.limits import (
+    RateLimiter,
+    SqlRateLimiter,
+)
 from job_apply.features.apply_worker.repository import (
     SqlApplyJobRepository,
     SqlApplyStatusHistoryRepository,
 )
 from job_apply.features.apply_worker.schemas import (
     ApplyJobRead,
+    ApplyRateLimitRead,
     ApplyStatusHistoryRead,
     apply_job_to_dto,
+    apply_rate_limit_to_dto,
     apply_status_history_to_dto,
 )
 from job_apply.features.apply_worker.service import (
@@ -47,6 +55,7 @@ from job_apply.features.apply_worker.service import (
     ApplyJobNotFoundError,
     ApplyJobOwnershipError,
     ApplyJobService,
+    RateLimitExceeded,
 )
 from job_apply.features.matches.repository import SqlVacancyMatchRepository
 from job_apply.features.search_profiles.repository import SqlSearchProfileRepository
@@ -101,17 +110,32 @@ def get_apply_job_service(
     from ``APP_APPLY_*`` env vars at process start) so the M5 retry
     semantics — exponential backoff, jitter, ``max_attempts`` — apply
     uniformly across HTTP and worker invocations.
+
+    The :class:`RateLimiter` (M5, issue #46) shares the same session
+    factory so ``record`` / ``check`` participate in the request
+    transaction. The hourly / daily caps are read from
+    :class:`ApplyWorkerSettings` so the same env-driven knobs that
+    tune the retry policy tune the anti-spam budget.
     """
-    job_repo = SqlApplyJobRepository(session_factory=lambda: session)
-    match_repo = SqlVacancyMatchRepository(session_factory=lambda: session)
-    profile_repo = SqlSearchProfileRepository(session_factory=lambda: session)
-    history_repo = SqlApplyStatusHistoryRepository(session_factory=lambda: session)
+
+    def _session_scope() -> Session:
+        return session
+
+    job_repo = SqlApplyJobRepository(session_factory=_session_scope)
+    match_repo = SqlVacancyMatchRepository(session_factory=_session_scope)
+    profile_repo = SqlSearchProfileRepository(session_factory=_session_scope)
+    history_repo = SqlApplyStatusHistoryRepository(session_factory=_session_scope)
+    rate_limiter: RateLimiter = SqlRateLimiter(
+        session_factory=_session_scope,
+        settings=get_apply_worker_settings(),
+    )
     return ApplyJobService(
         job_repo=job_repo,
         match_repo=match_repo,
         profile_repo=profile_repo,
         history_repo=history_repo,
         retry_policy=get_apply_worker_settings().to_retry_policy(),
+        rate_limiter=rate_limiter,
     )
 
 
@@ -134,6 +158,35 @@ def list_apply_jobs(
     """List the caller's apply jobs, newest first."""
     jobs = service.list_user_jobs(uuid.UUID(user_id_str))
     return [apply_job_to_dto(j) for j in jobs]
+
+
+# NOTE: ``/limits`` (M5, issue #46) must be declared *before*
+# ``/{job_id}`` so FastAPI's path matcher does not greedily bind
+# the literal ``limits`` to the dynamic ``{job_id}`` parameter. The
+# same pattern applies to ``/enqueue/{match_id}`` (declared further
+# down) for the same reason.
+
+
+@router.get(
+    "/limits",
+    response_model=ApplyRateLimitRead,
+    responses={
+        401: {"description": "Missing or invalid bearer token"},
+    },
+)
+def get_apply_job_limits(
+    user_id_str: str = Depends(_resolve_user_id),  # noqa: B008
+    service: ApplyJobService = Depends(get_apply_job_service),  # noqa: B008
+) -> ApplyRateLimitRead:
+    """Return the caller's current rate-limit snapshot (M5, issue #46).
+
+    The endpoint is read-only: it does not consume a token, does not
+    touch the queue, and does not require a match to exist. The
+    dashboard calls it on page load to render the hourly / daily
+    progress bars and the "back in N seconds" countdown.
+    """
+    result = service.rate_limit_status(uuid.UUID(user_id_str))
+    return apply_rate_limit_to_dto(result)
 
 
 @router.get(
@@ -171,6 +224,7 @@ def get_apply_job(
     responses={
         401: {"description": "Missing or invalid bearer token"},
         404: {"description": "Match or search profile not found"},
+        429: {"description": "Per-user rate limit exceeded"},
     },
 )
 def enqueue_apply_job(
@@ -185,6 +239,10 @@ def enqueue_apply_job(
     ``match_id``; ownership of the match is enforced indirectly
     through the match's search profile, which the service looks up
     before creating the row.
+
+    The endpoint maps :class:`RateLimitExceeded` (M5, issue #46) to a
+    ``429 Too Many Requests`` response. The ``Retry-After`` header
+    carries the seconds-until-retry hint from the limiter.
     """
     try:
         match_uuid = uuid.UUID(match_id)
@@ -197,6 +255,21 @@ def enqueue_apply_job(
         job = service.enqueue_for_match(match_uuid)
     except ApplyJobDependencyMissingError as exc:
         raise _http_error(status.HTTP_404_NOT_FOUND, exc.code, str(exc)) from exc
+    except RateLimitExceeded as exc:
+        # 429 + Retry-After header. The HTTPException detail includes
+        # the structured payload the dashboard uses to render the
+        # rate-limit card on the apply-jobs page.
+        retry_after = exc.retry_after_seconds
+        headers = {"Retry-After": str(retry_after)} if retry_after is not None else None
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "code": exc.code,
+                "message": str(exc),
+                "retry_after_seconds": retry_after,
+            },
+            headers=headers,
+        ) from exc
     return apply_job_to_dto(job)
 
 

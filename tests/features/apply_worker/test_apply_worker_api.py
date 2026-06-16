@@ -166,6 +166,7 @@ def token(apply_world: _World) -> str:
 def test_endpoints_require_token(client: TestClient) -> None:
     """Every apply-jobs endpoint must reject requests without a bearer token."""
     assert client.get("/apply-jobs").status_code == 401
+    assert client.get("/apply-jobs/limits").status_code == 401
     assert client.get(f"/apply-jobs/{uuid.uuid4()}").status_code == 401
     assert client.get(f"/apply-jobs/{uuid.uuid4()}/history").status_code == 401
     assert client.post(f"/apply-jobs/{uuid.uuid4()}/cancel").status_code == 401
