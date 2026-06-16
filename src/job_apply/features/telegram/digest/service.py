@@ -109,7 +109,7 @@ class StatsService:
         matches = list(self._match_repo.list_by_user(user_id))
 
         counts = {
-            "total": len(matches),
+            "total": 0,
             "new": 0,
             "review": 0,
             "accepted": 0,
@@ -117,8 +117,17 @@ class StatsService:
             "applied": 0,
             "applied_today": 0,
         }
+        # ``deferred`` matches are a soft "not now, maybe later" state
+        # (issue #39): they are stored on the row so the user can
+        # resume them, but the daily digest must not surface them.
+        # We drop them from every bucket here rather than filtering
+        # the list up-front so a future "include deferred" toggle can
+        # add them back to ``total`` without re-walking the matches.
         for match in matches:
             status = match.status
+            if status == MatchStatus.DEFERRED.value:
+                continue
+            counts["total"] += 1
             if status in _NEW_STATUSES:
                 counts["new"] += 1
             elif status == MatchStatus.REVIEW.value:
@@ -131,8 +140,8 @@ class StatsService:
                 counts["applied"] += 1
                 if _updated_on_date(match, target_date):
                     counts["applied_today"] += 1
-            # ``dismissed`` and any future status are counted in ``total``
-            # but do not move any of the explicit buckets.
+            # ``dismissed`` and any future non-deferred status are counted
+            # in ``total`` but do not move any of the explicit buckets.
 
         return UserStats(
             matches_total=counts["total"],

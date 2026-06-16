@@ -23,6 +23,11 @@ from job_apply.features.telegram.actions.accept import (
     AcceptActionHandler,
     parse_accept_command,
 )
+from job_apply.features.telegram.actions.defer import (
+    DEFER_HELP_TEXT,
+    DeferActionHandler,
+    parse_defer_command,
+)
 from job_apply.features.telegram.actions.reject import (
     REJECT_HELP_TEXT,
     RejectActionHandler,
@@ -63,6 +68,7 @@ class TelegramBot:
         linking_service: TelegramLinkingService | None = None,
         telegram_account_repository: TelegramAccountRepository | None = None,
         accept_handler: AcceptActionHandler | None = None,
+        defer_handler: DeferActionHandler | None = None,
         reject_handler: RejectActionHandler | None = None,
         review_handler: ReviewActionHandler | None = None,
     ) -> None:
@@ -83,6 +89,12 @@ class TelegramBot:
         # bot stays usable in test rigs that only exercise
         # non-action commands.
         self._accept_handler = accept_handler
+        # Optional defer action handler. When None, the ``/defer``
+        # command returns a "not available" message; the link between
+        # the dispatcher and the action is dependency-injected so the
+        # bot stays usable in test rigs that only exercise
+        # non-action commands.
+        self._defer_handler = defer_handler
         # Optional reject action handler. When None, the ``/reject``
         # command returns a "not available" message; the link between
         # the dispatcher and the action is dependency-injected so the
@@ -214,6 +226,12 @@ class TelegramBot:
                 telegram_user_id=message.get("from", {}).get("id", 0),
                 message_text=text,
             )
+        if command == "defer":
+            return self._handle_defer_command(
+                chat_id=chat_id,
+                telegram_user_id=message.get("from", {}).get("id", 0),
+                message_text=text,
+            )
         if command == "reject":
             return self._handle_reject_command(
                 chat_id=chat_id,
@@ -275,6 +293,7 @@ class TelegramBot:
             "/start — show welcome message and account-linking hint\n"
             "/link — link your Telegram account using the code from the web app\n"
             "/accept <match_id> — mark one of your matches as accepted\n"
+            "/defer <match_id> — shelve one of your matches for later\n"
             "/reject <match_id> [reason] — mark one of your matches as rejected\n"
             "/review <match_id> — render a vacancy review card for one of your matches\n"
             "/help — list available commands"
@@ -376,6 +395,36 @@ class TelegramBot:
             return SendMessageRequest(chat_id=chat_id, text=ACCEPT_HELP_TEXT)
 
         return self._accept_handler.handle(
+            chat_id=chat_id,
+            telegram_user_id=telegram_user_id,
+            command=command,
+        )
+
+    def _handle_defer_command(
+        self,
+        *,
+        chat_id: int,
+        telegram_user_id: int,
+        message_text: str,
+    ) -> SendMessageRequest:
+        """Handle the ``/defer <match_id>`` command.
+
+        The handler is collaborator-injected. When no handler is wired
+        (e.g. the bot is running with a stripped-down set of
+        dependencies for local hacking) the command returns a
+        "not available" message instead of crashing.
+        """
+        if self._defer_handler is None:
+            return SendMessageRequest(
+                chat_id=chat_id,
+                text=("Defer action is not available right now. Please try again later."),
+            )
+
+        command = parse_defer_command(message_text)
+        if command is None:
+            return SendMessageRequest(chat_id=chat_id, text=DEFER_HELP_TEXT)
+
+        return self._defer_handler.handle(
             chat_id=chat_id,
             telegram_user_id=telegram_user_id,
             command=command,

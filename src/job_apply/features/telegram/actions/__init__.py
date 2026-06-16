@@ -17,6 +17,12 @@ from job_apply.features.telegram.actions.accept import (
     AcceptCommand,
     parse_accept_command,
 )
+from job_apply.features.telegram.actions.defer import (
+    DEFER_HELP_TEXT,
+    DeferActionHandler,
+    DeferCommand,
+    parse_defer_command,
+)
 from job_apply.features.telegram.actions.reject import (
     REJECT_HELP_TEXT,
     RejectActionHandler,
@@ -35,6 +41,9 @@ __all__ = [
     "ACCEPT_HELP_TEXT",
     "AcceptActionHandler",
     "AcceptCommand",
+    "DEFER_HELP_TEXT",
+    "DeferActionHandler",
+    "DeferCommand",
     "REJECT_HELP_TEXT",
     "REVIEW_HELP_TEXT",
     "RejectActionHandler",
@@ -42,6 +51,7 @@ __all__ = [
     "ReviewActionHandler",
     "ReviewCommand",
     "parse_accept_command",
+    "parse_defer_command",
     "parse_reject_command",
     "parse_review_command",
     "render_review_card",
