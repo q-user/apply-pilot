@@ -2,17 +2,26 @@
 
 The ``SourceService`` owns the ingest pipeline: normalise raw source data
 into a canonical ``Vacancy``, deduplicate it, and persist it via the
-repository.
+repository. As of M2 (issue #26) the service also delegates the
+screening-question capture to an optional
+:class:`~job_apply.features.screening.extractor.ScreeningQuestionExtractor`
+that the caller injects; the sources slice stays agnostic of the
+screening schema.
 """
 
 from __future__ import annotations
 
 import logging
+from typing import Any, TYPE_CHECKING
 
+from job_apply.features.screening.models import ScreeningQuestion
 from job_apply.features.sources.dedup import VacancyDeduplicator
 from job_apply.features.sources.models import Vacancy
 from job_apply.features.sources.normalizer import VacancyNormalizer
 from job_apply.features.sources.repository import VacancyRepository
+
+if TYPE_CHECKING:
+    from job_apply.features.screening.extractor import ScreeningQuestionExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +34,14 @@ class SourceService:
     * :class:`VacancyNormalizer` — turns raw source payloads into ``Vacancy``.
     * :class:`VacancyDeduplicator` — short-circuits known rows.
     * :class:`VacancyRepository` — persists what survives dedup.
+
+    A fourth collaborator — a
+    :class:`~job_apply.features.screening.extractor.ScreeningQuestionExtractor`
+    — is **optional**. When supplied via
+    :meth:`ingest_vacancy` the service runs the extractor after the
+    vacancy is upserted, persists the resulting screening questions
+    and returns them. When not supplied the service still upserts the
+    vacancy but the screening-capture step is a no-op.
     """
 
     def __init__(
@@ -53,15 +70,36 @@ class SourceService:
         """Expose the deduplicator for tests that need to assert state."""
         return self._deduplicator
 
-    def ingest_vacancy(self, source: str, raw_data: dict) -> Vacancy:
-        """Normalise raw source data and upsert into the repository.
+    def ingest_vacancy(
+        self,
+        source: str,
+        raw_data: dict[str, Any],
+        *,
+        screening_extractor: "ScreeningQuestionExtractor | None" = None,
+    ) -> list[ScreeningQuestion]:
+        """Normalise raw source data, upsert the vacancy, and capture screening questions.
 
-        Returns the persisted ``Vacancy``.
+        The vacancy is always upserted via the repository. If a
+        ``screening_extractor`` is provided, it runs *after* the
+        upsert (so the vacancy's id is already assigned) and the
+        captured questions are returned; otherwise the method returns
+        an empty list.
+
+        The Vacancy itself is **not** part of the return value; the
+        repository exposes the just-persisted row via
+        :meth:`VacancyRepository.find_by_source` /
+        :meth:`VacancyRepository.get_by_id`, which is what the rest
+        of the application uses for further lookups.
         """
         vacancy = self._normalizer.normalize(source, raw_data)
-        return self._repo.upsert(vacancy)
+        self._repo.upsert(vacancy)
+        if screening_extractor is None:
+            return []
+        return screening_extractor.extract_from_vacancy(vacancy, raw_data)
 
-    async def ingest_vacancy_deduped(self, source: str, raw_data: dict) -> Vacancy | None:
+    async def ingest_vacancy_deduped(
+        self, source: str, raw_data: dict
+    ) -> Vacancy | None:
         """Normalise, dedup, and (only if new) persist a single vacancy.
 
         Returns the persisted :class:`Vacancy` or ``None`` when the

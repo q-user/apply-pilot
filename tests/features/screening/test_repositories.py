@@ -92,6 +92,34 @@ class TestInMemoryScreeningQuestionRepository:
         # The other vacancy's questions are untouched.
         assert {q.question_text for q in repo.list_by_vacancy(v2)} == {"keep"}
 
+    def test_create_many_persists_in_supplied_order(self) -> None:
+        """``create_many`` stores every row and preserves input order."""
+        repo = InMemoryScreeningQuestionRepository()
+        v = uuid.uuid4()
+        rows = [
+            ScreeningQuestion(vacancy_id=v, question_text="alpha", question_order=0),
+            ScreeningQuestion(vacancy_id=v, question_text="beta", question_order=1),
+            ScreeningQuestion(vacancy_id=v, question_text="gamma", question_order=2),
+        ]
+
+        created = repo.create_many(rows)
+
+        # Returned rows match the input; ids are assigned.
+        assert [r.question_text for r in created] == ["alpha", "beta", "gamma"]
+        for r in created:
+            assert r.id is not None
+        # ``list_by_vacancy`` returns them sorted by question_order.
+        assert [q.question_text for q in repo.list_by_vacancy(v)] == [
+            "alpha",
+            "beta",
+            "gamma",
+        ]
+
+    def test_create_many_with_empty_input_is_noop(self) -> None:
+        """An empty batch returns ``[]`` and touches no state."""
+        repo = InMemoryScreeningQuestionRepository()
+        assert repo.create_many([]) == []
+
 
 # ---------------------------------------------------------------------------
 # In-memory: ScreeningAnswerRepository
@@ -306,6 +334,29 @@ class TestSqlScreeningQuestionRepository:
         assert deleted == 2
         assert list(repo.list_by_vacancy(v1)) == []
         assert len(list(repo.list_by_vacancy(v2_id))) == 1
+
+    def test_create_many_persists_all_rows_in_one_batch(self, session_factory) -> None:
+        """``create_many`` commits every row and exposes DB-assigned ids."""
+        _, vacancy_id = _seed_user_and_vacancy(session_factory)
+        repo = SqlScreeningQuestionRepository(session_factory=session_factory)
+        rows = [
+            ScreeningQuestion(vacancy_id=vacancy_id, question_text="alpha", question_order=0),
+            ScreeningQuestion(vacancy_id=vacancy_id, question_text="beta", question_order=1),
+            ScreeningQuestion(vacancy_id=vacancy_id, question_text="gamma", question_order=2),
+        ]
+
+        created = repo.create_many(rows)
+
+        for row in created:
+            assert row.id is not None
+            assert row.created_at is not None
+        loaded = list(repo.list_by_vacancy(vacancy_id))
+        assert [q.question_text for q in loaded] == ["alpha", "beta", "gamma"]
+
+    def test_create_many_with_empty_input_is_noop(self, session_factory) -> None:
+        """An empty batch returns ``[]`` without opening a session."""
+        repo = SqlScreeningQuestionRepository(session_factory=session_factory)
+        assert repo.create_many([]) == []
 
 
 # ---------------------------------------------------------------------------
