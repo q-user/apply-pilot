@@ -7,6 +7,26 @@ without coupling to the internal module structure.
 
 from __future__ import annotations
 
+from job_apply.features.hh.apply import HH_APPLY_CLIENT_ERROR_PREFIX as HH_APPLY_CLIENT_ERROR_PREFIX
+from job_apply.features.hh.apply import (
+    HH_APPLY_INVALID_RESPONSE_ERROR as HH_APPLY_INVALID_RESPONSE_ERROR,
+)
+from job_apply.features.hh.apply import (
+    HH_APPLY_NETWORK_ERROR_PREFIX as HH_APPLY_NETWORK_ERROR_PREFIX,
+)
+from job_apply.features.hh.apply import (
+    HH_APPLY_NO_COVER_LETTER_ERROR as HH_APPLY_NO_COVER_LETTER_ERROR,
+)
+from job_apply.features.hh.apply import (
+    HH_APPLY_NO_CREDENTIALS_ERROR as HH_APPLY_NO_CREDENTIALS_ERROR,
+)
+from job_apply.features.hh.apply import HH_APPLY_NO_RESUME_ERROR as HH_APPLY_NO_RESUME_ERROR
+from job_apply.features.hh.apply import HH_APPLY_NO_VACANCY_ERROR as HH_APPLY_NO_VACANCY_ERROR
+from job_apply.features.hh.apply import HH_APPLY_RATE_LIMITED_ERROR as HH_APPLY_RATE_LIMITED_ERROR
+from job_apply.features.hh.apply import HH_APPLY_SERVER_ERROR_PREFIX as HH_APPLY_SERVER_ERROR_PREFIX
+from job_apply.features.hh.apply import HH_APPLY_UNAUTHORIZED_ERROR as HH_APPLY_UNAUTHORIZED_ERROR
+from job_apply.features.hh.apply import HhApplyAdapter as HhApplyAdapter
+from job_apply.features.hh.apply import HTTPClientFactory as HTTPClientFactory
 from job_apply.features.hh.encryption import CredentialEncryptor as CredentialEncryptor
 from job_apply.features.hh.models import HHCredential as HHCredential
 from job_apply.features.hh.oauth import (
@@ -70,6 +90,7 @@ __all__ = [
     "HHVacancyNotFoundError",
     "HHVacancySearchClient",
     "HHVacancySearchError",
+    "HhApplyAdapter",
     "HhAuthService",
     "HhHttpOAuthClient",
     "HhHttpVacancySearchClient",
@@ -83,4 +104,15 @@ __all__ = [
     "MissingRefreshTokenError",
     "OAuthExchangeError",
     "RedactedCredentials",
+    "HH_APPLY_CLIENT_ERROR_PREFIX",
+    "HH_APPLY_INVALID_RESPONSE_ERROR",
+    "HH_APPLY_NETWORK_ERROR_PREFIX",
+    "HH_APPLY_NO_COVER_LETTER_ERROR",
+    "HH_APPLY_NO_CREDENTIALS_ERROR",
+    "HH_APPLY_NO_RESUME_ERROR",
+    "HH_APPLY_NO_VACANCY_ERROR",
+    "HH_APPLY_RATE_LIMITED_ERROR",
+    "HH_APPLY_SERVER_ERROR_PREFIX",
+    "HH_APPLY_UNAUTHORIZED_ERROR",
+    "HTTPClientFactory",
 ]
