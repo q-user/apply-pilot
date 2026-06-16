@@ -55,6 +55,7 @@ def _profile_to_dto(profile: SearchProfile) -> SearchProfileRead:
         location=profile.location,
         schedule=profile.schedule,
         is_active=profile.is_active,
+        is_preferred=profile.is_preferred,
         created_at=profile.created_at,
         updated_at=profile.updated_at,
     )
@@ -160,6 +161,44 @@ class SearchProfileService:
                 f"search profile {profile_id} does not belong to user {user_id}"
             )
         self._repo.delete(profile)
+
+    def set_active(
+        self,
+        profile_id: uuid.UUID,
+        *,
+        active: bool,
+        user_id: uuid.UUID,
+    ) -> SearchProfileRead:
+        """Toggle the ``is_active`` flag on a profile owned by ``user_id``.
+
+        Used by ``POST /search-profiles/{id}/activate`` and
+        ``POST /search-profiles/{id}/deactivate`` so the HTTP layer does
+        not need a separate handler per direction.
+        """
+        profile = self._repo.get_by_id(profile_id)
+        if profile is None:
+            raise ProfileNotFoundError(f"search profile {profile_id} not found")
+        if profile.user_id != user_id:
+            raise ProfileOwnershipError(
+                f"search profile {profile_id} does not belong to user {user_id}"
+            )
+        profile.is_active = active
+        updated = self._repo.update(profile)
+        return _profile_to_dto(updated)
+
+    def get_preferred(self, user_id: uuid.UUID) -> SearchProfileRead | None:
+        """Return the user's "preferred" search profile, or ``None`` if none
+        is flagged ``is_preferred=True``.
+
+        The ``is_preferred`` flag is added in this milestone (M6, #53) as a
+        data-model placeholder; the dedicated "set preferred profile"
+        endpoint will land in a follow-up issue. Until then every user
+        gets ``None`` and the HTTP layer translates that into ``404``.
+        """
+        for profile in self._repo.list_by_user(user_id):
+            if profile.is_preferred:
+                return _profile_to_dto(profile)
+        return None
 
 
 __all__ = [
