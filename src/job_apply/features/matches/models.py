@@ -14,6 +14,11 @@ A :class:`VacancyMatch` is the join row that connects a canonical
 * ``applied``   — the apply pipeline submitted an application.
 * ``dismissed`` — the user explicitly hid the match (does not
                   influence scoring).
+* ``deferred``  — the user shelved the match for later ("not now,
+                  maybe later"). Excluded from the daily digest so
+                  matches the user has already triaged do not keep
+                  showing up. A follow-up ``/defer`` call is a
+                  no-op that still records an audit event.
 
 The ``(search_profile_id, vacancy_id)`` pair is unique: the same
 vacancy may be re-ingested under a new status, but it cannot spawn
@@ -57,6 +62,7 @@ class MatchStatus(StrEnum):
     REJECTED = "rejected"
     APPLIED = "applied"
     DISMISSED = "dismissed"
+    DEFERRED = "deferred"
 
 
 class VacancyMatch(Base):

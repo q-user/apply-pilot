@@ -18,8 +18,12 @@ class UserStats:
     """Per-user counts that the daily digest renders.
 
     Attributes:
-        matches_total: All matches that belong to the user's profiles,
-            regardless of status. Includes ``dismissed`` matches.
+        matches_total: All matches that belong to the user's profiles
+            that are not ``deferred`` (issue #39). ``deferred`` matches
+            are a soft "not now, maybe later" state the user has
+            explicitly shelved, so they stay on the row but are
+            hidden from the digest. ``dismissed`` matches are still
+            counted in the total.
         matches_new: Matches with status in ``{new, scored}`` — the
             queue the user has not reviewed yet.
         matches_review: Matches flagged for human review.
