@@ -5,8 +5,6 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-from job_apply.features.apply_worker.retry import RetryPolicy
-
 
 @dataclass(frozen=True)
 class Settings:
@@ -356,13 +354,20 @@ class ApplyWorkerSettings:
                 f"got max={self.max_delay_seconds}, base={self.base_delay_seconds}"
             )
 
-    def to_retry_policy(self) -> RetryPolicy:
+    def to_retry_policy(self) -> "RetryPolicy":
         """Return a :class:`~job_apply.features.apply_worker.retry.RetryPolicy`.
 
-        The :class:`RetryPolicy` is imported at module level so type
-        checkers see the annotation; the dataclass is a thin copy of
-        the five settings fields, so the two stay in lock-step.
+        The :class:`RetryPolicy` is imported lazily inside the method
+        to avoid the circular dependency chain
+        ``db -> config -> apply_worker.retry -> apply_worker.__init__ ->
+        apply_worker.models -> db`` that would otherwise fire on
+        ``job_apply.config`` import. ``from __future__ import
+        annotations`` keeps the type annotation a bare string, so
+        static type checkers resolve it through the local alias and
+        runtime never touches the import.
         """
+        from job_apply.features.apply_worker.retry import RetryPolicy
+
         return RetryPolicy(
             max_attempts=self.max_attempts,
             base_delay_seconds=self.base_delay_seconds,

@@ -41,7 +41,10 @@ from datetime import UTC, datetime
 import pytest
 
 from job_apply.features.apply_worker.models import ApplyJobStatus
-from job_apply.features.apply_worker.repository import InMemoryApplyJobRepository
+from job_apply.features.apply_worker.repository import (
+    InMemoryApplyJobRepository,
+    InMemoryApplyStatusHistoryRepository,
+)
 from job_apply.features.apply_worker.retry import RetryPolicy
 from job_apply.features.apply_worker.runtime import (
     DEFAULT_MAX_ATTEMPTS,
@@ -170,6 +173,7 @@ def _make_world(
         job_repo=job_repo,
         match_repo=match_repo,  # type: ignore[arg-type]
         profile_repo=profile_repo,  # type: ignore[arg-type]
+        history_repo=InMemoryApplyStatusHistoryRepository(),
         retry_policy=retry_policy,
     )
     match_service = MatchService(

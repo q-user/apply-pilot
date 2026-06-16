@@ -33,7 +33,10 @@ from job_apply.config import (
     get_apply_worker_settings,
 )
 from job_apply.features.apply_worker.models import ApplyJobStatus
-from job_apply.features.apply_worker.repository import InMemoryApplyJobRepository
+from job_apply.features.apply_worker.repository import (
+    InMemoryApplyJobRepository,
+    InMemoryApplyStatusHistoryRepository,
+)
 from job_apply.features.apply_worker.retry import RetryPolicy
 from job_apply.features.apply_worker.service import ApplyJobService
 from job_apply.features.matches.models import VacancyMatch
@@ -225,6 +228,7 @@ def _make_world(*, policy: RetryPolicy | None = None) -> _World:
         job_repo=job_repo,
         match_repo=match_repo,  # type: ignore[arg-type]
         profile_repo=profile_repo,  # type: ignore[arg-type]
+        history_repo=InMemoryApplyStatusHistoryRepository(),
         retry_policy=active_policy,
     )
     return _World(
