@@ -38,6 +38,8 @@ class TelegramAccountRepository(Protocol):
 
     def find_by_telegram_user_id(self, telegram_user_id: int) -> TelegramAccount | None: ...
 
+    def find_by_user_id(self, user_id: uuid.UUID) -> TelegramAccount | None: ...
+
 
 # ---------------------------------------------------------------------------
 # In-memory implementation
@@ -97,6 +99,20 @@ class InMemoryTelegramAccountRepository:
         is not linked.
         """
         account_id = self._by_telegram_user_id.get(telegram_user_id)
+        if account_id is None:
+            return None
+        return self._by_id.get(account_id)
+
+    def find_by_user_id(self, user_id: uuid.UUID) -> TelegramAccount | None:
+        """Return the linked :class:`TelegramAccount` for the local ``user_id``.
+
+        Used by the apply-worker notifier (M5, issue #50) to resolve
+        the Telegram chat id of a user that just had an :class:`ApplyJob`
+        transition to a terminal state. The repository enforces the
+        one-account-per-user invariant at write time, so the lookup
+        here can never return more than one row.
+        """
+        account_id = self._by_user_id.get(user_id)
         if account_id is None:
             return None
         return self._by_id.get(account_id)
@@ -200,6 +216,23 @@ class SqlAlchemyTelegramAccountRepository:
             statement = select(TelegramAccount).where(
                 TelegramAccount.telegram_user_id == telegram_user_id
             )
+            return scoped.execute(statement).scalar_one_or_none()
+        finally:
+            if self._session is None:
+                scoped.close()
+
+    def find_by_user_id(self, user_id: uuid.UUID) -> TelegramAccount | None:
+        """Return the linked :class:`TelegramAccount` for the local ``user_id``.
+
+        Mirrors the in-memory repo's behaviour. The
+        ``TelegramAccount.user_id`` column is ``UNIQUE`` so the lookup
+        is unambiguous. Used by the apply-worker notifier (M5, issue
+        #50) to resolve the Telegram chat id of a user whose
+        :class:`ApplyJob` just reached a terminal state.
+        """
+        scoped = self._scope()
+        try:
+            statement = select(TelegramAccount).where(TelegramAccount.user_id == user_id)
             return scoped.execute(statement).scalar_one_or_none()
         finally:
             if self._session is None:
