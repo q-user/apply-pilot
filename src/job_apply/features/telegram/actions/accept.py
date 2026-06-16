@@ -1,11 +1,13 @@
-"""``/accept <match_id>`` Telegram action handler (M4, issue #37).
+"""``/accept <match_id>`` Telegram action handler (M4, issue #37 + issue #41).
 
 This module owns the use-case for marking a :class:`VacancyMatch` as
 accepted by the user from a Telegram chat. The handler is intentionally
 thin: it resolves the local user from the Telegram account link, asks
 the :class:`MatchService` to perform the state change (which enforces
 ownership and status validation), records a ``MATCH_ACCEPTED`` audit
-event, and returns a :class:`SendMessageRequest` for the chat.
+event, optionally enqueues an :class:`ApplyJob` through the injected
+:class:`ApplyJobEnqueuer` (issue #41), and returns a
+:class:`SendMessageRequest` for the chat.
 
 The handler never talks to the network or to the SQLAlchemy session
 directly — every collaborator is collaborator-injected so the vertical
@@ -17,6 +19,7 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass
+from typing import Protocol
 
 from job_apply.features.audit.models import AuditEventType
 from job_apply.features.audit.service import AuditService
@@ -104,6 +107,26 @@ def parse_accept_command(text: str) -> AcceptCommand | None:
 
 
 # ---------------------------------------------------------------------------
+# ApplyJob enqueue dependency (issue #41)
+# ---------------------------------------------------------------------------
+
+
+class ApplyJobEnqueuer(Protocol):
+    """Minimal Protocol for the apply-queue dependency of :class:`AcceptActionHandler`.
+
+    The actual :class:`apply_worker.ApplyJobService` (landed in #43) will
+    satisfy this protocol structurally — it exposes
+    ``enqueue_for_match(match_id)``. The Protocol keeps the accept action
+    decoupled from the apply worker package so the two slices can ship
+    independently and tests can wire a tiny recording fake.
+    """
+
+    def enqueue_for_match(self, match_id: uuid.UUID) -> object:
+        """Enqueue an apply job for ``match_id`` and return the new job."""
+        ...
+
+
+# ---------------------------------------------------------------------------
 # Handler
 # ---------------------------------------------------------------------------
 
@@ -120,6 +143,13 @@ class AcceptActionHandler:
     accordingly — the action interface is small and the change stays
     local.
 
+    ``apply_job_enqueuer`` is optional: when it is ``None`` the accept
+    still works but no :class:`ApplyJob` is scheduled. This lets the
+    slice ship before issue #43 (the apply queue model) lands — once
+    :class:`apply_worker.ApplyJobService` is available, the wiring code
+    in :mod:`job_apply.features.telegram.process` will inject it
+    structurally (it satisfies :class:`ApplyJobEnqueuer`).
+
     The dispatcher (``TelegramBot``) is responsible for extracting
     ``chat_id`` and ``telegram_user_id`` from the incoming update and
     passing them in. The handler does not look at the raw update
@@ -133,10 +163,12 @@ class AcceptActionHandler:
         match_service: MatchService,
         telegram_account_repo: TelegramAccountRepository,
         audit_service: AuditService,
+        apply_job_enqueuer: ApplyJobEnqueuer | None = None,
     ) -> None:
         self._match_service = match_service
         self._telegram_account_repo = telegram_account_repo
         self._audit_service = audit_service
+        self._apply_job_enqueuer = apply_job_enqueuer
 
     def handle(
         self,
@@ -202,10 +234,35 @@ class AcceptActionHandler:
                 text=f"❌ Match {command.match_id} not found.",
             )
 
+        # Best-effort enqueue of an ApplyJob for the apply worker (issue #41).
+        # The accept must not fail if the queue is down: the user has
+        # already accepted the match and the worker can be re-driven by a
+        # periodic reconciler (out of scope for this slice). The audit
+        # event below records whether the enqueue succeeded so operators
+        # can spot patterns of failures.
+        audit_details: dict[str, object] = {"match_id": str(command.match_id)}
+        if self._apply_job_enqueuer is not None:
+            try:
+                self._apply_job_enqueuer.enqueue_for_match(command.match_id)
+            except Exception as exc:
+                _LOGGER.exception(
+                    "telegram.accept.enqueue_failed",
+                    extra={
+                        "event": "telegram.accept.enqueue_failed",
+                        "match_id": str(command.match_id),
+                        "user_id": str(user_id),
+                    },
+                )
+                audit_details["apply_job_enqueued"] = False
+                audit_details["apply_job_enqueue_failed"] = True
+                audit_details["apply_job_enqueue_error"] = str(exc)
+            else:
+                audit_details["apply_job_enqueued"] = True
+
         self._audit_service.log_event(
             AuditEventType.MATCH_ACCEPTED,
             user_id=user_id,
-            details={"match_id": str(command.match_id)},
+            details=audit_details,
         )
 
         _LOGGER.info(
@@ -235,5 +292,6 @@ __all__ = [
     "ACCEPT_HELP_TEXT",
     "AcceptActionHandler",
     "AcceptCommand",
+    "ApplyJobEnqueuer",
     "parse_accept_command",
 ]
