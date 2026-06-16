@@ -9,6 +9,8 @@ Endpoints
 * ``GET /hh/oauth/authorize`` — start the OAuth2 flow (authenticated).
 * ``GET /hh/oauth/callback`` — OAuth2 callback (public, no auth).
 * ``POST /hh/oauth/refresh`` — refresh the access token (authenticated).
+* ``POST /hh/resumes/sync`` — pull resume metadata from hh.ru (authenticated).
+* ``GET /hh/resumes`` — list the caller's stored hh resume links.
 """
 
 from __future__ import annotations
@@ -16,7 +18,9 @@ from __future__ import annotations
 import logging
 import threading
 import uuid
+from collections.abc import Callable
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
@@ -34,7 +38,19 @@ from job_apply.features.hh.oauth import (
     OAuthExchangeError,
 )
 from job_apply.features.hh.repository import SqlHHCredentialRepository
-from job_apply.features.hh.schemas import CredentialCheck, CredentialsStoreRequest
+from job_apply.features.hh.resumes import (
+    HhHttpResumesClient,
+    HhResumesError,
+    HhResumesSyncService,
+    SqlHhResumeLinkRepository,
+)
+from job_apply.features.hh.schemas import (
+    CredentialCheck,
+    CredentialsStoreRequest,
+    HhResumeLinkDTO,
+    HhResumesListResponse,
+    HhResumesSyncResponse,
+)
 from job_apply.features.hh.service import HHCredentialService
 from job_apply.features.users.security import InvalidTokenError
 from job_apply.shared.errors import NotFoundError
@@ -349,11 +365,157 @@ async def oauth_refresh(
         ) from exc
 
 
+# ---------------------------------------------------------------------------
+# Resume metadata sync (issue #21)
+# ---------------------------------------------------------------------------
+
+
+# Process-wide default HTTP client for the resumes slice. A single
+# :class:`httpx.AsyncClient` is reused across requests so the
+# connection-pool setup cost is paid once per process. The instance is
+# built lazily on the first request so importing this module never
+# blocks waiting on the network layer.
+_default_resumes_http: httpx.AsyncClient | None = None
+_default_resumes_http_lock = threading.Lock()
+
+
+def get_hh_resumes_http_client() -> httpx.AsyncClient:
+    """Return the process-wide :class:`httpx.AsyncClient` for the resumes slice.
+
+    Tests can override the dependency to inject a client backed by
+    :class:`httpx.MockTransport`. Production callers receive a lazily-
+    initialised shared client; tests that want isolation create their
+    own :class:`HhHttpResumesClient` directly.
+    """
+    global _default_resumes_http
+    if _default_resumes_http is not None:
+        return _default_resumes_http
+    with _default_resumes_http_lock:
+        if _default_resumes_http is None:
+            _default_resumes_http = httpx.AsyncClient(timeout=30.0)
+    return _default_resumes_http
+
+
+def _build_resumes_token_provider(
+    *,
+    credential_service: HHCredentialService,
+    user_id: uuid.UUID,
+) -> Callable[[], str | None]:
+    """Return a closure that mints a fresh bearer token per request.
+
+    The closure calls the credential service on every invocation so a
+    refreshed access token (e.g. after ``POST /hh/oauth/refresh``) is
+    picked up without rebuilding the HTTP client.
+    """
+
+    def _provider() -> str | None:
+        try:
+            creds = credential_service.get_credentials(user_id)
+        except NotFoundError:
+            return None
+        return creds.access_token
+
+    return _provider
+
+
+def get_hh_resumes_sync_service(
+    session: Session = Depends(get_db),  # noqa: B008
+    http_client: httpx.AsyncClient = Depends(get_hh_resumes_http_client),  # noqa: B008
+    encryptor: CredentialEncryptor = Depends(_get_encryptor),  # noqa: B008
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),  # noqa: B008
+) -> HhResumesSyncService:
+    """Build an :class:`HhResumesSyncService` for the current request.
+
+    The service binds the caller's ``user_id`` (resolved from the
+    bearer token) and a per-user ``token_provider`` closure so the
+    service can talk to hh.ru without knowing how the credential
+    service works internally.
+    """
+    user_id_str = _resolve_user_id(credentials, session)
+    user_id = uuid.UUID(user_id_str)
+    credential_service = HHCredentialService(
+        repo=SqlHHCredentialRepository(session=session), encryptor=encryptor
+    )
+    resumes_client = HhHttpResumesClient(
+        client=http_client,
+        token_provider=_build_resumes_token_provider(
+            credential_service=credential_service, user_id=user_id
+        ),
+    )
+    link_repo = SqlHhResumeLinkRepository(session=session)
+    return HhResumesSyncService(
+        resumes_client=resumes_client,
+        credential_service=credential_service,
+        link_repo=link_repo,
+        user_id=user_id,
+    )
+
+
+@router.post(
+    "/resumes/sync",
+    response_model=HhResumesSyncResponse,
+    responses={
+        401: {"description": "Missing or invalid bearer token"},
+        404: {"description": "No hh.ru credentials stored for the user"},
+        502: {"description": "hh.ru returned an error response"},
+    },
+)
+async def sync_resumes(
+    service: HhResumesSyncService = Depends(get_hh_resumes_sync_service),  # noqa: B008
+) -> HhResumesSyncResponse:
+    """Pull the caller's resume metadata from hh.ru and persist the links.
+
+    The endpoint refreshes the stored access token implicitly via the
+    ``token_provider`` closure on every call, so a recent
+    ``POST /hh/oauth/refresh`` is picked up automatically. If the user
+    has not linked their hh.ru account yet, the call returns 404.
+    """
+    try:
+        links = await service.sync_metadata()
+    except NotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": exc.code, "message": exc.message},
+        ) from exc
+    except HhResumesError as exc:
+        _LOGGER.warning("hh.resumes.sync_failed", extra={"code": exc.code})
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"code": exc.code, "message": exc.message},
+        ) from exc
+
+    return HhResumesSyncResponse(
+        items=[HhResumeLinkDTO.model_validate(link) for link in links],
+        synced_count=len(links),
+    )
+
+
+@router.get(
+    "/resumes",
+    response_model=HhResumesListResponse,
+    responses={
+        401: {"description": "Missing or invalid bearer token"},
+    },
+)
+def list_resumes(
+    session: Session = Depends(get_db),  # noqa: B008
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),  # noqa: B008
+) -> HhResumesListResponse:
+    """Return the caller's stored hh resume links, oldest-first."""
+    user_id_str = _resolve_user_id(credentials, session)
+    user_id = uuid.UUID(user_id_str)
+    repo = SqlHhResumeLinkRepository(session=session)
+    links = repo.list_by_user(user_id)
+    return HhResumesListResponse(items=[HhResumeLinkDTO.model_validate(link) for link in links])
+
+
 __all__ = [
     "get_hh_auth_service",
     "get_hh_oauth_client",
     "get_hh_oauth_state_store",
     "get_hh_oauth_settings_dep",
+    "get_hh_resumes_http_client",
+    "get_hh_resumes_sync_service",
     "get_hh_service",
     "router",
 ]
