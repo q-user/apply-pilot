@@ -11,9 +11,12 @@ The :class:`ApplyJobService` owns the queue's lifecycle. It exposes:
   next claimable row and transition it to ``running``.
 * :meth:`complete` — record a successful hh submission (storing the
   ``external_application_id``).
-* :meth:`fail` — record a failed run. ``retryable=True`` parks the job
-  back in ``queued`` with a future ``next_run_at``; ``retryable=False``
-  transitions to ``dead_letter`` for manual inspection.
+* :meth:`fail` — record a failed run. ``retryable=True`` parks the row
+  back in ``queued`` with a future ``next_run_at`` computed by the
+  injected :class:`~job_apply.features.apply_worker.retry.RetryPolicy`;
+  once the policy's ``max_attempts`` is exhausted the row transitions
+  to ``dead_letter`` for manual inspection. ``retryable=False``
+  short-circuits straight to ``dead_letter``.
 * :meth:`cancel` — user-initiated cancellation; only valid from
   ``queued`` (or ``failed``) states.
 * :meth:`get` / :meth:`list_user_jobs` — read-through helpers that
@@ -38,6 +41,7 @@ from job_apply.features.apply_worker.models import (
     compute_idempotency_key,
 )
 from job_apply.features.apply_worker.repository import ApplyJobRepository
+from job_apply.features.apply_worker.retry import RetryPolicy
 from job_apply.features.matches.models import VacancyMatch
 from job_apply.features.search_profiles.models import SearchProfile
 from job_apply.shared.errors import ConflictError, NotFoundError
@@ -45,6 +49,12 @@ from job_apply.shared.errors import ConflictError, NotFoundError
 #: A retryable failure is rescheduled this far into the future.
 #: The constant is small enough that a backoff cycle is short
 #: (60s) but large enough to avoid hammering a flaky upstream.
+#:
+#: Kept as a module-level constant for backwards compatibility with
+#: callers that constructed the service before the retry-policy
+#: abstraction was added (M5, issue #47). New code should pass an
+#: explicit :class:`RetryPolicy` via the ``retry_policy`` parameter
+#: instead of relying on this default.
 DEFAULT_RETRY_BACKOFF: timedelta = timedelta(seconds=60)
 
 #: A job is considered "terminal" (no further transitions allowed
@@ -174,12 +184,30 @@ class ApplyJobService:
         job_repo: ApplyJobRepository,
         match_repo: _MatchLookup,
         profile_repo: _ProfileLookup,
+        retry_policy: RetryPolicy | None = None,
         retry_backoff: timedelta = DEFAULT_RETRY_BACKOFF,
     ) -> None:
         self._job_repo = job_repo
         self._match_repo = match_repo
         self._profile_repo = profile_repo
-        self._retry_backoff = retry_backoff
+        # The ``RetryPolicy`` is the modern entry point; ``retry_backoff``
+        # is the legacy knob that predates issue #47. When the caller
+        # passes an explicit policy we use it as-is. When the caller
+        # passes only the legacy ``retry_backoff`` we wrap it in a
+        # no-jitter, single-attempt policy so the rest of the code
+        # path is uniform.
+        if retry_policy is not None:
+            self._retry_policy = retry_policy
+            self._legacy_retry_backoff: timedelta | None = None
+        else:
+            self._retry_policy = RetryPolicy(
+                max_attempts=999_999,
+                base_delay_seconds=retry_backoff.total_seconds(),
+                max_delay_seconds=retry_backoff.total_seconds(),
+                backoff_multiplier=1.0,
+                jitter=False,
+            )
+            self._legacy_retry_backoff = retry_backoff
 
     @property
     def job_repo(self) -> ApplyJobRepository:
@@ -188,8 +216,17 @@ class ApplyJobService:
 
     @property
     def retry_backoff(self) -> timedelta:
-        """Return the retry-backoff applied on ``fail(retryable=True)``."""
-        return self._retry_backoff
+        """Return the retry-backoff applied on ``fail(retryable=True)``.
+
+        Returns the legacy ``retry_backoff`` constant when the service
+        was constructed without an explicit :class:`RetryPolicy`. When a
+        policy was injected, the value is derived from its
+        ``base_delay_seconds`` so callers that only need a single
+        ``timedelta`` keep working.
+        """
+        if self._legacy_retry_backoff is not None:
+            return self._legacy_retry_backoff
+        return timedelta(seconds=self._retry_policy.base_delay_seconds)
 
     # ------------------------------------------------------------------
     # Enqueue
@@ -301,17 +338,27 @@ class ApplyJobService:
         """Record a failed run.
 
         ``retryable=True`` parks the row back in ``queued`` with a
-        future ``next_run_at`` so the worker picks it up again after
-        the backoff window. ``retryable=False`` parks the row in
-        ``dead_letter`` for manual inspection. In both branches
+        future ``next_run_at`` computed by the configured
+        :class:`~job_apply.features.apply_worker.retry.RetryPolicy` so
+        the worker picks it up again after the backoff window. Once
+        the policy's ``max_attempts`` is exhausted, the row is moved to
+        ``dead_letter`` for manual inspection. ``retryable=False``
+        short-circuits straight to ``dead_letter``. In all branches
         ``mark_attempt`` increments ``attempts`` and stores
         ``last_error``.
         """
         job = self._require_exists(job_id)
         _assert_not_terminal(job)
         self._job_repo.mark_attempt(job_id, error)
-        if retryable:
-            next_run_at = datetime.now(UTC) + self._retry_backoff
+        # Re-read so ``attempts`` reflects the value just persisted by
+        # ``mark_attempt``. The repository's write is synchronous (in
+        # the in-memory fake) and committed (in the SQL implementation)
+        # by the time we get here, so a follow-up ``get_by_id`` returns
+        # the bumped counter.
+        fresh = self._job_repo.get_by_id(job_id)
+        attempts = fresh.attempts if fresh is not None else job.attempts
+        if retryable and self._retry_policy.should_retry(attempts):
+            next_run_at = self._retry_policy.compute_next_run_at(attempts)
             return self._job_repo.update_status(
                 job_id,
                 ApplyJobStatus.QUEUED.value,

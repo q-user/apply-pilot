@@ -26,6 +26,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from job_apply.config import get_apply_worker_settings
 from job_apply.db import get_db
 from job_apply.features.apply_worker.repository import SqlApplyJobRepository
 from job_apply.features.apply_worker.schemas import ApplyJobRead, apply_job_to_dto
@@ -84,6 +85,11 @@ def get_apply_job_service(
     enqueue / cancel / list operations all participate in a single
     transaction. Dependency overrides in the test suite swap the
     in-memory fakes in place of the SQL implementations.
+
+    The retry policy is built from :class:`ApplyWorkerSettings` (loaded
+    from ``APP_APPLY_*`` env vars at process start) so the M5 retry
+    semantics — exponential backoff, jitter, ``max_attempts`` — apply
+    uniformly across HTTP and worker invocations.
     """
     job_repo = SqlApplyJobRepository(session_factory=lambda: session)
     match_repo = SqlVacancyMatchRepository(session_factory=lambda: session)
@@ -92,6 +98,7 @@ def get_apply_job_service(
         job_repo=job_repo,
         match_repo=match_repo,
         profile_repo=profile_repo,
+        retry_policy=get_apply_worker_settings().to_retry_policy(),
     )
 
 
