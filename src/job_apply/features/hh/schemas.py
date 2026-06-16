@@ -1,8 +1,16 @@
-"""DTOs for the HH credentials slice.
+"""DTOs for the HH slice.
 
-Every public DTO that touches token material uses string redaction in its
-``__repr__`` / ``__str__`` so that tokens never leak into structured logs
-or error messages. The raw token values are only available through
+Two layers of DTOs live here:
+
+* The credentials DTOs (request/response for ``/hh/credentials``) and
+  the internal-vs-redacted credential value objects used by the
+  service layer.
+* :class:`HhResumeLinkDTO` and the ``/hh/resumes`` response envelopes
+  used by the resume metadata sync endpoint.
+
+The public DTOs that touch token material use string redaction in their
+``__repr__`` / ``__str__`` so tokens never leak into structured logs or
+error messages. The raw token values are only available through
 attribute access within the service layer.
 """
 
@@ -95,9 +103,59 @@ class CredentialCheck(BaseModel):
     expires_at: datetime | None = None
 
 
+# ---------------------------------------------------------------------------
+# Resume metadata DTOs (issue #21)
+# ---------------------------------------------------------------------------
+
+
+class HhResumeLinkDTO(BaseModel):
+    """Public representation of a :class:`HhResumeLink` row.
+
+    Built from the ORM model via :class:`ConfigDict.from_attributes`. The
+    ``local_resume_id`` is ``None`` until full-text fetch (M2+'s next
+    slice) links the hh resume to a local :class:`Resume` row.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=False, from_attributes=True)
+
+    id: uuid.UUID
+    user_id: uuid.UUID
+    local_resume_id: uuid.UUID | None = None
+    hh_resume_id: str = Field(max_length=50, description="hh.ru's external resume id.")
+    title: str | None = Field(default=None, max_length=255)
+    updated_at_hh: datetime | None = None
+    last_synced_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime | None = None
+
+
+class HhResumesListResponse(BaseModel):
+    """Response envelope for ``GET /hh/resumes``."""
+
+    model_config = ConfigDict(extra="forbid", frozen=False)
+
+    items: list[HhResumeLinkDTO]
+
+
+class HhResumesSyncResponse(BaseModel):
+    """Response envelope for ``POST /hh/resumes/sync``.
+
+    ``synced_count`` is the number of rows written (inserts + updates)
+    so clients can show "synced N resumes" without re-counting ``items``.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=False)
+
+    items: list[HhResumeLinkDTO]
+    synced_count: int = Field(ge=0)
+
+
 __all__ = [
     "CredentialCheck",
     "CredentialsStoreRequest",
+    "HhResumeLinkDTO",
+    "HhResumesListResponse",
+    "HhResumesSyncResponse",
     "InternalCredentials",
     "RedactedCredentials",
 ]

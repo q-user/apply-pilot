@@ -40,11 +40,43 @@ from job_apply.features.hh.oauth import (
 from job_apply.features.hh.oauth import (
     OAuthExchangeError as OAuthExchangeError,
 )
+from job_apply.features.hh.resumes import HhHttpResumesClient as HhHttpResumesClient
+from job_apply.features.hh.resumes import HhResumeLink as HhResumeLink
+from job_apply.features.hh.resumes import (
+    HhResumeLinkRepository as HhResumeLinkRepository,
+)
+from job_apply.features.hh.resumes import HhResumeNotFoundError as HhResumeNotFoundError
+from job_apply.features.hh.resumes import HhResumesClient as HhResumesClient
+from job_apply.features.hh.resumes import HhResumesError as HhResumesError
+from job_apply.features.hh.resumes import (
+    HhResumesSyncService as HhResumesSyncService,
+)
+from job_apply.features.hh.resumes import (
+    HhResumesTokenProvider as HhResumesTokenProvider,
+)
+from job_apply.features.hh.resumes import (
+    InMemoryHhResumeLinkRepository as InMemoryHhResumeLinkRepository,
+)
+from job_apply.features.hh.resumes import (
+    InMemoryHhResumesClient as InMemoryHhResumesClient,
+)
+from job_apply.features.hh.resumes import (
+    SqlHhResumeLinkRepository as SqlHhResumeLinkRepository,
+)
 from job_apply.features.hh.schemas import (
     CredentialCheck as CredentialCheck,
 )
 from job_apply.features.hh.schemas import (
     CredentialsStoreRequest as CredentialsStoreRequest,
+)
+from job_apply.features.hh.schemas import (
+    HhResumeLinkDTO as HhResumeLinkDTO,
+)
+from job_apply.features.hh.schemas import (
+    HhResumesListResponse as HhResumesListResponse,
+)
+from job_apply.features.hh.schemas import (
+    HhResumesSyncResponse as HhResumesSyncResponse,
 )
 from job_apply.features.hh.schemas import (
     InternalCredentials as InternalCredentials,
@@ -80,15 +112,29 @@ __all__ = [
     "HhApplyTokenProvider",
     "HhAuthService",
     "HhHttpOAuthClient",
+    "HhHttpResumesClient",
     "HhHttpVacancySearchClient",
     "HhOAuthClient",
     "HhOAuthStateStore",
+    "HhResumeLink",
+    "HhResumeLinkDTO",
+    "HhResumeLinkRepository",
+    "HhResumeNotFoundError",
+    "HhResumesClient",
+    "HhResumesError",
+    "HhResumesListResponse",
+    "HhResumesSyncResponse",
+    "HhResumesSyncService",
+    "HhResumesTokenProvider",
     "HhTokenResponse",
     "InMemoryHhOAuthClient",
+    "InMemoryHhResumeLinkRepository",
+    "InMemoryHhResumesClient",
     "InMemoryHhVacancySearchClient",
     "InternalCredentials",
     "InvalidOAuthStateError",
     "MissingRefreshTokenError",
     "OAuthExchangeError",
     "RedactedCredentials",
+    "SqlHhResumeLinkRepository",
 ]
