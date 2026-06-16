@@ -1,4 +1,4 @@
-"""Apply worker vertical slice (M5, issue #43 + #44).
+"""Apply worker vertical slice (M5, issue #43 + #44 + #46).
 
 Public surface
 --------------
@@ -8,6 +8,8 @@ Public surface
 * :class:`ApplyJobStatus` — lifecycle enum.
 * :class:`ApplyStatusHistory` — append-only record of every status
   transition (M5, issue #49).
+* :class:`ApplyRateLimitEvent` — append-only record of every enqueue
+  used by the rate limiter (M5, issue #46).
 * :func:`compute_idempotency_key` — SHA-256 of ``(user, vacancy, match)``.
 * :class:`ApplyJobRepository` — Protocol contract.
 * :class:`ApplyStatusHistoryRepository` — Protocol contract for the
@@ -19,10 +21,16 @@ Public surface
 * :class:`ApplyJobService` — business logic.
 * :class:`ApplyJobRead` — public DTO.
 * :class:`ApplyStatusHistoryRead` — public DTO for history rows.
+* :class:`ApplyRateLimitRead` / :class:`WindowStatusRead` — public
+  DTOs for the rate-limit snapshot (M5, issue #46).
 * :class:`ApplyResult` — adapter return shape.
 * :class:`ApplyAdapter` — Protocol the apply worker dispatches to.
 * :class:`ApplyWorker` — per-iteration worker that drains the queue.
 * :class:`ApplyWorkerProcess` — long-running process driving the worker.
+* :class:`RateLimiter` / :class:`RateLimitResult` / :class:`WindowStatus` /
+  :class:`RateLimitExceeded` / :class:`InMemoryRateLimiter` /
+  :class:`SqlRateLimiter` — per-user anti-spam cap machinery
+  (M5, issue #46).
 
 The slice is consumed by:
 
@@ -34,14 +42,27 @@ The slice is consumed by:
   :meth:`ApplyJobService.enqueue_for_match` after the user accepts a
   match;
 * the HTTP API (:mod:`api`) which exposes the dashboard / cancel /
-  enqueue / history endpoints.
+  enqueue / history / limits endpoints.
 """
 
 from __future__ import annotations
 
+from job_apply.features.apply_worker.limits import (
+    APPLY_KEY,
+    DAILY_WINDOW,
+    HOURLY_WINDOW,
+    InMemoryRateLimiter,
+    RateLimiter,
+    RateLimitExceeded,
+    RateLimitResult,
+    SqlRateLimiter,
+    WindowStatus,
+    default_rate_limiter,
+)
 from job_apply.features.apply_worker.models import (
     ApplyJob,
     ApplyJobStatus,
+    ApplyRateLimitEvent,
     ApplyStatusHistory,
     compute_idempotency_key,
 )
@@ -64,8 +85,11 @@ from job_apply.features.apply_worker.runtime import (
 )
 from job_apply.features.apply_worker.schemas import (
     ApplyJobRead,
+    ApplyRateLimitRead,
     ApplyStatusHistoryRead,
+    WindowStatusRead,
     apply_job_to_dto,
+    apply_rate_limit_to_dto,
     apply_status_history_to_dto,
 )
 from job_apply.features.apply_worker.service import (
@@ -78,8 +102,11 @@ from job_apply.features.apply_worker.service import (
 )
 
 __all__ = [
+    "APPLY_KEY",
+    "DAILY_WINDOW",
     "DEFAULT_MAX_ATTEMPTS",
     "DEFAULT_RETRY_BACKOFF",
+    "HOURLY_WINDOW",
     "NO_ADAPTER_ERROR",
     "VACANCY_NOT_FOUND_ERROR",
     "ApplyAdapter",
@@ -92,17 +119,28 @@ __all__ = [
     "ApplyJobRepository",
     "ApplyJobService",
     "ApplyJobStatus",
+    "ApplyRateLimitEvent",
+    "ApplyRateLimitRead",
+    "ApplyResult",
     "ApplyStatusHistory",
     "ApplyStatusHistoryRead",
     "ApplyStatusHistoryRepository",
-    "ApplyResult",
     "ApplyWorker",
     "ApplyWorkerProcess",
     "InMemoryApplyJobRepository",
     "InMemoryApplyStatusHistoryRepository",
+    "InMemoryRateLimiter",
+    "RateLimitExceeded",
+    "RateLimitResult",
+    "RateLimiter",
     "SqlApplyJobRepository",
     "SqlApplyStatusHistoryRepository",
+    "SqlRateLimiter",
+    "WindowStatus",
+    "WindowStatusRead",
     "apply_job_to_dto",
+    "apply_rate_limit_to_dto",
     "apply_status_history_to_dto",
     "compute_idempotency_key",
+    "default_rate_limiter",
 ]

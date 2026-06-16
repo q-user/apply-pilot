@@ -36,6 +36,13 @@ from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
 
+from job_apply.features.apply_worker.limits import (
+    APPLY_KEY,
+    RateLimiter,
+    RateLimitExceeded,
+    RateLimitResult,
+    default_rate_limiter,
+)
 from job_apply.features.apply_worker.models import (
     ApplyJob,
     ApplyJobStatus,
@@ -192,11 +199,20 @@ class ApplyJobService:
         history_repo: ApplyStatusHistoryRepository,
         retry_policy: RetryPolicy | None = None,
         retry_backoff: timedelta = DEFAULT_RETRY_BACKOFF,
+        rate_limiter: RateLimiter | None = None,
     ) -> None:
         self._job_repo = job_repo
         self._match_repo = match_repo
         self._profile_repo = profile_repo
         self._history_repo = history_repo
+        # The ``RateLimiter`` (M5, issue #46) gates ``enqueue_for_match``
+        # on a per-user hourly / daily cap so a runaway script (or a
+        # user click-spamming ``/accept``) cannot flood hh.ru with
+        # submissions. When the caller does not inject a limiter the
+        # service falls back to a permissive no-op so existing test
+        # fixtures that pre-date the rate-limit feature keep working
+        # without modification.
+        self._rate_limiter: RateLimiter = rate_limiter or default_rate_limiter()
         # The ``RetryPolicy`` is the modern entry point; ``retry_backoff``
         # is the legacy knob that predates issue #47. When the caller
         # passes an explicit policy we use it as-is. When the caller
@@ -250,12 +266,16 @@ class ApplyJobService:
         The flow:
 
         1. Resolve the match → user (via search profile) and vacancy.
-        2. Look up an existing job for the match and return it when
+        2. Check the per-user rate limit (M5, issue #46); a saturated
+           window raises :class:`RateLimitExceeded` *before* the row
+           is inserted so a denied caller pays no I/O cost.
+        3. Look up an existing job for the match and return it when
            one is found — the UNIQUE constraint makes this idempotent.
-        3. Otherwise insert a new row with ``status=queued`` and a
+        4. Otherwise insert a new row with ``status=queued`` and a
            fresh ``idempotency_key``.
-        4. Write the initial :class:`ApplyStatusHistory` row (the only
-           row with ``from_status=None``).
+        5. Record the enqueue against the rate limiter and write the
+           initial :class:`ApplyStatusHistory` row (the only row with
+           ``from_status=None``).
         """
         match = self._match_repo.get_by_id(match_id)
         if match is None:
@@ -266,8 +286,23 @@ class ApplyJobService:
                 f"search profile {match.search_profile_id} not found for match {match_id}"
             )
 
+        # M5 #46 — enforce the per-user rate limit before any storage
+        # work. The check is read-only, so a denied caller pays only
+        # the cost of a single ``COUNT(*)`` (or an in-memory list scan
+        # in tests). ``APPLY_KEY`` is reserved as a module-level
+        # constant on the limits module so the HTTP layer can log
+        # the same key the service used.
+        result = self._rate_limiter.check(profile.user_id, key=APPLY_KEY)
+        if not result.allowed:
+            raise RateLimitExceeded(result)
+
         existing = self._job_repo.get_by_match(match_id)
         if existing is not None:
+            # Idempotent return path: the user *did* express an
+            # intent to apply, so the call still counts toward the
+            # anti-spam budget — a click-spamming client should be
+            # blocked even when the underlying state is unchanged.
+            self._rate_limiter.record(profile.user_id, key=APPLY_KEY)
             return existing
 
         job = ApplyJob(
@@ -277,6 +312,12 @@ class ApplyJobService:
             idempotency_key=compute_idempotency_key(profile.user_id, match.vacancy_id, match_id),
         )
         created = self._job_repo.create(job)
+        # Record the enqueue *after* the row is persisted so a failed
+        # insert (e.g. UNIQUE violation) does not consume a token. The
+        # service is single-threaded per call, so the race window
+        # between the ``check`` and ``record`` is bounded by the
+        # duration of one ``enqueue_for_match`` call.
+        self._rate_limiter.record(profile.user_id, key=APPLY_KEY)
         self._record_transition(
             job=created,
             from_status=None,
@@ -317,6 +358,16 @@ class ApplyJobService:
         """
         self.get(job_id, user_id=user_id)
         return self._history_repo.list_by_job(job_id)
+
+    def rate_limit_status(self, user_id: uuid.UUID) -> RateLimitResult:
+        """Return the current :class:`RateLimitResult` for ``user_id``.
+
+        M5, issue #46. The HTTP ``GET /apply-jobs/limits`` endpoint
+        delegates to this helper so the slice keeps a single source of
+        truth for the snapshot shape. The call is non-mutating; the
+        rate limiter only consults the event log.
+        """
+        return self._rate_limiter.check(user_id, key=APPLY_KEY)
 
     # ------------------------------------------------------------------
     # Cancel
