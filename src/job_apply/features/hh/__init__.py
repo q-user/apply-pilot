@@ -7,6 +7,10 @@ without coupling to the internal module structure.
 
 from __future__ import annotations
 
+from job_apply.features.hh.apply import HhApplyAdapter as HhApplyAdapter
+from job_apply.features.hh.apply import HhApplyError as HhApplyError
+from job_apply.features.hh.apply import HhApplyRateLimitError as HhApplyRateLimitError
+from job_apply.features.hh.apply import HhApplyTokenProvider as HhApplyTokenProvider
 from job_apply.features.hh.encryption import CredentialEncryptor as CredentialEncryptor
 from job_apply.features.hh.models import HHCredential as HHCredential
 from job_apply.features.hh.oauth import (
@@ -70,6 +74,10 @@ __all__ = [
     "HHVacancyNotFoundError",
     "HHVacancySearchClient",
     "HHVacancySearchError",
+    "HhApplyAdapter",
+    "HhApplyError",
+    "HhApplyRateLimitError",
+    "HhApplyTokenProvider",
     "HhAuthService",
     "HhHttpOAuthClient",
     "HhHttpVacancySearchClient",
