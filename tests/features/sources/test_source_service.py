@@ -4,6 +4,13 @@ The service is tested with the in-memory repository (the production
 fake). The point of these tests is to verify the normaliser + repository
 collaboration, not the repository mechanics (those live in
 ``test_vacancy_repository.py``).
+
+Since M2 (issue #26) the service's :meth:`SourceService.ingest_vacancy`
+returns ``list[ScreeningQuestion]`` — the captured screening
+questions, or ``[]`` when no extractor was supplied. The vacancy
+itself is observed through the repository's read methods; the tests
+below use :meth:`VacancyRepository.find_by_source` /
+:meth:`VacancyRepository.get_by_id` to keep the assertions honest.
 """
 
 from __future__ import annotations
@@ -50,10 +57,19 @@ def hh_raw() -> dict:
     }
 
 
+def _get_vacancy(service: SourceService, source: str, source_id: str):
+    rows = service.repo.find_by_source(source, source_id)
+    assert rows, f"vacancy {source}:{source_id} not found in repo"
+    return rows[0]
+
+
 class TestIngestVacancy:
     def test_ingest_creates_new_vacancy(self, service: SourceService, hh_raw: dict) -> None:
-        vacancy = service.ingest_vacancy("hh", hh_raw)
+        result = service.ingest_vacancy("hh", hh_raw)
 
+        # No extractor → empty list returned.
+        assert result == []
+        vacancy = _get_vacancy(service, "hh", "114314622")
         assert vacancy.id is not None
         assert vacancy.source == "hh"
         assert vacancy.source_id == "114314622"
@@ -63,18 +79,20 @@ class TestIngestVacancy:
     def test_ingest_is_idempotent_on_same_natural_key(
         self, service: SourceService, hh_raw: dict
     ) -> None:
-        v1 = service.ingest_vacancy("hh", hh_raw)
-        v2 = service.ingest_vacancy("hh", {**hh_raw, "name": "Updated Title"})
+        service.ingest_vacancy("hh", hh_raw)
+        service.ingest_vacancy("hh", {**hh_raw, "name": "Updated Title"})
 
         # Same canonical row, mutated in place.
-        assert v2.id == v1.id
-        assert v2.title == "Updated Title"
-        assert v2.created_at == v1.created_at
+        v1 = _get_vacancy(service, "hh", "114314622")
+        assert v1.title == "Updated Title"
+        # Two calls, but only one row stored.
+        assert len(service.repo.list_by_source("hh")) == 1
 
     def test_ingest_persists_raw_payload_verbatim(
         self, service: SourceService, hh_raw: dict
     ) -> None:
-        vacancy = service.ingest_vacancy("hh", hh_raw)
+        service.ingest_vacancy("hh", hh_raw)
+        vacancy = _get_vacancy(service, "hh", "114314622")
 
         assert isinstance(vacancy.raw_data, dict)
         assert vacancy.raw_data["id"] == "114314622"
@@ -83,7 +101,8 @@ class TestIngestVacancy:
     def test_ingest_applies_salary_normalisation(
         self, service: SourceService, hh_raw: dict
     ) -> None:
-        vacancy = service.ingest_vacancy("hh", hh_raw)
+        service.ingest_vacancy("hh", hh_raw)
+        vacancy = _get_vacancy(service, "hh", "114314622")
 
         # Gross 250 000 → net 217 500; 350 000 → 304 500.
         assert vacancy.salary_from == 217500
@@ -102,7 +121,8 @@ class TestIngestVacancy:
             "key_skills": [],
             "published_at": "2025-01-01T00:00:00+0000",
         }
-        vacancy = service.ingest_vacancy("hh", raw)
+        service.ingest_vacancy("hh", raw)
+        vacancy = _get_vacancy(service, "hh", "999")
 
         assert vacancy.salary_from is None
         assert vacancy.salary_to is None
@@ -111,19 +131,21 @@ class TestIngestVacancy:
     def test_ingest_different_source_creates_new_row(
         self, service: SourceService, hh_raw: dict
     ) -> None:
-        v1 = service.ingest_vacancy("hh", hh_raw)
+        service.ingest_vacancy("hh", hh_raw)
+        hh_vacancy = _get_vacancy(service, "hh", "114314622")
 
         with pytest.raises(NotImplementedError):
             service.ingest_vacancy("habr", hh_raw)
         # The hh row is unaffected.
-        assert service.repo.get_by_id(v1.id) is not None
+        assert service.repo.get_by_id(hh_vacancy.id) is not None
 
     def test_ingest_unknown_source_raises(self, service: SourceService) -> None:
         with pytest.raises(NotImplementedError, match="habr"):
             service.ingest_vacancy("habr", {"id": "1"})
 
     def test_repository_is_observable(self, service: SourceService, hh_raw: dict) -> None:
-        vacancy = service.ingest_vacancy("hh", hh_raw)
+        service.ingest_vacancy("hh", hh_raw)
+        vacancy = _get_vacancy(service, "hh", "114314622")
 
         # The repository exposes its state for end-to-end assertions.
         assert service.repo.get_by_id(vacancy.id) is not None

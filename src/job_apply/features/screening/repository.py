@@ -61,9 +61,19 @@ class ScreeningQuestionRepository(Protocol):
     Read methods take vacancy and question ids as plain UUIDs. Write
     methods accept fully-constructed ORM rows; the service is the
     only place that decides which fields to populate.
+
+    :meth:`create_many` is the batch counterpart of :meth:`create`;
+    the M2 capture flow uses it from
+    :class:`~job_apply.features.screening.extractor.HhScreeningQuestionExtractor`
+    so a single vacancy with multiple screening questions costs one
+    repository round-trip per question rather than N independent
+    commits.
     """
 
     def create(self, question: ScreeningQuestion) -> ScreeningQuestion: ...
+    def create_many(
+        self, questions: Sequence[ScreeningQuestion]
+    ) -> Sequence[ScreeningQuestion]: ...
     def get_by_id(self, question_id: uuid.UUID) -> ScreeningQuestion | None: ...
     def list_by_vacancy(self, vacancy_id: uuid.UUID) -> Sequence[ScreeningQuestion]: ...
     def delete_by_vacancy(self, vacancy_id: uuid.UUID) -> int: ...
@@ -94,6 +104,17 @@ class InMemoryScreeningQuestionRepository:
         self._by_id[question.id] = question
         self._by_vacancy.setdefault(question.vacancy_id, []).append(question.id)
         return question
+
+    def create_many(
+        self, questions: Sequence[ScreeningQuestion]
+    ) -> Sequence[ScreeningQuestion]:
+        """Persist a batch of questions in the order they are supplied.
+
+        Empty input is a no-op and returns an empty list. The method
+        delegates to :meth:`create` so the bookkeeping (``_by_id`` /
+        ``_by_vacancy``) stays consistent with single-row writes.
+        """
+        return [self.create(question) for question in questions]
 
     def delete_by_vacancy(self, vacancy_id: uuid.UUID) -> int:
         ids = self._by_vacancy.pop(vacancy_id, [])
@@ -151,6 +172,33 @@ class SqlScreeningQuestionRepository:
             session.commit()
             session.refresh(question)
             return question
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            if self._session_factory is not None:
+                session.close()
+
+    def create_many(
+        self, questions: Sequence[ScreeningQuestion]
+    ) -> Sequence[ScreeningQuestion]:
+        """Persist a batch of questions in a single transaction.
+
+        All rows go in with one ``session.add_all`` call so a vacancy
+        with N screening questions costs a single commit. The rows
+        are returned in the order they were supplied; SQLAlchemy
+        refreshes them so the caller sees the DB-assigned ``id`` and
+        ``created_at`` columns.
+        """
+        if not questions:
+            return []
+        session = self._scope()
+        try:
+            session.add_all(list(questions))
+            session.commit()
+            for question in questions:
+                session.refresh(question)
+            return list(questions)
         except Exception:
             session.rollback()
             raise
