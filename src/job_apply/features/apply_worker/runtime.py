@@ -27,19 +27,14 @@ vacancy's ``source`` (``hh``, ``habr``, ...). Adapters implement the
 Retry policy
 ------------
 
-A retryable failure with ``attempts < max_attempts`` is parked back
-in ``queued`` with ``next_run_at = now + 2 ** attempts`` seconds
-(exponential backoff). The check uses ``attempts`` as set by
-:meth:`ApplyJobService.claim_next`, so the budget is consumed
-deterministically:
-
-* 1st claim: ``attempts=1`` → ``2 ** 1 == 2s`` backoff (still under budget).
-* 2nd claim: ``attempts=2`` → ``2 ** 2 == 4s`` backoff (still under budget).
-* 3rd claim: ``attempts=3`` → budget exhausted, ``dead_letter``.
-
-The :func:`job_apply.features.apply_worker.service.fail` service method
-accepts a custom ``next_run_at`` (backward compatible with the default
-60 s backoff the rest of the slice uses).
+A retryable failure delegates the backoff schedule to the
+:class:`~job_apply.features.apply_worker.service.ApplyJobService`,
+which forwards to the injected
+:class:`~job_apply.features.apply_worker.retry.RetryPolicy`. The
+worker itself only chooses the log line (``retry`` vs
+``dead_letter``) based on its own ``max_attempts`` budget; the
+actual ``next_run_at`` is computed by the policy from the
+post-``mark_attempt`` attempt count.
 """
 
 from __future__ import annotations
@@ -48,7 +43,6 @@ import asyncio
 import logging
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
 from job_apply.features.apply_worker.models import ApplyJob
@@ -294,25 +288,28 @@ class ApplyWorker:
         return completed
 
     def _handle_failure(self, job: ApplyJob, result: ApplyResult) -> ApplyJob:
-        """Walk a failed submission: requeue with backoff or ``dead_letter``."""
+        """Walk a failed submission: requeue with backoff or ``dead_letter``.
+
+        The actual ``next_run_at`` is computed by the
+        :class:`~job_apply.features.apply_worker.service.ApplyJobService`
+        via its injected
+        :class:`~job_apply.features.apply_worker.retry.RetryPolicy`; the
+        worker only decides which log line to emit.
+        """
         error = result.error or "unknown_error"
         if result.retryable and job.attempts < self._max_attempts:
-            backoff_seconds = 2**job.attempts
-            next_run_at = datetime.now(UTC) + timedelta(seconds=backoff_seconds)
             self._logger.info(
                 "apply_worker.retry",
                 extra={
                     "event": "apply_worker.retry",
                     "job_id": str(job.id),
                     "attempts": job.attempts,
-                    "backoff_seconds": backoff_seconds,
                 },
             )
             return self._job_service.fail(
                 job.id,
                 error=error,
                 retryable=True,
-                next_run_at=next_run_at,
             )
         self._logger.warning(
             "apply_worker.dead_letter",

@@ -42,6 +42,7 @@ import pytest
 
 from job_apply.features.apply_worker.models import ApplyJobStatus
 from job_apply.features.apply_worker.repository import InMemoryApplyJobRepository
+from job_apply.features.apply_worker.retry import RetryPolicy
 from job_apply.features.apply_worker.runtime import (
     DEFAULT_MAX_ATTEMPTS,
     ApplyResult,
@@ -130,6 +131,7 @@ def _make_world(
     source: str = "hh",
     adapters: dict[str, _FakeAdapter] | None = None,
     job_result: ApplyResult | None = None,
+    retry_policy: RetryPolicy | None = None,
 ) -> _World:
     user_id = uuid.uuid4()
     profile = SearchProfile(
@@ -168,6 +170,7 @@ def _make_world(
         job_repo=job_repo,
         match_repo=match_repo,  # type: ignore[arg-type]
         profile_repo=profile_repo,  # type: ignore[arg-type]
+        retry_policy=retry_policy,
     )
     match_service = MatchService(
         match_repo=match_repo,  # type: ignore[arg-type]
@@ -324,13 +327,23 @@ async def test_process_one_updates_match_status_on_success() -> None:
 @pytest.mark.asyncio
 async def test_process_one_retries_retryable_failure() -> None:
     """A retryable failure parks the job back in ``queued`` with backoff."""
+    # The runtime no longer computes the backoff itself; the service's
+    # injected ``RetryPolicy`` does. Use a policy that yields the same
+    # 2-second first-retry delay the worker used to compute inline so the
+    # assertion below stays meaningful.
     world = _make_world(
         job_result=ApplyResult(
             success=False,
             external_application_id=None,
             error="boom",
             retryable=True,
-        )
+        ),
+        retry_policy=RetryPolicy(
+            max_attempts=DEFAULT_MAX_ATTEMPTS,
+            base_delay_seconds=1.0,
+            backoff_multiplier=2.0,
+            jitter=True,
+        ),
     )
     world.job_service.enqueue_for_match(world.match.id)
     worker = _make_worker(world)
@@ -344,11 +357,11 @@ async def test_process_one_retries_retryable_failure() -> None:
     assert processed.status == ApplyJobStatus.QUEUED.value
     assert processed.last_error == "boom"
     # ``claim_next`` bumped ``attempts`` to 1; ``mark_attempt`` (called
-    # from ``fail``) bumps it to 2. The backoff is computed off the
-    # pre-``mark_attempt`` value (1), so the delay is ``2 ** 1 == 2`` s.
+    # from ``fail``) bumps it to 2. The policy computes the delay off the
+    # post-``mark_attempt`` value (2) as ``base_delay * multiplier ** (2-1)``
+    # = ``1.0 * 2.0 == 2`` s, with ±10 % jitter.
     assert processed.attempts == 2
     assert processed.next_run_at is not None
-    # Exponential backoff: attempts==1 → 2 ** 1 == 2 seconds.
     delay = (processed.next_run_at - before).total_seconds()
     assert 1.5 <= delay <= 3.0
     # The job is not claimable until next_run_at elapses.

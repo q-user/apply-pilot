@@ -1,7 +1,11 @@
 """Application settings."""
 
+from __future__ import annotations
+
 import os
 from dataclasses import dataclass
+
+from job_apply.features.apply_worker.retry import RetryPolicy
 
 
 @dataclass(frozen=True)
@@ -289,3 +293,143 @@ def get_digest_settings() -> DigestSettings:
     except ValueError as exc:
         raise ValueError(f"APP_DIGEST_HOUR_UTC must be an integer; got {raw!r}") from exc
     return DigestSettings(digest_hour_utc=hour)
+
+
+# --- Apply worker settings (M5, issue #47) ---------------------------------
+
+
+@dataclass(frozen=True)
+class ApplyWorkerSettings:
+    """Configuration for the apply-worker retry policy (M5, issue #47).
+
+    The settings are loaded from environment variables at process
+    start. ``get_apply_worker_settings()`` is the only entry point; it
+    raises :class:`ValueError` on any malformed value so misconfiguration
+    surfaces at boot time, not at the first failed apply job.
+
+    Environment variables (all optional; defaults shown):
+
+    * ``APP_APPLY_MAX_ATTEMPTS`` (int, default ``3``) — maximum number
+      of attempts before a job is dead-lettered.
+    * ``APP_APPLY_BASE_DELAY_SECONDS`` (float, default ``2.0``) —
+      delay applied after the first attempt.
+    * ``APP_APPLY_MAX_DELAY_SECONDS`` (float, default ``300.0``) — cap
+      on the backoff delay.
+    * ``APP_APPLY_BACKOFF_MULTIPLIER`` (float, default ``2.0``) —
+      geometric growth factor between attempts.
+    * ``APP_APPLY_JITTER`` (bool, default ``true``) — whether to
+      perturb each delay with ±10% jitter. Accepted truthy values
+      match the convention used by :class:`FastAPISettings`:
+      ``1``, ``true``, ``yes``, ``on`` (case-insensitive).
+    """
+
+    max_attempts: int = 3
+    base_delay_seconds: float = 2.0
+    max_delay_seconds: float = 300.0
+    backoff_multiplier: float = 2.0
+    jitter: bool = True
+
+    def __post_init__(self) -> None:
+        if self.max_attempts < 1:
+            raise ValueError(
+                f"ApplyWorkerSettings.max_attempts must be a positive integer; "
+                f"got {self.max_attempts}"
+            )
+        if self.base_delay_seconds <= 0:
+            raise ValueError(
+                f"ApplyWorkerSettings.base_delay_seconds must be positive; "
+                f"got {self.base_delay_seconds}"
+            )
+        if self.max_delay_seconds <= 0:
+            raise ValueError(
+                f"ApplyWorkerSettings.max_delay_seconds must be positive; "
+                f"got {self.max_delay_seconds}"
+            )
+        if self.backoff_multiplier <= 0:
+            raise ValueError(
+                f"ApplyWorkerSettings.backoff_multiplier must be positive; "
+                f"got {self.backoff_multiplier}"
+            )
+        if self.max_delay_seconds < self.base_delay_seconds:
+            raise ValueError(
+                "ApplyWorkerSettings.max_delay_seconds must be >= base_delay_seconds; "
+                f"got max={self.max_delay_seconds}, base={self.base_delay_seconds}"
+            )
+
+    def to_retry_policy(self) -> RetryPolicy:
+        """Return a :class:`~job_apply.features.apply_worker.retry.RetryPolicy`.
+
+        The :class:`RetryPolicy` is imported at module level so type
+        checkers see the annotation; the dataclass is a thin copy of
+        the five settings fields, so the two stay in lock-step.
+        """
+        return RetryPolicy(
+            max_attempts=self.max_attempts,
+            base_delay_seconds=self.base_delay_seconds,
+            max_delay_seconds=self.max_delay_seconds,
+            backoff_multiplier=self.backoff_multiplier,
+            jitter=self.jitter,
+        )
+
+
+def _parse_bool(value: str, *, env_var: str) -> bool:
+    """Parse a boolean from an env-var string with explicit error messages."""
+    lowered = value.strip().lower()
+    if lowered in ("1", "true", "yes", "on"):
+        return True
+    if lowered in ("0", "false", "no", "off"):
+        return False
+    raise ValueError(
+        f"{env_var} must be a boolean (1/true/yes/on or 0/false/no/off); got {value!r}"
+    )
+
+
+def _parse_positive_int(value: str, *, env_var: str) -> int:
+    """Parse a positive int from an env-var string."""
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise ValueError(f"{env_var} must be an integer; got {value!r}") from exc
+    if parsed < 1:
+        raise ValueError(f"{env_var} must be a positive integer; got {parsed}")
+    return parsed
+
+
+def _parse_positive_float(value: str, *, env_var: str) -> float:
+    """Parse a positive float from an env-var string."""
+    try:
+        parsed = float(value)
+    except ValueError as exc:
+        raise ValueError(f"{env_var} must be a float; got {value!r}") from exc
+    if parsed <= 0:
+        raise ValueError(f"{env_var} must be a positive float; got {parsed}")
+    return parsed
+
+
+def get_apply_worker_settings() -> ApplyWorkerSettings:
+    """Build :class:`ApplyWorkerSettings` from the environment.
+
+    All five knobs are optional; the dataclass defaults match the
+    operational defaults documented in the M5 spec. Errors are raised
+    eagerly so a typo (``APP_APPLY_MAX_ATTEMPTS=three``) surfaces at
+    process start, not at the first failed retry.
+    """
+    max_attempts_raw = os.getenv("APP_APPLY_MAX_ATTEMPTS", "3")
+    base_delay_raw = os.getenv("APP_APPLY_BASE_DELAY_SECONDS", "2.0")
+    max_delay_raw = os.getenv("APP_APPLY_MAX_DELAY_SECONDS", "300.0")
+    multiplier_raw = os.getenv("APP_APPLY_BACKOFF_MULTIPLIER", "2.0")
+    jitter_raw = os.getenv("APP_APPLY_JITTER", "true")
+
+    return ApplyWorkerSettings(
+        max_attempts=_parse_positive_int(max_attempts_raw, env_var="APP_APPLY_MAX_ATTEMPTS"),
+        base_delay_seconds=_parse_positive_float(
+            base_delay_raw, env_var="APP_APPLY_BASE_DELAY_SECONDS"
+        ),
+        max_delay_seconds=_parse_positive_float(
+            max_delay_raw, env_var="APP_APPLY_MAX_DELAY_SECONDS"
+        ),
+        backoff_multiplier=_parse_positive_float(
+            multiplier_raw, env_var="APP_APPLY_BACKOFF_MULTIPLIER"
+        ),
+        jitter=_parse_bool(jitter_raw, env_var="APP_APPLY_JITTER"),
+    )
