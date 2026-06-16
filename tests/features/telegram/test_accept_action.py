@@ -1,4 +1,4 @@
-"""TDD tests for the :class:`AcceptActionHandler` (M4, issue #37).
+"""TDD tests for the :class:`AcceptActionHandler` (M4, issue #37 + issue #41).
 
 The handler is the use-case for the ``/accept <match_id>`` Telegram
 command. It:
@@ -12,6 +12,10 @@ command. It:
   :meth:`MatchService.update_status`;
 * records a ``MATCH_ACCEPTED`` audit event with ``match_id`` in
   ``details``;
+* (issue #41) enqueues an :class:`ApplyJob` through the injected
+  :class:`ApplyJobEnqueuer` so the apply worker can pick the match up;
+  the enqueue is best-effort and any error is logged but does not
+  fail the accept;
 * returns a confirmation :class:`SendMessageRequest` for the chat.
 
 All collaborators are wired through the constructor with the in-memory
@@ -157,6 +161,27 @@ def _link_telegram(
 ) -> None:
     """Create a Telegram account linking ``telegram_user_id`` to ``user_id``."""
     repo.create(user_id=user_id, telegram_user_id=telegram_user_id, username="alice")
+
+
+class _RecordingApplyJobEnqueuer:
+    """Recording fake for the :class:`ApplyJobEnqueuer` protocol.
+
+    The handler only needs ``enqueue_for_match``; the fake records the
+    call so tests can assert that the enqueue was attempted and with
+    which ``match_id``. Tests that want to exercise the failure path
+    can set ``fail_with`` to a non-``None`` exception instance, which
+    the fake will raise on the first call.
+    """
+
+    def __init__(self) -> None:
+        self.calls: list[uuid.UUID] = []
+        self.fail_with: Exception | None = None
+
+    def enqueue_for_match(self, match_id: uuid.UUID) -> object:
+        self.calls.append(match_id)
+        if self.fail_with is not None:
+            raise self.fail_with
+        return {"job_id": f"job-{match_id}"}
 
 
 # ---------------------------------------------------------------------------
@@ -384,3 +409,135 @@ def test_dispatcher_routes_accept_command(
     text = response.text.lower()
     assert "accepted" in text
     assert match_repo.get_by_id(match.id).status == MatchStatus.ACCEPTED.value
+
+
+# ---------------------------------------------------------------------------
+# ApplyJob enqueue (M4, issue #41)
+# ---------------------------------------------------------------------------
+
+
+def test_accept_enqueues_apply_job_when_handler_provided(
+    match_service: MatchService,
+    match_repo: InMemoryVacancyMatchRepository,
+    profile_repo: InMemorySearchProfileRepository,
+    telegram_account_repo: InMemoryTelegramAccountRepository,
+    audit_service: AuditService,
+    audit_repo: InMemoryAuditLogRepository,
+    user_id: uuid.UUID,
+    telegram_user_id: int,
+) -> None:
+    """Wiring an enqueuer must trigger ``enqueue_for_match(match_id)`` on accept."""
+    match = _seed_match(match_repo, profile_repo, user_id=user_id)
+    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+
+    enqueuer = _RecordingApplyJobEnqueuer()
+    handler = AcceptActionHandler(
+        match_service=match_service,
+        telegram_account_repo=telegram_account_repo,
+        audit_service=audit_service,
+        apply_job_enqueuer=enqueuer,
+    )
+
+    response = handler.handle(
+        chat_id=100,
+        telegram_user_id=telegram_user_id,
+        command=parse_accept_command(f"/accept {match.id}"),
+    )
+
+    assert isinstance(response, SendMessageRequest)
+    # The enqueuer was called exactly once, with the accepted match's id.
+    assert enqueuer.calls == [match.id]
+    # The match was accepted regardless of the enqueue side-effect.
+    assert match_repo.get_by_id(match.id).status == MatchStatus.ACCEPTED.value
+    # The audit event records the enqueue success in its details.
+    logs = audit_repo.list_by_event_type(AuditEventType.MATCH_ACCEPTED.value)
+    assert len(logs) == 1
+    details = json.loads(logs[0].details)
+    assert details["match_id"] == str(match.id)
+    assert details["apply_job_enqueued"] is True
+    assert "apply_job_enqueue_failed" not in details
+
+
+def test_accept_succeeds_even_if_enqueue_fails(
+    match_service: MatchService,
+    match_repo: InMemoryVacancyMatchRepository,
+    profile_repo: InMemorySearchProfileRepository,
+    telegram_account_repo: InMemoryTelegramAccountRepository,
+    audit_service: AuditService,
+    audit_repo: InMemoryAuditLogRepository,
+    user_id: uuid.UUID,
+    telegram_user_id: int,
+) -> None:
+    """A failing enqueue must be logged but must not fail the accept command."""
+    match = _seed_match(match_repo, profile_repo, user_id=user_id)
+    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+
+    enqueuer = _RecordingApplyJobEnqueuer()
+    enqueuer.fail_with = RuntimeError("queue is down")
+    handler = AcceptActionHandler(
+        match_service=match_service,
+        telegram_account_repo=telegram_account_repo,
+        audit_service=audit_service,
+        apply_job_enqueuer=enqueuer,
+    )
+
+    response = handler.handle(
+        chat_id=100,
+        telegram_user_id=telegram_user_id,
+        command=parse_accept_command(f"/accept {match.id}"),
+    )
+
+    # The accept still succeeded for the user.
+    assert isinstance(response, SendMessageRequest)
+    assert "accepted" in response.text.lower()
+    # The match is in the accepted state.
+    assert match_repo.get_by_id(match.id).status == MatchStatus.ACCEPTED.value
+    # The enqueue was attempted despite the failure.
+    assert enqueuer.calls == [match.id]
+    # The audit event records the enqueue failure in its details.
+    logs = audit_repo.list_by_event_type(AuditEventType.MATCH_ACCEPTED.value)
+    assert len(logs) == 1
+    details = json.loads(logs[0].details)
+    assert details["match_id"] == str(match.id)
+    assert details["apply_job_enqueue_failed"] is True
+    assert details["apply_job_enqueued"] is False
+    assert "queue is down" in details["apply_job_enqueue_error"]
+
+
+def test_accept_skips_enqueue_when_handler_is_none(
+    match_service: MatchService,
+    match_repo: InMemoryVacancyMatchRepository,
+    profile_repo: InMemorySearchProfileRepository,
+    telegram_account_repo: InMemoryTelegramAccountRepository,
+    audit_service: AuditService,
+    audit_repo: InMemoryAuditLogRepository,
+    user_id: uuid.UUID,
+    telegram_user_id: int,
+) -> None:
+    """Without an enqueuer wired, the accept still works and no enqueue flag is recorded."""
+    match = _seed_match(match_repo, profile_repo, user_id=user_id)
+    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+
+    # ``apply_job_enqueuer`` is left at its default (None).
+    handler = AcceptActionHandler(
+        match_service=match_service,
+        telegram_account_repo=telegram_account_repo,
+        audit_service=audit_service,
+    )
+
+    response = handler.handle(
+        chat_id=100,
+        telegram_user_id=telegram_user_id,
+        command=parse_accept_command(f"/accept {match.id}"),
+    )
+
+    assert isinstance(response, SendMessageRequest)
+    assert "accepted" in response.text.lower()
+    assert match_repo.get_by_id(match.id).status == MatchStatus.ACCEPTED.value
+    # The audit event is recorded but contains no enqueue flag.
+    logs = audit_repo.list_by_event_type(AuditEventType.MATCH_ACCEPTED.value)
+    assert len(logs) == 1
+    details = json.loads(logs[0].details)
+    assert details["match_id"] == str(match.id)
+    assert "apply_job_enqueued" not in details
+    assert "apply_job_enqueue_failed" not in details
