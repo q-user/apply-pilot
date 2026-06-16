@@ -94,6 +94,12 @@ class InMemoryCoverLetterDraftRepository:
         # the production behaviour.
         if draft.status is None:
             draft.status = "draft"
+        # Mirror the SQL ``server_default="1"`` on the ``version``
+        # column so an in-memory draft created without an explicit
+        # version reads back as ``1`` — same shape as a fresh SQL
+        # row. Added in M4 issue #40 (``/regenerate``).
+        if draft.version is None:
+            draft.version = 1
         self._by_id[draft.id] = draft
         self._by_match[draft.match_id] = draft.id
         return draft

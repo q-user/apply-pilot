@@ -596,7 +596,7 @@ def _review_update(
     }
 
 
-def test_dispatcher_routes_review_command(
+async def test_dispatcher_routes_review_command(
     match_service: MatchService,
     vacancy_repo: InMemoryVacancyRepository,
     cover_letter_repo: InMemoryCoverLetterDraftRepository,
@@ -623,7 +623,7 @@ def test_dispatcher_routes_review_command(
         review_handler=handler,
     )
 
-    response = bot.handle_update(_review_update(f"/review {match.id}", telegram_user_id=600))
+    response = await bot.handle_update(_review_update(f"/review {match.id}", telegram_user_id=600))
 
     assert response is not None
     # The card contains the title and the action buttons.
@@ -631,7 +631,7 @@ def test_dispatcher_routes_review_command(
     assert "/accept" in response.text
 
 
-def test_dispatcher_review_command_without_args_returns_help(
+async def test_dispatcher_review_command_without_args_returns_help(
     match_service: MatchService,
     vacancy_repo: InMemoryVacancyRepository,
     cover_letter_repo: InMemoryCoverLetterDraftRepository,
@@ -649,7 +649,7 @@ def test_dispatcher_review_command_without_args_returns_help(
         review_handler=handler,
     )
 
-    response = bot.handle_update(_review_update("/review", telegram_user_id=600))
+    response = await bot.handle_update(_review_update("/review", telegram_user_id=600))
 
     assert response is not None
     text = response.text.lower()
@@ -657,11 +657,11 @@ def test_dispatcher_review_command_without_args_returns_help(
     assert "/review" in text or "usage" in text
 
 
-def test_dispatcher_includes_review_in_help() -> None:
+async def test_dispatcher_includes_review_in_help() -> None:
     """The /help text mentions the /review command."""
     bot = TelegramBot(
         settings=TelegramSettings(bot_token="test-token", polling_timeout=30),
     )
-    response = bot.handle_update(_review_update("/help", telegram_user_id=600))
+    response = await bot.handle_update(_review_update("/help", telegram_user_id=600))
     assert response is not None
     assert "/review" in response.text

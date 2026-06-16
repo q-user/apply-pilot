@@ -190,7 +190,7 @@ def _link_update(
     }
 
 
-def test_link_command_with_valid_code_returns_success() -> None:
+async def test_link_command_with_valid_code_returns_success() -> None:
     """``/link <code>`` with a valid code must return a success message."""
     from job_apply.config import TelegramSettings
     from job_apply.features.telegram.bot import TelegramBot
@@ -203,14 +203,14 @@ def test_link_command_with_valid_code_returns_success() -> None:
         linking_service=service,
     )
 
-    response = bot.handle_update(_link_update(f"/link {token}"))
+    response = await bot.handle_update(_link_update(f"/link {token}"))
 
     assert response is not None
     assert response.chat_id == 200
     assert "linked" in response.text.lower() or "success" in response.text.lower()
 
 
-def test_link_command_persists_account_when_repo_injected() -> None:
+async def test_link_command_persists_account_when_repo_injected() -> None:
     """When a TelegramAccountRepository is injected, /link must persist the row."""
     from job_apply.config import TelegramSettings
     from job_apply.features.telegram.bot import TelegramBot
@@ -225,7 +225,7 @@ def test_link_command_persists_account_when_repo_injected() -> None:
         telegram_account_repository=repo,
     )
 
-    response = bot.handle_update(
+    response = await bot.handle_update(
         _link_update(
             f"/link {token}",
             telegram_user_id=111222333,
@@ -241,7 +241,7 @@ def test_link_command_persists_account_when_repo_injected() -> None:
     )
 
 
-def test_link_command_with_invalid_code_returns_error() -> None:
+async def test_link_command_with_invalid_code_returns_error() -> None:
     """``/link <bad code>`` must return an error message."""
     from job_apply.config import TelegramSettings
     from job_apply.features.telegram.bot import TelegramBot
@@ -252,7 +252,7 @@ def test_link_command_with_invalid_code_returns_error() -> None:
         linking_service=service,
     )
 
-    response = bot.handle_update(_link_update("/link garbage-code"))
+    response = await bot.handle_update(_link_update("/link garbage-code"))
 
     assert response is not None
     assert response.chat_id == 200
@@ -260,7 +260,7 @@ def test_link_command_with_invalid_code_returns_error() -> None:
     assert "invalid" in text_lower or "expired" in text_lower or "error" in text_lower
 
 
-def test_link_command_without_code_returns_usage_hint() -> None:
+async def test_link_command_without_code_returns_usage_hint() -> None:
     """``/link`` without a code must return a usage hint."""
     from job_apply.config import TelegramSettings
     from job_apply.features.telegram.bot import TelegramBot
@@ -270,7 +270,7 @@ def test_link_command_without_code_returns_usage_hint() -> None:
         linking_service=TelegramLinkingService(),
     )
 
-    response = bot.handle_update(_link_update("/link"))
+    response = await bot.handle_update(_link_update("/link"))
 
     assert response is not None
     assert response.chat_id == 200
@@ -278,7 +278,7 @@ def test_link_command_without_code_returns_usage_hint() -> None:
     assert "usage" in text_lower or "provide" in text_lower or "code" in text_lower
 
 
-def test_link_command_duplicate_telegram_account_returns_error() -> None:
+async def test_link_command_duplicate_telegram_account_returns_error() -> None:
     """``/link`` with an already-linked Telegram account must return an error."""
     from job_apply.config import TelegramSettings
     from job_apply.features.telegram.bot import TelegramBot
@@ -295,7 +295,7 @@ def test_link_command_duplicate_telegram_account_returns_error() -> None:
 
     # Now try to link a different user with the same Telegram id
     token2 = service.generate_token(user_id="user-2")
-    response = bot.handle_update(_link_update(f"/link {token2}", telegram_user_id=200))
+    response = await bot.handle_update(_link_update(f"/link {token2}", telegram_user_id=200))
 
     assert response is not None
     assert response.chat_id == 200
