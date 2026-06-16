@@ -89,6 +89,7 @@ def create_app(settings: FastAPISettings | None = None) -> FastAPI:
     )
     from job_apply.features.hh.api import router as hh_router
     from job_apply.features.matches.api import router as matches_router
+    from job_apply.features.screening.api import router as screening_router
     from job_apply.features.search_profiles.api import router as search_profiles_router
     from job_apply.features.sources.api import router as sources_router
     from job_apply.features.telegram.digest.api import router as digest_router
@@ -96,6 +97,7 @@ def create_app(settings: FastAPISettings | None = None) -> FastAPI:
     app.include_router(cover_letter_style_router)
     app.include_router(hh_router)
     app.include_router(matches_router)
+    app.include_router(screening_router)
     app.include_router(search_profiles_router)
     app.include_router(sources_router)
     app.include_router(digest_router)
