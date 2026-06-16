@@ -101,10 +101,19 @@ def apply_world() -> _World:
     profile_repo = _FakeProfileRepo()
     profile_repo.profiles[profile.id] = profile
 
+    # M5 #49 — the service now requires a history repo. The router's
+    # in-memory fakes use the same collaborator-injected fakes as the
+    # rest of the test world.
+    from job_apply.features.apply_worker.repository import (
+        InMemoryApplyStatusHistoryRepository,
+    )
+
+    history_repo = InMemoryApplyStatusHistoryRepository()
     service = ApplyJobService(
         job_repo=job_repo,  # type: ignore[arg-type]
         match_repo=match_repo,  # type: ignore[arg-type]
         profile_repo=profile_repo,  # type: ignore[arg-type]
+        history_repo=history_repo,
     )
 
     return _World(
@@ -158,6 +167,7 @@ def test_endpoints_require_token(client: TestClient) -> None:
     """Every apply-jobs endpoint must reject requests without a bearer token."""
     assert client.get("/apply-jobs").status_code == 401
     assert client.get(f"/apply-jobs/{uuid.uuid4()}").status_code == 401
+    assert client.get(f"/apply-jobs/{uuid.uuid4()}/history").status_code == 401
     assert client.post(f"/apply-jobs/{uuid.uuid4()}/cancel").status_code == 401
     assert client.post(f"/apply-jobs/enqueue/{uuid.uuid4()}").status_code == 401
 

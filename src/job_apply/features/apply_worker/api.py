@@ -6,6 +6,9 @@ Endpoints
 * ``GET /apply-jobs`` — list the caller's apply jobs.
 * ``GET /apply-jobs/{id}`` — fetch a single apply job (ownership
   enforced).
+* ``GET /apply-jobs/{id}/history`` — list the caller's apply job
+  history (M5, issue #49); ownership enforced, returns rows in
+  chronological order.
 * ``POST /apply-jobs/enqueue/{match_id}`` — idempotently enqueue an
   apply job for an accepted match.
 * ``POST /apply-jobs/{id}/cancel`` — cancel a queued job.
@@ -27,8 +30,16 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from job_apply.db import get_db
-from job_apply.features.apply_worker.repository import SqlApplyJobRepository
-from job_apply.features.apply_worker.schemas import ApplyJobRead, apply_job_to_dto
+from job_apply.features.apply_worker.repository import (
+    SqlApplyJobRepository,
+    SqlApplyStatusHistoryRepository,
+)
+from job_apply.features.apply_worker.schemas import (
+    ApplyJobRead,
+    ApplyStatusHistoryRead,
+    apply_job_to_dto,
+    apply_status_history_to_dto,
+)
 from job_apply.features.apply_worker.service import (
     ApplyJobAlreadyTerminalError,
     ApplyJobDependencyMissingError,
@@ -80,18 +91,20 @@ def get_apply_job_service(
 ) -> ApplyJobService:
     """Build an :class:`ApplyJobService` for the current request.
 
-    The three repositories share the request-scoped session so the
-    enqueue / cancel / list operations all participate in a single
-    transaction. Dependency overrides in the test suite swap the
+    The four repositories share the request-scoped session so the
+    enqueue / cancel / list / history operations all participate in a
+    single transaction. Dependency overrides in the test suite swap the
     in-memory fakes in place of the SQL implementations.
     """
     job_repo = SqlApplyJobRepository(session_factory=lambda: session)
     match_repo = SqlVacancyMatchRepository(session_factory=lambda: session)
     profile_repo = SqlSearchProfileRepository(session_factory=lambda: session)
+    history_repo = SqlApplyStatusHistoryRepository(session_factory=lambda: session)
     return ApplyJobService(
         job_repo=job_repo,
         match_repo=match_repo,
         profile_repo=profile_repo,
+        history_repo=history_repo,
     )
 
 
@@ -178,6 +191,39 @@ def enqueue_apply_job(
     except ApplyJobDependencyMissingError as exc:
         raise _http_error(status.HTTP_404_NOT_FOUND, exc.code, str(exc)) from exc
     return apply_job_to_dto(job)
+
+
+@router.get(
+    "/{job_id}/history",
+    response_model=list[ApplyStatusHistoryRead],
+    responses={
+        401: {"description": "Missing or invalid bearer token"},
+        403: {"description": "Apply job does not belong to the caller"},
+        404: {"description": "Apply job not found"},
+    },
+)
+def get_apply_job_history(
+    job_id: str,
+    user_id_str: str = Depends(_resolve_user_id),  # noqa: B008
+    service: ApplyJobService = Depends(get_apply_job_service),  # noqa: B008
+) -> list[ApplyStatusHistoryRead]:
+    """List the chronological status-transition history for ``job_id`` (M5, #49).
+
+    Ownership is enforced through :meth:`ApplyJobService.list_history`,
+    so a missing or foreign job returns the same 404 / 403 codes as the
+    other apply-jobs endpoints.
+    """
+    try:
+        job_uuid = uuid.UUID(job_id)
+    except ValueError as exc:
+        raise _http_error(status.HTTP_404_NOT_FOUND, "not_found", "invalid job id") from exc
+    try:
+        rows = service.list_history(job_uuid, user_id=uuid.UUID(user_id_str))
+    except ApplyJobNotFoundError as exc:
+        raise _http_error(status.HTTP_404_NOT_FOUND, exc.code, exc.message) from exc
+    except ApplyJobOwnershipError as exc:
+        raise _http_error(status.HTTP_403_FORBIDDEN, exc.code, exc.message) from exc
+    return [apply_status_history_to_dto(r) for r in rows]
 
 
 @router.post(
