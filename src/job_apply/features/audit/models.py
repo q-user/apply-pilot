@@ -34,6 +34,7 @@ class AuditEventType(StrEnum):
     RESUME_UPLOAD = "resume_upload"
     PROFILE_UPDATE = "profile_update"
     VACANCY_MATCH_REJECTED = "vacancy_match_rejected"
+    MATCH_ACCEPTED = "match_accepted"
 
 
 class AuditLog(Base):
