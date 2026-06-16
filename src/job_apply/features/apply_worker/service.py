@@ -297,7 +297,14 @@ class ApplyJobService:
             external_application_id=external_application_id,
         )
 
-    def fail(self, job_id: uuid.UUID, *, error: str, retryable: bool) -> ApplyJob:
+    def fail(
+        self,
+        job_id: uuid.UUID,
+        *,
+        error: str,
+        retryable: bool,
+        next_run_at: datetime | None = None,
+    ) -> ApplyJob:
         """Record a failed run.
 
         ``retryable=True`` parks the row back in ``queued`` with a
@@ -306,16 +313,24 @@ class ApplyJobService:
         ``dead_letter`` for manual inspection. In both branches
         ``mark_attempt`` increments ``attempts`` and stores
         ``last_error``.
+
+        The optional ``next_run_at`` overrides the default
+        :data:`DEFAULT_RETRY_BACKOFF`. The apply worker passes an
+        exponential backoff (``2 ** attempts`` seconds) through this
+        argument; other callers leave it ``None`` to keep the
+        historical 60 s default.
         """
         job = self._require_exists(job_id)
         _assert_not_terminal(job)
         self._job_repo.mark_attempt(job_id, error)
         if retryable:
-            next_run_at = datetime.now(UTC) + self._retry_backoff
+            scheduled = (
+                next_run_at if next_run_at is not None else datetime.now(UTC) + self._retry_backoff
+            )
             return self._job_repo.update_status(
                 job_id,
                 ApplyJobStatus.QUEUED.value,
-                next_run_at=next_run_at,
+                next_run_at=scheduled,
             )
         return self._finish(
             job_id,
