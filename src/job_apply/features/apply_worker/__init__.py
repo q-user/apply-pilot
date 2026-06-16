@@ -1,4 +1,4 @@
-"""Apply worker vertical slice (M5, issue #43).
+"""Apply worker vertical slice (M5, issue #43 + #44).
 
 Public surface
 --------------
@@ -12,11 +12,15 @@ Public surface
 * :class:`SqlApplyJobRepository` — production implementation.
 * :class:`ApplyJobService` — business logic.
 * :class:`ApplyJobRead` — public DTO.
+* :class:`ApplyResult` — adapter return shape.
+* :class:`ApplyAdapter` — Protocol the apply worker dispatches to.
+* :class:`ApplyWorker` — per-iteration worker that drains the queue.
+* :class:`ApplyWorkerProcess` — long-running process driving the worker.
 
 The slice is consumed by:
 
-* the apply worker process (background runner, not yet implemented in
-  M5) which calls :meth:`ApplyJobService.claim_next`,
+* the apply worker process (:class:`ApplyWorkerProcess`, issue #44)
+  which calls :meth:`ApplyJobService.claim_next`,
   :meth:`~ApplyJobService.complete`, and
   :meth:`~ApplyJobService.fail`;
 * the ``/accept`` Telegram action (M4, issue #41) which calls
@@ -38,6 +42,15 @@ from job_apply.features.apply_worker.repository import (
     InMemoryApplyJobRepository,
     SqlApplyJobRepository,
 )
+from job_apply.features.apply_worker.runtime import (
+    DEFAULT_MAX_ATTEMPTS,
+    NO_ADAPTER_ERROR,
+    VACANCY_NOT_FOUND_ERROR,
+    ApplyAdapter,
+    ApplyResult,
+    ApplyWorker,
+    ApplyWorkerProcess,
+)
 from job_apply.features.apply_worker.schemas import ApplyJobRead, apply_job_to_dto
 from job_apply.features.apply_worker.service import (
     DEFAULT_RETRY_BACKOFF,
@@ -49,7 +62,11 @@ from job_apply.features.apply_worker.service import (
 )
 
 __all__ = [
+    "DEFAULT_MAX_ATTEMPTS",
     "DEFAULT_RETRY_BACKOFF",
+    "NO_ADAPTER_ERROR",
+    "VACANCY_NOT_FOUND_ERROR",
+    "ApplyAdapter",
     "ApplyJob",
     "ApplyJobAlreadyTerminalError",
     "ApplyJobDependencyMissingError",
@@ -59,6 +76,9 @@ __all__ = [
     "ApplyJobRepository",
     "ApplyJobService",
     "ApplyJobStatus",
+    "ApplyResult",
+    "ApplyWorker",
+    "ApplyWorkerProcess",
     "InMemoryApplyJobRepository",
     "SqlApplyJobRepository",
     "apply_job_to_dto",

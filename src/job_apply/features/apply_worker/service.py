@@ -334,7 +334,13 @@ class ApplyJobService:
             external_application_id=external_application_id,
         )
 
-    def fail(self, job_id: uuid.UUID, *, error: str, retryable: bool) -> ApplyJob:
+    def fail(
+        self,
+        job_id: uuid.UUID,
+        *,
+        error: str,
+        retryable: bool,
+    ) -> ApplyJob:
         """Record a failed run.
 
         ``retryable=True`` parks the row back in ``queued`` with a
