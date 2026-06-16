@@ -70,4 +70,7 @@ prepend_sys_path = ["src"]
 [dependency-groups]
 dev = [
     "pytest-asyncio>=1.4.0",
+    "pytest-cov>=7.1.0",
+    "pytest-timeout>=2.4.0",
+    "pytest-xdist>=3.8.0",
 ]
