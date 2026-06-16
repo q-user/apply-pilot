@@ -461,7 +461,7 @@ def _defer_update(
     }
 
 
-def test_dispatcher_routes_defer_command(
+async def test_dispatcher_routes_defer_command(
     match_service: MatchService,
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
@@ -484,7 +484,7 @@ def test_dispatcher_routes_defer_command(
         defer_handler=handler,
     )
 
-    response = bot.handle_update(_defer_update(f"/defer {match.id}", telegram_user_id=600))
+    response = await bot.handle_update(_defer_update(f"/defer {match.id}", telegram_user_id=600))
 
     assert response is not None
     text = response.text.lower()
@@ -492,7 +492,7 @@ def test_dispatcher_routes_defer_command(
     assert match_repo.get_by_id(match.id).status == MatchStatus.DEFERRED.value
 
 
-def test_dispatcher_defer_command_without_args_returns_help() -> None:
+async def test_dispatcher_defer_command_without_args_returns_help() -> None:
     """``/defer`` without args must return the help text (not a crash)."""
     bot = TelegramBot(
         settings=TelegramSettings(bot_token="test-token", polling_timeout=30),
@@ -506,18 +506,18 @@ def test_dispatcher_defer_command_without_args_returns_help() -> None:
         ),
     )
 
-    response = bot.handle_update(_defer_update("/defer"))
+    response = await bot.handle_update(_defer_update("/defer"))
 
     assert response is not None
     text = response.text.lower()
     assert "usage" in text or "defer" in text
 
 
-def test_dispatcher_includes_defer_in_help() -> None:
+async def test_dispatcher_includes_defer_in_help() -> None:
     """``/help`` must list ``/defer`` so users discover the command."""
     bot = TelegramBot(settings=TelegramSettings(bot_token="test-token", polling_timeout=30))
 
-    response = bot.handle_update(_defer_update("/help"))
+    response = await bot.handle_update(_defer_update("/help"))
 
     assert response is not None
     assert "/defer" in response.text

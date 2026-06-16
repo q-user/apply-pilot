@@ -457,7 +457,7 @@ def _reject_update(
     }
 
 
-def test_dispatcher_routes_reject_command(
+async def test_dispatcher_routes_reject_command(
     match_service: MatchService,
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
@@ -480,7 +480,7 @@ def test_dispatcher_routes_reject_command(
         reject_handler=handler,
     )
 
-    response = bot.handle_update(_reject_update(f"/reject {match.id}", telegram_user_id=700))
+    response = await bot.handle_update(_reject_update(f"/reject {match.id}", telegram_user_id=700))
 
     assert response is not None
     text = response.text.lower()
@@ -488,7 +488,7 @@ def test_dispatcher_routes_reject_command(
     assert match_repo.get_by_id(match.id).status == MatchStatus.REJECTED.value
 
 
-def test_dispatcher_reject_command_without_args_returns_help() -> None:
+async def test_dispatcher_reject_command_without_args_returns_help() -> None:
     """``/reject`` without args must return the help text (not a crash)."""
     from job_apply.config import TelegramSettings
 
@@ -504,20 +504,20 @@ def test_dispatcher_reject_command_without_args_returns_help() -> None:
         ),
     )
 
-    response = bot.handle_update(_reject_update("/reject"))
+    response = await bot.handle_update(_reject_update("/reject"))
 
     assert response is not None
     text = response.text.lower()
     assert "usage" in text or "reject" in text
 
 
-def test_dispatcher_includes_reject_in_help() -> None:
+async def test_dispatcher_includes_reject_in_help() -> None:
     """``/help`` must list ``/reject`` so users discover the command."""
     from job_apply.config import TelegramSettings
 
     bot = TelegramBot(settings=TelegramSettings(bot_token="test-token", polling_timeout=30))
 
-    response = bot.handle_update(_reject_update("/help"))
+    response = await bot.handle_update(_reject_update("/help"))
 
     assert response is not None
     assert "/reject" in response.text

@@ -28,6 +28,11 @@ from job_apply.features.telegram.actions.defer import (
     DeferActionHandler,
     parse_defer_command,
 )
+from job_apply.features.telegram.actions.regenerate import (
+    REGENERATE_HELP_TEXT,
+    RegenerateActionHandler,
+    parse_regenerate_command,
+)
 from job_apply.features.telegram.actions.reject import (
     REJECT_HELP_TEXT,
     RejectActionHandler,
@@ -69,6 +74,7 @@ class TelegramBot:
         telegram_account_repository: TelegramAccountRepository | None = None,
         accept_handler: AcceptActionHandler | None = None,
         defer_handler: DeferActionHandler | None = None,
+        regenerate_handler: RegenerateActionHandler | None = None,
         reject_handler: RejectActionHandler | None = None,
         review_handler: ReviewActionHandler | None = None,
     ) -> None:
@@ -95,6 +101,13 @@ class TelegramBot:
         # bot stays usable in test rigs that only exercise
         # non-action commands.
         self._defer_handler = defer_handler
+        # Optional regenerate action handler. When None, the ``/regenerate``
+        # command returns a "not available" message; the link between
+        # the dispatcher and the action is dependency-injected so the
+        # bot stays usable in test rigs that only exercise
+        # non-action commands. The handler is async because it calls
+        # the LLM; ``handle_update`` is therefore async too.
+        self._regenerate_handler = regenerate_handler
         # Optional reject action handler. When None, the ``/reject``
         # command returns a "not available" message; the link between
         # the dispatcher and the action is dependency-injected so the
@@ -181,14 +194,19 @@ class TelegramBot:
     # ------------------------------------------------------------------
     # Command dispatch
     # ------------------------------------------------------------------
-    def handle_update(self, update: dict[str, Any]) -> SendMessageRequest | None:
+    async def handle_update(self, update: dict[str, Any]) -> SendMessageRequest | None:
         """Parse an incoming ``Update`` and return the reply to send.
 
         Returns ``None`` for updates the bot does not act on (non-message
         updates, messages without text, messages without a chat id, ...)
         so the caller can skip them without a special branch. The function
-        is intentionally side-effect free: it never touches the network and
-        never reads from the environment.
+        is ``async`` because the :class:`RegenerateActionHandler`
+        (M4, issue #40) is async — it calls the LLM. All other
+        handlers are sync but the dispatcher awaits them uniformly
+        so the call sites stay symmetric.
+
+        The function is intentionally side-effect free: it never
+        touches the network and never reads from the environment.
         """
         message = update.get("message") or update.get("edited_message")
         if not isinstance(message, dict):
@@ -228,6 +246,12 @@ class TelegramBot:
             )
         if command == "defer":
             return self._handle_defer_command(
+                chat_id=chat_id,
+                telegram_user_id=message.get("from", {}).get("id", 0),
+                message_text=text,
+            )
+        if command == "regenerate":
+            return await self._handle_regenerate_command(
                 chat_id=chat_id,
                 telegram_user_id=message.get("from", {}).get("id", 0),
                 message_text=text,
@@ -294,6 +318,7 @@ class TelegramBot:
             "/link — link your Telegram account using the code from the web app\n"
             "/accept <match_id> — mark one of your matches as accepted\n"
             "/defer <match_id> — shelve one of your matches for later\n"
+            "/regenerate <match_id> — ask the LLM for a fresh cover letter\n"
             "/reject <match_id> [reason] — mark one of your matches as rejected\n"
             "/review <match_id> — render a vacancy review card for one of your matches\n"
             "/help — list available commands"
@@ -425,6 +450,38 @@ class TelegramBot:
             return SendMessageRequest(chat_id=chat_id, text=DEFER_HELP_TEXT)
 
         return self._defer_handler.handle(
+            chat_id=chat_id,
+            telegram_user_id=telegram_user_id,
+            command=command,
+        )
+
+    async def _handle_regenerate_command(
+        self,
+        *,
+        chat_id: int,
+        telegram_user_id: int,
+        message_text: str,
+    ) -> SendMessageRequest:
+        """Handle the ``/regenerate <match_id>`` command.
+
+        The handler is collaborator-injected. When no handler is wired
+        (e.g. the bot is running with a stripped-down set of
+        dependencies for local hacking) the command returns a
+        "not available" message instead of crashing. The method is
+        ``async`` because :class:`RegenerateActionHandler.handle`
+        awaits the LLM call.
+        """
+        if self._regenerate_handler is None:
+            return SendMessageRequest(
+                chat_id=chat_id,
+                text=("Regenerate action is not available right now. Please try again later."),
+            )
+
+        command = parse_regenerate_command(message_text)
+        if command is None:
+            return SendMessageRequest(chat_id=chat_id, text=REGENERATE_HELP_TEXT)
+
+        return await self._regenerate_handler.handle(
             chat_id=chat_id,
             telegram_user_id=telegram_user_id,
             command=command,

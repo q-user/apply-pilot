@@ -31,11 +31,11 @@ def _start_update(text: str, *, chat_id: int = 100) -> dict[str, Any]:
     }
 
 
-def test_handle_start_command_returns_welcome() -> None:
+async def test_handle_start_command_returns_welcome() -> None:
     """``/start`` must return a welcome message that mentions account linking."""
     bot = TelegramBot(settings=TelegramSettings(bot_token="test-token", polling_timeout=30))
 
-    response = bot.handle_update(_start_update("/start"))
+    response = await bot.handle_update(_start_update("/start"))
 
     assert response is not None
     assert response.chat_id == 100
@@ -47,11 +47,11 @@ def test_handle_start_command_returns_welcome() -> None:
     assert "deep-link" in text.lower() or "link" in text.lower()
 
 
-def test_handle_help_command_returns_help() -> None:
+async def test_handle_help_command_returns_help() -> None:
     """``/help`` must list the available commands."""
     bot = TelegramBot(settings=TelegramSettings(bot_token="test-token", polling_timeout=30))
 
-    response = bot.handle_update(_start_update("/help"))
+    response = await bot.handle_update(_start_update("/help"))
 
     assert response is not None
     assert response.chat_id == 100
@@ -60,11 +60,11 @@ def test_handle_help_command_returns_help() -> None:
     assert "/help" in text
 
 
-def test_handle_unknown_command_returns_fallback() -> None:
+async def test_handle_unknown_command_returns_fallback() -> None:
     """An unknown command must produce a fallback message that points to /help."""
     bot = TelegramBot(settings=TelegramSettings(bot_token="test-token", polling_timeout=30))
 
-    response = bot.handle_update(_start_update("/notacommand"))
+    response = await bot.handle_update(_start_update("/notacommand"))
 
     assert response is not None
     assert response.chat_id == 100

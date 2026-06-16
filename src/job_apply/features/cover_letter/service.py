@@ -37,7 +37,6 @@ from job_apply.features.cover_letter.models import (
 )
 from job_apply.features.cover_letter.repository import CoverLetterDraftRepository
 from job_apply.features.cover_letter_style.models import CoverLetterStyle
-from job_apply.features.matches.models import VacancyMatch
 from job_apply.features.matches.repository import VacancyMatchRepository
 from job_apply.features.resumes.models import Resume
 from job_apply.features.scoring.llm import LLMClient
@@ -260,6 +259,19 @@ class CoverLetterService:
         return self._draft_repo
 
     @property
+    def match_repo(self) -> VacancyMatchRepository:
+        """Expose the match repository for the action handlers.
+
+        The ``/regenerate`` Telegram action (M4, issue #40) needs to
+        look up the match to verify ownership before asking the LLM
+        to regenerate the cover letter. Exposing the repo here keeps
+        the handler independent of the :class:`MatchService` surface
+        while still letting it enforce the "this match belongs to
+        you" precondition.
+        """
+        return self._match_repo
+
+    @property
     def prompt_version(self) -> str:
         """Return the ``prompt_version`` stamp applied to new drafts."""
         return self._prompt_version
@@ -338,6 +350,76 @@ class CoverLetterService:
             status=CoverLetterDraftStatus.DRAFT.value,
         )
         return self._draft_repo.create(draft)
+
+    async def regenerate_for_match(self, match_id: uuid.UUID) -> CoverLetterDraft:
+        """Regenerate the cover letter for ``match_id`` (M4, issue #40).
+
+        Unlike :meth:`generate_for_match`, this method **requires** a
+        draft to already exist for the match — the user is asking for
+        a fresh version of something they have already seen, not the
+        first one. A missing draft is surfaced as
+        :class:`CoverLetterDependencyMissingError` so the caller can
+        show a "use ``/review`` to generate one first" hint.
+
+        On success the existing draft is mutated in place:
+
+        * ``content`` is replaced with the new LLM output;
+        * ``prompt_version`` is stamped from ``self._prompt_version``;
+        * ``model_used`` is updated from the LLM client;
+        * ``version`` is bumped (``1 → 2 → 3 …``);
+        * ``updated_at`` is set to ``now()``.
+
+        The match's ``UNIQUE`` constraint means there is at most one
+        draft per match, so there is no "create a second row" branch
+        to worry about. The function returns the same row it just
+        mutated, which the action handler records in the audit log
+        and renders in the chat reply.
+        """
+        existing = self._draft_repo.get_by_match(match_id)
+        if existing is None:
+            raise CoverLetterDependencyMissingError(f"no cover letter draft for match {match_id}")
+
+        match = self._match_repo.get_by_id(match_id)
+        if match is None:
+            raise CoverLetterDependencyMissingError(f"match {match_id} not found")
+        vacancy = self._vacancy_repo.get_by_id(match.vacancy_id)
+        if vacancy is None:
+            raise CoverLetterDependencyMissingError(
+                f"vacancy {match.vacancy_id} not found for match {match_id}"
+            )
+        profile = self._profile_repo.get_by_id(match.search_profile_id)
+        if profile is None:
+            raise CoverLetterDependencyMissingError(
+                f"search profile {match.search_profile_id} not found for match {match_id}"
+            )
+        user = self._user_repo.get_by_id(profile.user_id)
+        if user is None:
+            raise CoverLetterDependencyMissingError(
+                f"user {profile.user_id} not found for match {match_id}"
+            )
+        resume = self._resume_repo.get_active_by_user(user.id)
+        if resume is None:
+            raise CoverLetterDependencyMissingError(f"no active resume for user {user.id}")
+        style_row = self._style_repo.get_by_user(user.id)
+        if style_row is None:
+            style_row = CoverLetterStyle(user_id=user.id)
+
+        prompt = build_cover_letter_prompt(
+            vacancy=vacancy,
+            profile=profile,
+            resume_text=resume.plain_text,
+            style=style_row,
+            template=self._template,
+        )
+        content = await self._llm.complete(prompt)
+        model_used = getattr(self._llm, "model", None)
+
+        existing.content = content
+        existing.prompt_version = self._prompt_version
+        existing.model_used = model_used
+        existing.version = existing.version + 1
+        existing.updated_at = datetime.now(UTC)
+        return existing
 
 
 __all__ = [

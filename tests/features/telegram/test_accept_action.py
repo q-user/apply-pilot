@@ -380,7 +380,7 @@ def _accept_update(
     }
 
 
-def test_dispatcher_routes_accept_command(
+async def test_dispatcher_routes_accept_command(
     match_service: MatchService,
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
@@ -403,7 +403,7 @@ def test_dispatcher_routes_accept_command(
         accept_handler=handler,
     )
 
-    response = bot.handle_update(_accept_update(f"/accept {match.id}", telegram_user_id=800))
+    response = await bot.handle_update(_accept_update(f"/accept {match.id}", telegram_user_id=800))
 
     assert response is not None
     text = response.text.lower()

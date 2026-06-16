@@ -23,6 +23,12 @@ from job_apply.features.telegram.actions.defer import (
     DeferCommand,
     parse_defer_command,
 )
+from job_apply.features.telegram.actions.regenerate import (
+    REGENERATE_HELP_TEXT,
+    RegenerateActionHandler,
+    RegenerateCommand,
+    parse_regenerate_command,
+)
 from job_apply.features.telegram.actions.reject import (
     REJECT_HELP_TEXT,
     RejectActionHandler,
@@ -44,6 +50,9 @@ __all__ = [
     "DEFER_HELP_TEXT",
     "DeferActionHandler",
     "DeferCommand",
+    "REGENERATE_HELP_TEXT",
+    "RegenerateActionHandler",
+    "RegenerateCommand",
     "REJECT_HELP_TEXT",
     "REVIEW_HELP_TEXT",
     "RejectActionHandler",
@@ -52,6 +61,7 @@ __all__ = [
     "ReviewCommand",
     "parse_accept_command",
     "parse_defer_command",
+    "parse_regenerate_command",
     "parse_reject_command",
     "parse_review_command",
     "render_review_card",

@@ -39,7 +39,7 @@ import uuid
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from job_apply.db import Base
@@ -92,6 +92,12 @@ class CoverLetterDraft(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     prompt_version: Mapped[str] = mapped_column(String(50), nullable=False)
     model_used: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # ``version`` tracks the regeneration count. The first draft is
+    # ``1``; every successful call to
+    # :meth:`CoverLetterService.regenerate_for_match` bumps it. The
+    # ``server_default`` mirrors the column default so SQL inserts
+    # without an explicit value land at version ``1``.
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     status: Mapped[str] = mapped_column(
         String(20),
         nullable=False,

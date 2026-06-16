@@ -115,7 +115,7 @@ class TelegramBotProcess(BaseProcess):
             )
 
         try:
-            response = self._bot.handle_update(update)
+            response = await self._bot.handle_update(update)
         except Exception:
             _LOGGER.exception(
                 "telegram.handle_update.failed",
