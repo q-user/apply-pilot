@@ -1,16 +1,16 @@
-"""Pydantic schemas for the dashboard slice (M6, issue #51).
+"""Pydantic schemas for the dashboard slice (M6, issue #51 + M8, #67).
 
 The :class:`DashboardSummary` dataclass in :mod:`models` is the
-in-process contract; these Pydantic models are the wire format for
-``GET /dashboard``. Every field uses ``from_attributes=True`` so the
-Pydantic model can be constructed directly from the dataclass via
-``DashboardSummaryRead.model_validate(summary)`` — the API layer never
-copies fields by hand.
+in-process contract; these Pydantic models are the wire format for the
+``/dashboard`` endpoints. Every field uses ``from_attributes=True`` so
+the Pydantic model can be constructed directly from the dataclass via
+``Model.model_validate(thing)`` — the API layer never copies fields by
+hand.
 """
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -88,8 +88,131 @@ def dashboard_summary_to_read(summary: Any) -> DashboardSummaryRead:
     )
 
 
+# ---------------------------------------------------------------------------
+# Analytics schemas (M8, issue #67)
+# ---------------------------------------------------------------------------
+
+
+class FunnelRowRead(BaseModel):
+    """Wire format for one :class:`FunnelRow` of the source funnel."""
+
+    model_config = ConfigDict(extra="forbid", frozen=False, from_attributes=True)
+
+    source: str
+    fetched: int
+    matched: int
+    accepted: int
+    applied: int
+    rejected: int
+
+
+class FunnelFiltersRead(BaseModel):
+    """Echoes the query parameters the funnel was computed for."""
+
+    model_config = ConfigDict(extra="forbid", frozen=False, from_attributes=True)
+
+    source: str | None = None
+    since: datetime | None = None
+    until: datetime | None = None
+
+
+class FunnelRead(BaseModel):
+    """Wire format for ``GET /dashboard/funnel``.
+
+    The response is always a ``FunnelRead`` even when no data is
+    available; ``rows`` is the empty list in that case and ``filters``
+    echoes the input. The shape stays stable so the front-end does
+    not have to branch on the empty / non-empty cases.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=False, from_attributes=True)
+
+    rows: list[FunnelRowRead] = Field(default_factory=list)
+    filters: FunnelFiltersRead = Field(default_factory=FunnelFiltersRead)
+
+
+class ConversionRowRead(BaseModel):
+    """Wire format for one :class:`ConversionRow` of the conversion table."""
+
+    model_config = ConfigDict(extra="forbid", frozen=False, from_attributes=True)
+
+    profile_id: str
+    matches: int
+    accepted: int
+    applied: int
+    accepted_rate: float
+    applied_rate: float
+
+
+class ConversionRead(BaseModel):
+    """Wire format for ``GET /dashboard/conversion``.
+
+    ``rows`` is empty when the user owns no profiles. The ``rows``
+    field is always a list (never ``null``) so the front-end can
+    iterate without a presence check.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=False, from_attributes=True)
+
+    rows: list[ConversionRowRead] = Field(default_factory=list)
+
+
+class TimeToApplyRead(BaseModel):
+    """Wire format for ``GET /dashboard/time-to-apply``.
+
+    The endpoint serialises ``None`` (no data) as JSON ``null`` so
+    the front-end can render a "no data" placeholder without an extra
+    round-trip.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=False, from_attributes=True)
+
+    average_seconds: float
+    median_seconds: float
+    sample_size: int
+
+
+def funnel_to_read(
+    rows: list[Any],
+    *,
+    source: str | None,
+    since: datetime | None,
+    until: datetime | None,
+) -> FunnelRead:
+    """Bridge the in-process :class:`FunnelRow` list to the wire model."""
+    return FunnelRead(
+        rows=[FunnelRowRead.model_validate(row) for row in rows],
+        filters=FunnelFiltersRead(source=source, since=since, until=until),
+    )
+
+
+def conversion_to_read(rows: list[Any]) -> ConversionRead:
+    """Bridge the in-process :class:`ConversionRow` list to the wire model."""
+    return ConversionRead(rows=[ConversionRowRead.model_validate(row) for row in rows])
+
+
+def time_to_apply_to_read(stats: Any | None) -> TimeToApplyRead | None:
+    """Bridge the in-process :class:`TimeToApplyStats` dataclass to the wire model.
+
+    ``None`` flows through unchanged so the API can serialise the
+    "no data" case as JSON ``null``.
+    """
+    if stats is None:
+        return None
+    return TimeToApplyRead.model_validate(stats)
+
+
 __all__ = [
+    "ConversionRead",
+    "ConversionRowRead",
     "DashboardSummaryRead",
+    "FunnelFiltersRead",
+    "FunnelRead",
+    "FunnelRowRead",
+    "TimeToApplyRead",
     "UserStatsRead",
+    "conversion_to_read",
     "dashboard_summary_to_read",
+    "funnel_to_read",
+    "time_to_apply_to_read",
 ]

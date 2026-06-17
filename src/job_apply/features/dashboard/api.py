@@ -1,24 +1,46 @@
-"""FastAPI router for the dashboard slice (M6, issue #51).
+"""FastAPI router for the dashboard slice (M6, issue #51 + M8, #67).
 
-Single endpoint — ``GET /dashboard`` — returns a :class:`DashboardSummary`
-for the authenticated user. All counts are scoped to the caller; a user
-without any rows gets an all-zero response (with the embedded digest
-``null`` when the service is built without a digest
-:class:`StatsService`).
+Four endpoints share the ``/dashboard`` prefix:
+
+* ``GET /dashboard``             — per-user :class:`DashboardSummary`
+                                  (flat totals).
+* ``GET /dashboard/funnel``      — per-source funnel counts
+                                  (issue #67).
+* ``GET /dashboard/conversion``  — per-profile conversion rates
+                                  (issue #67).
+* ``GET /dashboard/time-to-apply`` — average + median wall-clock
+                                  seconds from :class:`VacancyMatch`
+                                  to :class:`ApplyJob` for terminal
+                                  jobs (issue #67).
+
+All counts are scoped to the caller; a user without any rows gets
+an all-zero / empty / ``null`` response. Every endpoint requires a
+bearer token.
 """
 
 from __future__ import annotations
 
 import logging
+import uuid
+from datetime import datetime
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from job_apply.db import get_db
 from job_apply.features.apply_worker.repository import SqlApplyJobRepository
 from job_apply.features.cover_letter.repository import SqlCoverLetterDraftRepository
-from job_apply.features.dashboard.schemas import DashboardSummaryRead
+from job_apply.features.dashboard.schemas import (
+    ConversionRead,
+    DashboardSummaryRead,
+    FunnelRead,
+    TimeToApplyRead,
+    conversion_to_read,
+    dashboard_summary_to_read,
+    funnel_to_read,
+    time_to_apply_to_read,
+)
 from job_apply.features.dashboard.service import DashboardService
 from job_apply.features.matches.repository import SqlVacancyMatchRepository
 from job_apply.features.search_profiles.repository import SqlSearchProfileRepository
@@ -112,12 +134,111 @@ def get_dashboard(
     A user without any rows gets an all-zero response with an
     embedded (all-zero) digest.
     """
-    import uuid
-
-    from job_apply.features.dashboard.schemas import dashboard_summary_to_read
-
     summary = service.get_summary(uuid.UUID(user_id_str))
     return dashboard_summary_to_read(summary)
+
+
+# ---------------------------------------------------------------------------
+# M8 analytics endpoints (issue #67)
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/funnel",
+    response_model=FunnelRead,
+    responses={
+        401: {"description": "Missing or invalid bearer token"},
+        422: {"description": "Invalid query parameters"},
+    },
+)
+def get_dashboard_funnel(
+    user_id_str: str = Depends(_resolve_user_id),  # noqa: B008
+    service: DashboardService = Depends(get_dashboard_service),  # noqa: B008
+    source: str | None = Query(  # noqa: B008
+        default=None,
+        description="Restrict the funnel to a single source (e.g. 'hh', 'habr').",
+    ),
+    since: datetime | None = Query(  # noqa: B008
+        default=None,
+        description="Lower bound (inclusive) for vacancies.created_at and matches.created_at.",
+    ),
+    until: datetime | None = Query(  # noqa: B008
+        default=None,
+        description="Upper bound (exclusive) for vacancies.created_at and matches.created_at.",
+    ),
+) -> FunnelRead:
+    """Return the per-source funnel for the authenticated user.
+
+    The response carries one :class:`FunnelRow` per source, plus a
+    ``filters`` echo of the input parameters so the front-end can
+    confirm what the user queried.
+    """
+    rows = service.get_funnel(
+        uuid.UUID(user_id_str),
+        source=source,
+        since=since,
+        until=until,
+    )
+    return funnel_to_read(rows, source=source, since=since, until=until)
+
+
+@router.get(
+    "/conversion",
+    response_model=ConversionRead,
+    responses={
+        401: {"description": "Missing or invalid bearer token"},
+        422: {"description": "Invalid query parameters"},
+    },
+)
+def get_dashboard_conversion(
+    user_id_str: str = Depends(_resolve_user_id),  # noqa: B008
+    service: DashboardService = Depends(get_dashboard_service),  # noqa: B008
+    profile_id: uuid.UUID | None = Query(  # noqa: B008
+        default=None,
+        description="Restrict the conversion table to a single search profile.",
+    ),
+) -> ConversionRead:
+    """Return the per-profile conversion table for the authenticated user.
+
+    Each :class:`ConversionRow` carries the matches / accepted /
+    applied counts plus the two rates. ``rows`` is empty when the
+    user owns no profiles (or when ``profile_id`` does not match).
+    """
+    rows = service.get_conversion(uuid.UUID(user_id_str), profile_id=profile_id)
+    return conversion_to_read(rows)
+
+
+@router.get(
+    "/time-to-apply",
+    response_model=TimeToApplyRead | None,
+    responses={
+        401: {"description": "Missing or invalid bearer token"},
+        422: {"description": "Invalid query parameters"},
+    },
+)
+def get_dashboard_time_to_apply(
+    user_id_str: str = Depends(_resolve_user_id),  # noqa: B008
+    service: DashboardService = Depends(get_dashboard_service),  # noqa: B008
+    source: str | None = Query(  # noqa: B008
+        default=None,
+        description="Restrict the metric to matches whose vacancy.source matches.",
+    ),
+    profile_id: uuid.UUID | None = Query(  # noqa: B008
+        default=None,
+        description="Restrict the metric to matches owned by this search profile.",
+    ),
+) -> TimeToApplyRead | None:
+    """Return the average + median time-to-apply for the authenticated user.
+
+    The metric is the wall-clock delta between
+    :attr:`VacancyMatch.created_at` and
+    :attr:`ApplyJob.finished_at` for every terminal-state apply job
+    the user owns. The response is JSON ``null`` when no data is
+    available (so the front-end can render a placeholder without
+    a presence check).
+    """
+    stats = service.get_time_to_apply(uuid.UUID(user_id_str), source=source, profile_id=profile_id)
+    return time_to_apply_to_read(stats)
 
 
 __all__ = ["get_dashboard_service", "router"]
