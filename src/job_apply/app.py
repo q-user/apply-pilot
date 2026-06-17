@@ -16,10 +16,140 @@ from typing import Any
 
 import uvicorn
 from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
 
 from job_apply.config import FastAPISettings, get_fastapi_settings
 
 _LOGGER = logging.getLogger("job_apply.app")
+
+# Minimal static landing page for the M6 frontend shell (issue #55).
+# Kept as a module-level constant so the FastAPI handler stays cheap to
+# call and the page can be rendered without any template engine.
+_LANDING_HTML = """<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ApplyPilot</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f7f7f8;
+        --fg: #1f2328;
+        --muted: #57606a;
+        --accent: #0969da;
+        --card: #ffffff;
+        --border: #d0d7de;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0d1117;
+          --fg: #e6edf3;
+          --muted: #8b949e;
+          --accent: #58a6ff;
+          --card: #161b22;
+          --border: #30363d;
+        }
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Oxygen, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+        background: var(--bg);
+        color: var(--fg);
+        margin: 0;
+        padding: 0;
+        line-height: 1.5;
+      }
+      main {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 3rem 1.5rem;
+      }
+      h1 {
+        font-size: 2.5rem;
+        margin: 0 0 0.5rem;
+        letter-spacing: -0.02em;
+      }
+      p.lede {
+        color: var(--muted);
+        font-size: 1.1rem;
+        margin: 0 0 2rem;
+      }
+      ul.links {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: grid;
+        gap: 0.75rem;
+      }
+      ul.links li a {
+        display: block;
+        padding: 1rem 1.25rem;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--accent);
+        text-decoration: none;
+        font-weight: 500;
+        transition: border-color 0.15s ease;
+      }
+      ul.links li a:hover {
+        border-color: var(--accent);
+      }
+      ul.links li a small {
+        display: block;
+        color: var(--muted);
+        font-weight: 400;
+        margin-top: 0.25rem;
+      }
+      footer {
+        margin-top: 3rem;
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>ApplyPilot</h1>
+      <p class="lede">
+        A Telegram-first assistant for finding, scoring, reviewing, and applying
+        to jobs. Browse the API documentation or jump into the operational
+        surfaces below.
+      </p>
+      <ul class="links">
+        <li>
+          <a href="/docs">
+            API docs (Swagger UI)
+            <small>Interactive OpenAPI explorer for every endpoint.</small>
+          </a>
+        </li>
+        <li>
+          <a href="/redoc">
+            API reference (ReDoc)
+            <small>Clean, readable OpenAPI reference.</small>
+          </a>
+        </li>
+        <li>
+          <a href="/admin/health">
+            Admin health
+            <small>Service health, worker status, and dependency probes.</small>
+          </a>
+        </li>
+        <li>
+          <a href="/dashboard">
+            Dashboard
+            <small>Per-user summary of matches, applications, and digest.</small>
+          </a>
+        </li>
+      </ul>
+      <footer>
+        ApplyPilot &middot; minimal frontend shell (M6).
+      </footer>
+    </main>
+  </body>
+</html>
+"""
 
 
 class _JsonFormatter(logging.Formatter):
@@ -113,6 +243,11 @@ def create_app(settings: FastAPISettings | None = None) -> FastAPI:
     @app.get("/healthz", include_in_schema=False)
     async def healthz() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/", include_in_schema=False, response_class=HTMLResponse)
+    async def landing() -> HTMLResponse:
+        """Serve the minimal static HTML landing page (M6, issue #55)."""
+        return HTMLResponse(content=_LANDING_HTML)
 
     return app
 
