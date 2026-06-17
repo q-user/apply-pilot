@@ -225,6 +225,7 @@ def create_app(settings: FastAPISettings | None = None) -> FastAPI:
     from job_apply.features.dashboard.api import router as dashboard_router
     from job_apply.features.hh.api import router as hh_router
     from job_apply.features.matches.api import router as matches_router
+    from job_apply.features.scoring_review.api import router as scoring_review_router
     from job_apply.features.screening.api import router as screening_router
     from job_apply.features.search_profiles.api import router as search_profiles_router
     from job_apply.features.source_metrics.api import (
@@ -240,6 +241,7 @@ def create_app(settings: FastAPISettings | None = None) -> FastAPI:
     app.include_router(dashboard_router)
     app.include_router(hh_router)
     app.include_router(matches_router)
+    app.include_router(scoring_review_router)
     app.include_router(screening_router)
     app.include_router(search_profiles_router)
     app.include_router(sources_router)

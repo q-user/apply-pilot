@@ -36,6 +36,7 @@ class AuditEventType(StrEnum):
     VACANCY_MATCH_REJECTED = "vacancy_match_rejected"
     MATCH_ACCEPTED = "match_accepted"
     MATCH_DEFERRED = "match_deferred"
+    MATCH_REVIEWED = "match_reviewed"
     COVER_LETTER_REGENERATED = "cover_letter_regenerated"
     SOURCE_DEGRADED = "source_degraded"
     SOURCE_RECOVERED = "source_recovered"
