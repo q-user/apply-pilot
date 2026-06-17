@@ -21,6 +21,7 @@ from dataclasses import dataclass
 
 from job_apply.features.audit.models import AuditEventType
 from job_apply.features.audit.service import AuditService
+from job_apply.features.learning.service import LearningSignalsService
 from job_apply.features.matches.models import MatchStatus
 from job_apply.features.matches.service import (
     MatchNotFoundError,
@@ -140,10 +141,16 @@ class RejectActionHandler:
         match_service: MatchService,
         telegram_account_repo: TelegramAccountRepository,
         audit_service: AuditService,
+        learning_signals: LearningSignalsService | None = None,
     ) -> None:
         self._match_service = match_service
         self._telegram_account_repo = telegram_account_repo
         self._audit_service = audit_service
+        # Optional so the slice can be exercised in isolation (the
+        # public tests build the handler without a learning service).
+        # When present, every successful reject records a structured
+        # signal so future prompt tuning has data to learn from.
+        self._learning_signals = learning_signals
 
     def handle(
         self,
@@ -217,6 +224,24 @@ class RejectActionHandler:
                 "reason": command.reason,
             },
         )
+
+        # Record a structured learning signal alongside the audit
+        # event. ``score`` / ``prompt_version`` are ``None`` on a
+        # freshly-ingested match; the service persists the
+        # ``None``s as-is so future readers can tell the difference
+        # between "no score yet" and "score was 0". ``score`` is
+        # cast to float so the column type matches the schema
+        # (``Float``, not ``Integer``).
+        if self._learning_signals is not None:
+            self._learning_signals.record_rejection(
+                user_id=user_id,
+                match_id=command.match_id,
+                vacancy_id=existing.vacancy_id,
+                search_profile_id=existing.search_profile_id,
+                reason=command.reason,
+                score=float(existing.score) if existing.score is not None else None,
+                prompt_version=existing.prompt_version,
+            )
 
         suffix = f" Reason: {command.reason}" if command.reason else ""
         _LOGGER.info(
