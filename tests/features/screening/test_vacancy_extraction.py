@@ -48,7 +48,6 @@ from job_apply.features.sources.models import Vacancy
 from job_apply.features.sources.repository import InMemoryVacancyRepository
 from job_apply.features.sources.service import SourceService
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

@@ -199,9 +199,7 @@ class SqlCoverLetterStyleRepository:
         ``Mapped[str]`` type matches and no suppression is needed.
         """
         style.focus_areas = _encode_list(_decode_list(style.focus_areas))
-        style.avoid_phrases = (
-            _encode_list(_decode_list(style.avoid_phrases))
-        )
+        style.avoid_phrases = _encode_list(_decode_list(style.avoid_phrases))
 
     def _decode_list_columns(self, style: CoverLetterStyle) -> CoverLetterStyle:
         """Decode the JSON list columns back to Python lists.

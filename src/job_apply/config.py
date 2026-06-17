@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from job_apply.features.apply_worker.retry import RetryPolicy
 
 
 @dataclass(frozen=True)
@@ -372,7 +376,7 @@ class ApplyWorkerSettings:
                 f"got {self.daily_limit}"
             )
 
-    def to_retry_policy(self) -> "RetryPolicy":
+    def to_retry_policy(self) -> RetryPolicy:
         """Return a :class:`~job_apply.features.apply_worker.retry.RetryPolicy`.
 
         The :class:`RetryPolicy` is imported lazily inside the method

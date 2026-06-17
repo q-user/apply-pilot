@@ -84,6 +84,7 @@ class _FakeStyleRepo:
 
     def add(self, style: object) -> object:
         from job_apply.features.cover_letter_style.models import CoverLetterStyle
+
         assert isinstance(style, CoverLetterStyle)
         self.styles[style.user_id] = style
         return style
@@ -162,6 +163,7 @@ def _make_world(
         plain_text="I am a senior engineer.",
     )
     from job_apply.features.cover_letter_style.models import CoverLetterStyle
+
     style = CoverLetterStyle(
         user_id=user.id,
         tone="friendly",
