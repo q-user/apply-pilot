@@ -214,7 +214,7 @@ def create_app(settings: FastAPISettings | None = None) -> FastAPI:
     )
 
     # Register feature routers.
-    from job_apply.features.admin.api import router as admin_router
+    from job_apply.features.admin import router as admin_router
     from job_apply.features.apply_worker.api import (
         apply_history_router,
     )
