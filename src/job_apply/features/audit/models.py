@@ -37,6 +37,8 @@ class AuditEventType(StrEnum):
     MATCH_ACCEPTED = "match_accepted"
     MATCH_DEFERRED = "match_deferred"
     COVER_LETTER_REGENERATED = "cover_letter_regenerated"
+    SOURCE_DEGRADED = "source_degraded"
+    SOURCE_RECOVERED = "source_recovered"
 
 
 class AuditLog(Base):
