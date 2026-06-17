@@ -464,3 +464,28 @@ def get_apply_worker_settings() -> ApplyWorkerSettings:
         hourly_limit=_parse_positive_int(hourly_raw, env_var="APP_APPLY_HOURLY_LIMIT"),
         daily_limit=_parse_positive_int(daily_raw, env_var="APP_APPLY_DAILY_LIMIT"),
     )
+
+
+# --- Careers-page settings (M7, issue #59) ---------------------------------
+
+
+def get_careers_page_config():
+    """Build the :class:`CareersPageConfig` from the environment.
+
+    The list of configured sites is read from a single JSON-encoded
+    env var (``APP_CAREERS_PAGES``). An empty / unset value is
+    treated as "no sites configured" — the careers adapter registry
+    is then empty and the careers feature is effectively disabled.
+
+    Environment variables:
+
+    * ``APP_CAREERS_PAGES`` (optional) — JSON list of site entries
+      (see :class:`~job_apply.features.careers.config.CareersPageSite`).
+
+    The import is local to avoid a cycle (``job_apply.config`` is
+    imported very early in the boot sequence; the careers slice
+    transitively imports the screening ORM models).
+    """
+    from job_apply.features.careers.config import CareersPageConfig
+
+    return CareersPageConfig.from_json(os.getenv("APP_CAREERS_PAGES", ""))
