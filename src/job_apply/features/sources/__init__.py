@@ -16,8 +16,13 @@ Public surface
 * :class:`SourceService` — the ingest use case:
   :meth:`SourceService.ingest_vacancy` (raw → upsert),
   :meth:`SourceService.ingest_vacancy_deduped` (raw → dedup → upsert),
-  :meth:`SourceService.ingest_batch` (batched dedup → upsert).
-* :data:`router` — FastAPI router placeholder (full endpoints land later).
+  :meth:`SourceService.ingest_batch` (batched dedup → upsert),
+  :meth:`SourceService.list_vacancies` (filtered + paginated read).
+* :class:`VacancyListResult` — the dataclass returned by
+  :meth:`SourceService.list_vacancies`.
+* :class:`VacancyRead` / :class:`VacancyListResponse` — public Pydantic
+  DTOs for the ``GET /vacancies`` endpoint.
+* :data:`router` — FastAPI router (currently exposes ``GET /vacancies``).
 """
 
 from __future__ import annotations
@@ -30,11 +35,12 @@ from job_apply.features.sources.repository import (
     SqlVacancyRepository,
     VacancyRepository,
 )
+from job_apply.features.sources.schemas import VacancyListResponse, VacancyRead
 from job_apply.features.sources.search_service import IngestResult as IngestResult
 from job_apply.features.sources.search_service import (
     VacancySearchService as VacancySearchService,
 )
-from job_apply.features.sources.service import SourceService
+from job_apply.features.sources.service import SourceService, VacancyListResult
 
 __all__ = [
     "InMemoryVacancyRepository",
@@ -43,7 +49,10 @@ __all__ = [
     "SqlVacancyRepository",
     "Vacancy",
     "VacancyDeduplicator",
+    "VacancyListResponse",
+    "VacancyListResult",
     "VacancyNormalizer",
+    "VacancyRead",
     "VacancyRepository",
     "VacancySearchService",
 ]
