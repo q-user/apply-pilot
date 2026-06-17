@@ -7,6 +7,7 @@ without coupling to the internal module structure.
 
 from __future__ import annotations
 
+from job_apply.features.hh.adapter import HhSourceAdapter as HhSourceAdapter
 from job_apply.features.hh.apply import HhApplyAdapter as HhApplyAdapter
 from job_apply.features.hh.apply import HhApplyError as HhApplyError
 from job_apply.features.hh.apply import HhApplyRateLimitError as HhApplyRateLimitError
@@ -126,6 +127,7 @@ __all__ = [
     "HhResumesSyncResponse",
     "HhResumesSyncService",
     "HhResumesTokenProvider",
+    "HhSourceAdapter",
     "HhTokenResponse",
     "InMemoryHhOAuthClient",
     "InMemoryHhResumeLinkRepository",

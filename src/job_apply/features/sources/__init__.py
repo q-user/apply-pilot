@@ -22,11 +22,24 @@ Public surface
   :meth:`SourceService.list_vacancies`.
 * :class:`VacancyRead` / :class:`VacancyListResponse` — public Pydantic
   DTOs for the ``GET /vacancies`` endpoint.
+* :class:`SourceAdapter` — the cross-source Protocol (M7, issue #70).
+* :class:`SourceQuery` — source-agnostic search filter.
+* :class:`AdapterRegistry` — in-memory index of
+  :class:`SourceAdapter` instances keyed by :attr:`~SourceAdapter.name`.
 * :data:`router` — FastAPI router (currently exposes ``GET /vacancies``).
 """
 
 from __future__ import annotations
 
+from job_apply.features.sources.adapter import (
+    AdapterRegistry as AdapterRegistry,
+)
+from job_apply.features.sources.adapter import (
+    SourceAdapter as SourceAdapter,
+)
+from job_apply.features.sources.adapter import (
+    SourceQuery as SourceQuery,
+)
 from job_apply.features.sources.dedup import VacancyDeduplicator
 from job_apply.features.sources.models import Vacancy
 from job_apply.features.sources.normalizer import VacancyNormalizer
@@ -43,8 +56,11 @@ from job_apply.features.sources.search_service import (
 from job_apply.features.sources.service import SourceService, VacancyListResult
 
 __all__ = [
+    "AdapterRegistry",
     "InMemoryVacancyRepository",
     "IngestResult",
+    "SourceAdapter",
+    "SourceQuery",
     "SourceService",
     "SqlVacancyRepository",
     "Vacancy",
