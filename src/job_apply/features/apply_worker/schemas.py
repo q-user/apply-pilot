@@ -11,6 +11,7 @@ rules, ownership checks, and the status-transition logic.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
@@ -111,6 +112,31 @@ def apply_status_history_to_dto(row: ApplyStatusHistory) -> ApplyStatusHistoryRe
     return ApplyStatusHistoryRead.model_validate(payload)
 
 
+class ApplyStatusHistoryList(BaseModel):
+    """Paginated response for the ``GET /apply-history`` endpoint (M6, #54).
+
+    The endpoint returns a flat list of :class:`ApplyStatusHistoryRead`
+    rows scoped to the authenticated user, plus the total number of
+    matching rows so the dashboard can render a paginator without a
+    second round-trip.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=False)
+
+    items: list[ApplyStatusHistoryRead]
+    total: int
+
+
+def apply_status_history_list_to_dto(
+    rows: Sequence[ApplyStatusHistory], total: int
+) -> ApplyStatusHistoryList:
+    """Map a ``(rows, total)`` pair from the service to the list DTO."""
+    return ApplyStatusHistoryList(
+        items=[apply_status_history_to_dto(r) for r in rows],
+        total=total,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Rate-limit snapshot (M5, issue #46)
 # ---------------------------------------------------------------------------
@@ -167,9 +193,11 @@ def apply_rate_limit_to_dto(result: RateLimitResult) -> ApplyRateLimitRead:
 __all__ = [
     "ApplyJobRead",
     "ApplyRateLimitRead",
+    "ApplyStatusHistoryList",
     "ApplyStatusHistoryRead",
     "WindowStatusRead",
     "apply_job_to_dto",
     "apply_rate_limit_to_dto",
+    "apply_status_history_list_to_dto",
     "apply_status_history_to_dto",
 ]

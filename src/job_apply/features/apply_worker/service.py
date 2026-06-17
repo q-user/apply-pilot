@@ -369,6 +369,35 @@ class ApplyJobService:
         self.get(job_id, user_id=user_id)
         return self._history_repo.list_by_job(job_id)
 
+    def list_user_history(
+        self,
+        user_id: uuid.UUID,
+        *,
+        job_id: uuid.UUID | None = None,
+        to_status: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[Sequence[ApplyStatusHistory], int]:
+        """Return the caller's combined apply history (M6, #54).
+
+        The combined view joins every :class:`ApplyStatusHistory` row
+        for the user's apply jobs into a single, dashboard-friendly
+        list. ``job_id`` and ``to_status`` are optional filters;
+        ``limit`` / ``offset`` paginate the result.
+
+        The user-scoping is delegated to the history repository so
+        this method stays free of cross-repo coordination: the SQL
+        implementation JOINs with ``apply_jobs`` and the in-memory
+        implementation consults its ``get_job_user_id`` callback.
+        """
+        return self._history_repo.list_by_user(
+            user_id,
+            job_id=job_id,
+            to_status=to_status,
+            limit=limit,
+            offset=offset,
+        )
+
     def rate_limit_status(self, user_id: uuid.UUID) -> RateLimitResult:
         """Return the current :class:`RateLimitResult` for ``user_id``.
 
