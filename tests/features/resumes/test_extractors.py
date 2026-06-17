@@ -19,13 +19,13 @@ from docx import Document
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 
-from job_apply.features.resumes.extractors import (
+from apply_pilot.features.resumes.extractors import (
     DocxTextExtractor,
     ExtractionNotSupportedError,
     PdfTextExtractor,
 )
-from job_apply.features.resumes.schemas import UploadedFile
-from job_apply.features.resumes.service import ResumesService
+from apply_pilot.features.resumes.schemas import UploadedFile
+from apply_pilot.features.resumes.service import ResumesService
 
 # ---------------------------------------------------------------------------
 # Helpers: build PDF / DOCX in-memory

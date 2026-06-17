@@ -12,16 +12,16 @@ import uuid
 
 import pytest
 
-from job_apply.features.matches.models import MatchStatus
-from job_apply.features.matches.repository import InMemoryVacancyMatchRepository
-from job_apply.features.matches.service import (
+from apply_pilot.features.matches.models import MatchStatus
+from apply_pilot.features.matches.repository import InMemoryVacancyMatchRepository
+from apply_pilot.features.matches.service import (
     MatchNotFoundError,
     MatchOwnershipError,
     MatchService,
 )
-from job_apply.features.search_profiles.models import SearchProfile
-from job_apply.features.search_profiles.repository import InMemorySearchProfileRepository
-from job_apply.features.sources.models import Vacancy
+from apply_pilot.features.search_profiles.models import SearchProfile
+from apply_pilot.features.search_profiles.repository import InMemorySearchProfileRepository
+from apply_pilot.features.sources.models import Vacancy
 
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
@@ -272,7 +272,7 @@ def test_list_matches_filters_by_status(
 
 def test_list_matches_invalid_status_raises(service: MatchService, user_id: uuid.UUID) -> None:
     """An unknown status filter must raise ValidationError."""
-    from job_apply.shared.errors import ValidationError
+    from apply_pilot.shared.errors import ValidationError
 
     with pytest.raises(ValidationError, match="unknown match status"):
         service.list_matches(user_id, status="bogus")
@@ -301,7 +301,7 @@ def test_update_status_invalid_status_raises(
     service: MatchService, profile_repo: InMemorySearchProfileRepository, user_id: uuid.UUID
 ) -> None:
     """An unknown status must raise ValidationError before the repo is touched."""
-    from job_apply.shared.errors import ValidationError
+    from apply_pilot.shared.errors import ValidationError
 
     profile = _profile(user_id)
     profile_repo.create(profile)

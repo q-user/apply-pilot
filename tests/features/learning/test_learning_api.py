@@ -17,15 +17,15 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from job_apply.features.learning import models as _learning_models  # noqa: F401
-from job_apply.features.learning.api import (
+from apply_pilot.features.learning import models as _learning_models  # noqa: F401
+from apply_pilot.features.learning.api import (
     get_learning_signals_service,
 )
-from job_apply.features.learning.api import (
+from apply_pilot.features.learning.api import (
     router as learning_router,
 )
-from job_apply.features.learning.repository import InMemoryLearningSignalRepository
-from job_apply.features.learning.service import (
+from apply_pilot.features.learning.repository import InMemoryLearningSignalRepository
+from apply_pilot.features.learning.service import (
     LearningSignal,
     LearningSignalsService,
 )

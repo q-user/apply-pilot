@@ -32,8 +32,8 @@ from sqlalchemy import StaticPool, create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
-from job_apply.db import Base
-from job_apply.features.apply_worker.models import (
+from apply_pilot.db import Base
+from apply_pilot.features.apply_worker.models import (
     ApplyJob,
     ApplyJobStatus,
     compute_idempotency_key,
@@ -169,10 +169,10 @@ def engine() -> Engine:
     # Importing the parent model modules registers the foreign-key
     # targets on ``Base.metadata`` so the FK constraints on
     # ``apply_jobs`` resolve cleanly during ``create_all``.
-    from job_apply.features.apply_worker import models  # noqa: F401
-    from job_apply.features.matches import models as _match_models  # noqa: F401
-    from job_apply.features.sources import models as _vacancy_models  # noqa: F401
-    from job_apply.features.users import models as _user_models  # noqa: F401
+    from apply_pilot.features.apply_worker import models  # noqa: F401
+    from apply_pilot.features.matches import models as _match_models  # noqa: F401
+    from apply_pilot.features.sources import models as _vacancy_models  # noqa: F401
+    from apply_pilot.features.users import models as _user_models  # noqa: F401
 
     Base.metadata.create_all(bind=eng)
     try:

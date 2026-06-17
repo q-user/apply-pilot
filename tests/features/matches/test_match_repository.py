@@ -16,20 +16,20 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from job_apply.db import Base
-from job_apply.features.matches import models as _matches_models  # noqa: F401
-from job_apply.features.matches.models import MatchStatus, VacancyMatch
-from job_apply.features.matches.repository import (
+from apply_pilot.db import Base
+from apply_pilot.features.matches import models as _matches_models  # noqa: F401
+from apply_pilot.features.matches.models import MatchStatus, VacancyMatch
+from apply_pilot.features.matches.repository import (
     InMemoryVacancyMatchRepository,
     SqlVacancyMatchRepository,
 )
-from job_apply.features.search_profiles import models as _sp_models  # noqa: F401
-from job_apply.features.search_profiles.models import SearchProfile
-from job_apply.features.search_profiles.repository import InMemorySearchProfileRepository
-from job_apply.features.sources import models as _sources_models  # noqa: F401
-from job_apply.features.sources.models import Vacancy
-from job_apply.features.users import models as _users_models  # noqa: F401
-from job_apply.shared.errors import NotFoundError
+from apply_pilot.features.search_profiles import models as _sp_models  # noqa: F401
+from apply_pilot.features.search_profiles.models import SearchProfile
+from apply_pilot.features.search_profiles.repository import InMemorySearchProfileRepository
+from apply_pilot.features.sources import models as _sources_models  # noqa: F401
+from apply_pilot.features.sources.models import Vacancy
+from apply_pilot.features.users import models as _users_models  # noqa: F401
+from apply_pilot.shared.errors import NotFoundError
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -272,7 +272,7 @@ def _seed_vacancy_and_profile(
         session.flush()
         owner_id = user_id or uuid.uuid4()
         # The users FK requires a users row; insert a minimal one.
-        from job_apply.features.users.models import User
+        from apply_pilot.features.users.models import User
 
         user = User(id=owner_id, email=f"u{owner_id.hex[:8]}@example.com")
         session.add(user)
@@ -300,7 +300,7 @@ class TestSqlRepository:
 
         # We need a real users row for the FK chain in the SQL test.
         session_factory = sql_repo._session_factory  # noqa: SLF001
-        from job_apply.features.users.models import User
+        from apply_pilot.features.users.models import User
 
         session = session_factory()
         try:
@@ -327,7 +327,7 @@ class TestSqlRepository:
         from sqlalchemy.exc import IntegrityError
 
         session_factory = sql_repo._session_factory  # noqa: SLF001
-        from job_apply.features.users.models import User
+        from apply_pilot.features.users.models import User
 
         profile_id = uuid.uuid4()
         vacancy_id = uuid.uuid4()
@@ -365,7 +365,7 @@ class TestSqlRepository:
     def test_list_by_profile_returns_only_matching(
         self, sql_repo: SqlVacancyMatchRepository
     ) -> None:
-        from job_apply.features.users.models import User
+        from apply_pilot.features.users.models import User
 
         p1, p2 = uuid.uuid4(), uuid.uuid4()
         session_factory = sql_repo._session_factory  # noqa: SLF001
@@ -397,7 +397,7 @@ class TestSqlRepository:
     def test_list_by_user_joins_through_search_profiles(
         self, sql_repo: SqlVacancyMatchRepository
     ) -> None:
-        from job_apply.features.users.models import User
+        from apply_pilot.features.users.models import User
 
         owner_a = uuid.uuid4()
         owner_b = uuid.uuid4()
@@ -437,7 +437,7 @@ class TestSqlRepository:
         assert len(list(sql_repo.list_by_user(owner_b))) == 1
 
     def test_find_existing_returns_match(self, sql_repo: SqlVacancyMatchRepository) -> None:
-        from job_apply.features.users.models import User
+        from apply_pilot.features.users.models import User
 
         session_factory = sql_repo._session_factory  # noqa: SLF001
         session = session_factory()
@@ -465,7 +465,7 @@ class TestSqlRepository:
         assert sql_repo.find_existing(uuid.uuid4(), uuid.uuid4()) is None
 
     def test_update_status_persists(self, sql_repo: SqlVacancyMatchRepository) -> None:
-        from job_apply.features.users.models import User
+        from apply_pilot.features.users.models import User
 
         session_factory = sql_repo._session_factory  # noqa: SLF001
         session = session_factory()
@@ -495,7 +495,7 @@ class TestSqlRepository:
     def test_bulk_create_ignore_conflicts_inserts_and_skips(
         self, sql_repo: SqlVacancyMatchRepository
     ) -> None:
-        from job_apply.features.users.models import User
+        from apply_pilot.features.users.models import User
 
         session_factory = sql_repo._session_factory  # noqa: SLF001
         session = session_factory()

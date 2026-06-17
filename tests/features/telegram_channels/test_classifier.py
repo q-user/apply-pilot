@@ -8,14 +8,14 @@ the scanner can skip irrelevant traffic cheaply.
 The classifier is intentionally simple — a list of case-insensitive
 "vacancy" markers, and a list of "this is a discussion / non-vacancy
 post" markers that win when both fire. The list lives in
-:data:`job_apply.features.telegram_channels.classifier.DEFAULT_VACANCY_MARKERS`
+:data:`apply_pilot.features.telegram_channels.classifier.DEFAULT_VACANCY_MARKERS`
 and is overridable on construction so a channel-specific subset can
 be plugged in by callers that know the channel's vocabulary.
 """
 
 from __future__ import annotations
 
-from job_apply.features.telegram_channels.classifier import TelegramChannelClassifier
+from apply_pilot.features.telegram_channels.classifier import TelegramChannelClassifier
 
 
 def _msg(text: str) -> str:

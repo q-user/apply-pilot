@@ -17,23 +17,23 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from job_apply.db import Base
-from job_apply.features.quick_filter.models import (
+from apply_pilot.db import Base
+from apply_pilot.features.quick_filter.models import (
     DECISION_ACCEPT,
     DECISION_REJECT,
 )
-from job_apply.features.quick_filter.persistence import (
+from apply_pilot.features.quick_filter.persistence import (
     FilterDecisionRepository,
     FilterDecisionRow,
     InMemoryFilterDecisionRepository,
     SqlFilterDecisionRepository,
 )
-from job_apply.features.search_profiles import models as _sp_models  # noqa: F401
-from job_apply.features.search_profiles.models import SearchProfile
-from job_apply.features.sources import models as _sources_models  # noqa: F401
-from job_apply.features.sources.models import Vacancy
-from job_apply.features.users import models as _users_models  # noqa: F401
-from job_apply.features.users.models import User
+from apply_pilot.features.search_profiles import models as _sp_models  # noqa: F401
+from apply_pilot.features.search_profiles.models import SearchProfile
+from apply_pilot.features.sources import models as _sources_models  # noqa: F401
+from apply_pilot.features.sources.models import Vacancy
+from apply_pilot.features.users import models as _users_models  # noqa: F401
+from apply_pilot.features.users.models import User
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -13,17 +13,17 @@ import uuid
 
 import pytest
 
-from job_apply.features.hh.search import (
+from apply_pilot.features.hh.search import (
     HHQuery,
     HHVacancySearchClient,
     InMemoryHhVacancySearchClient,
 )
-from job_apply.features.sources.repository import InMemoryVacancyRepository
-from job_apply.features.sources.search_service import (
+from apply_pilot.features.sources.repository import InMemoryVacancyRepository
+from apply_pilot.features.sources.search_service import (
     IngestResult,
     VacancySearchService,
 )
-from job_apply.features.sources.service import SourceService
+from apply_pilot.features.sources.service import SourceService
 
 
 def _hh_vacancy(vacancy_id: str, name: str = "Python developer") -> dict:

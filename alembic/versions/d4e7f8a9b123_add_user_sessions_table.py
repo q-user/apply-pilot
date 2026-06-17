@@ -5,7 +5,7 @@ Revises: a03366a19528
 Create Date: 2026-06-15 01:00:00.000000
 
 Hand-written to mirror
-:class:`job_apply.features.users.models.UserSession`.
+:class:`apply_pilot.features.users.models.UserSession`.
 We deliberately do not autogenerate: the dev DB is sqlite, but the
 production target is Postgres, and Alembic's sqlite-flavoured output
 for the ``UUID`` columns would be wrong on the other side. The hand

@@ -28,22 +28,24 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from job_apply.config import (
+from apply_pilot.config import (
     ApplyWorkerSettings,
     get_apply_worker_settings,
 )
-from job_apply.features.apply_worker.models import ApplyJobStatus
-from job_apply.features.apply_worker.repository import (
+from apply_pilot.features.apply_worker.models import ApplyJobStatus
+from apply_pilot.features.apply_worker.repository import (
     InMemoryApplyJobRepository,
     InMemoryApplyStatusHistoryRepository,
 )
-from job_apply.features.apply_worker.retry import RetryPolicy
-from job_apply.features.apply_worker.service import ApplyJobService
-from job_apply.features.matches.models import VacancyMatch
-from job_apply.features.search_profiles.models import SearchProfile
+from apply_pilot.features.apply_worker.retry import RetryPolicy
+from apply_pilot.features.apply_worker.service import ApplyJobService
+from apply_pilot.features.matches.models import VacancyMatch
+from apply_pilot.features.search_profiles.models import SearchProfile
 
 # Local alias to avoid a top-level import we have not pinned down.
-MatchStatus = __import__("job_apply.features.matches.models", fromlist=["MatchStatus"]).MatchStatus
+MatchStatus = __import__(
+    "apply_pilot.features.matches.models", fromlist=["MatchStatus"]
+).MatchStatus
 
 
 # ---------------------------------------------------------------------------

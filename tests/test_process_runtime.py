@@ -16,7 +16,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from job_apply.runtime.process import BaseProcess
+from apply_pilot.runtime.process import BaseProcess
 
 
 def _build_mock_loop(

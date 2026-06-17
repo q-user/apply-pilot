@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from job_apply.app import create_app
+from apply_pilot.app import create_app
 
 
 def test_create_app_returns_fastapi_instance() -> None:

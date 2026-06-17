@@ -16,15 +16,15 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from job_apply.features.sources.api import (
+from apply_pilot.features.sources.api import (
     get_vacancy_list_service,
 )
-from job_apply.features.sources.api import (
+from apply_pilot.features.sources.api import (
     router as sources_router,
 )
-from job_apply.features.sources.models import Vacancy
-from job_apply.features.sources.repository import InMemoryVacancyRepository
-from job_apply.features.sources.service import SourceService
+from apply_pilot.features.sources.models import Vacancy
+from apply_pilot.features.sources.repository import InMemoryVacancyRepository
+from apply_pilot.features.sources.service import SourceService
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -74,7 +74,7 @@ def _stored_vacancy(
 ) -> Vacancy:
     """Build and persist a ``Vacancy`` with an explicit ``created_at``.
 
-    The in-memory :class:`~job_apply.features.sources.repository.InMemoryVacancyRepository`
+    The in-memory :class:`~apply_pilot.features.sources.repository.InMemoryVacancyRepository`
     stamps ``created_at = now`` on insert, so any test that needs a
     deterministic timestamp must override it on the row that the
     repository actually returned. Tests that don't care about

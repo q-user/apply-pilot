@@ -4,7 +4,7 @@ A :class:`CircuitBreaker` is a small per-source state machine that
 prevents a failing external job board (e.g. hh.ru returning 5xx) from
 blocking the rest of the batch ingestion pipeline. The wrapper
 :class:`BreakeredSourceAdapter` decorates an existing
-:class:`~job_apply.features.sources.adapter.SourceAdapter` and consults
+:class:`~apply_pilot.features.sources.adapter.SourceAdapter` and consults
 the breaker before forwarding every call.
 
 State machine
@@ -41,12 +41,12 @@ from typing import Any
 
 import pytest
 
-from job_apply.features.apply_worker.models import ApplyJob
-from job_apply.features.apply_worker.runtime import ApplyResult
-from job_apply.features.audit.models import AuditEventType
-from job_apply.features.screening.models import ScreeningQuestion
-from job_apply.features.sources.adapter import SourceAdapter, SourceQuery
-from job_apply.features.sources.breaker import (
+from apply_pilot.features.apply_worker.models import ApplyJob
+from apply_pilot.features.apply_worker.runtime import ApplyResult
+from apply_pilot.features.audit.models import AuditEventType
+from apply_pilot.features.screening.models import ScreeningQuestion
+from apply_pilot.features.sources.adapter import SourceAdapter, SourceQuery
+from apply_pilot.features.sources.breaker import (
     BreakeredSourceAdapter,
     BreakerSettings,
     CircuitBreaker,
@@ -55,8 +55,8 @@ from job_apply.features.sources.breaker import (
     SourceCircuitRegistry,
     SourceUnavailableError,
 )
-from job_apply.features.sources.models import Vacancy
-from job_apply.features.sources.normalizer import VacancyNormalizer
+from apply_pilot.features.sources.models import Vacancy
+from apply_pilot.features.sources.normalizer import VacancyNormalizer
 
 # ---------------------------------------------------------------------------
 # Fake clock

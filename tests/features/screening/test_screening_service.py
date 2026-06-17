@@ -28,24 +28,24 @@ from collections.abc import Sequence
 
 import pytest
 
-from job_apply.features.resumes.models import Resume
-from job_apply.features.scoring.llm import InMemoryLLMClient
-from job_apply.features.screening.models import (
+from apply_pilot.features.resumes.models import Resume
+from apply_pilot.features.scoring.llm import InMemoryLLMClient
+from apply_pilot.features.screening.models import (
     ScreeningQuestion,
     ScreeningQuestionAnswer,
 )
-from job_apply.features.screening.repository import (
+from apply_pilot.features.screening.repository import (
     InMemoryScreeningAnswerRepository,
     InMemoryScreeningQuestionRepository,
 )
-from job_apply.features.screening.service import (
+from apply_pilot.features.screening.service import (
     ScreeningService,
     ScreeningServiceError,
 )
-from job_apply.features.sources.models import Vacancy
-from job_apply.features.sources.repository import InMemoryVacancyRepository
-from job_apply.features.users.models import User
-from job_apply.features.users.repository import InMemoryUsersRepository
+from apply_pilot.features.sources.models import Vacancy
+from apply_pilot.features.sources.repository import InMemoryVacancyRepository
+from apply_pilot.features.users.models import User
+from apply_pilot.features.users.repository import InMemoryUsersRepository
 
 # ---------------------------------------------------------------------------
 # Fakes
@@ -339,7 +339,7 @@ class TestListUserAnswers:
             answer_text="not mine",
             prompt_version="screening_answer@1.0.0",
         )
-        from job_apply.features.screening.repository import InMemoryScreeningAnswerRepository
+        from apply_pilot.features.screening.repository import InMemoryScreeningAnswerRepository
 
         # Use the same repo the service is wired to so the filter runs.
         assert isinstance(service._answer_repo, InMemoryScreeningAnswerRepository)  # type: ignore[attr-defined]

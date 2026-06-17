@@ -22,10 +22,10 @@ from sqlalchemy import StaticPool, create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from job_apply.db import Base
-from job_apply.features.users import models as _users_models  # noqa: F401
-from job_apply.features.writing_style_memory.models import StyleMemoryEntryModel
-from job_apply.features.writing_style_memory.repository import (
+from apply_pilot.db import Base
+from apply_pilot.features.users import models as _users_models  # noqa: F401
+from apply_pilot.features.writing_style_memory.models import StyleMemoryEntryModel
+from apply_pilot.features.writing_style_memory.repository import (
     InMemoryStyleMemoryRepository,
     SqlStyleMemoryRepository,
 )
@@ -179,8 +179,8 @@ def engine() -> Iterator[Engine]:
     # ``cover_letter_drafts`` is the FK target for
     # ``style_memory_entries.cover_letter_id``; without it the FK cannot
     # be resolved at table-creation time.
-    from job_apply.features.cover_letter import models as _cover_letter_models  # noqa: F401
-    from job_apply.features.writing_style_memory import models  # noqa: F401
+    from apply_pilot.features.cover_letter import models as _cover_letter_models  # noqa: F401
+    from apply_pilot.features.writing_style_memory import models  # noqa: F401
 
     Base.metadata.create_all(bind=eng)
     try:

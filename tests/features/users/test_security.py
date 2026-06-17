@@ -11,7 +11,7 @@ import time
 
 import pytest
 
-from job_apply.features.users.security import (
+from apply_pilot.features.users.security import (
     InvalidTokenError,
     hash_password,
     issue_token,

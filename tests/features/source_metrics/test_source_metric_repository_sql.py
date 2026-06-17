@@ -18,13 +18,13 @@ from sqlalchemy import StaticPool, create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from job_apply.db import Base
-from job_apply.features.source_metrics import models as _sm_models  # noqa: F401
-from job_apply.features.source_metrics.models import (
+from apply_pilot.db import Base
+from apply_pilot.features.source_metrics import models as _sm_models  # noqa: F401
+from apply_pilot.features.source_metrics.models import (
     SourceMetricEvent,
     SourceMetricEventKind,
 )
-from job_apply.features.source_metrics.repository import SqlSourceMetricRepository
+from apply_pilot.features.source_metrics.repository import SqlSourceMetricRepository
 
 
 @pytest.fixture

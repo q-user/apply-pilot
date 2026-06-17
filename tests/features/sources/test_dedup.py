@@ -16,10 +16,10 @@ from __future__ import annotations
 
 import pytest
 
-from job_apply.features.sources.dedup import VacancyDeduplicator
-from job_apply.features.sources.models import Vacancy
-from job_apply.features.sources.repository import InMemoryVacancyRepository
-from job_apply.features.sources.service import SourceService
+from apply_pilot.features.sources.dedup import VacancyDeduplicator
+from apply_pilot.features.sources.models import Vacancy
+from apply_pilot.features.sources.repository import InMemoryVacancyRepository
+from apply_pilot.features.sources.service import SourceService
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -310,7 +310,7 @@ class TestSourceServiceIngestBatch:
             _make(source="hh", source_id="v-002", content_hash="new"),
         ]
 
-        with caplog.at_level("INFO", logger="job_apply.features.sources.service"):
+        with caplog.at_level("INFO", logger="apply_pilot.features.sources.service"):
             await service.ingest_batch(batch)
 
         assert any("persisted=1 skipped=1" in record.message for record in caplog.records)

@@ -63,26 +63,26 @@ services:
       redis:
         condition: service_healthy
     # TODO(M0): bot / scheduler / worker entry points land in later vertical
-    # slices. Once `job_apply.runtime.process` exists, add services here that
+    # slices. Once `apply_pilot.runtime.process` exists, add services here that
     # share the same image and depend on db/redis:
     #
     #   bot:
     #     image: apply-pilot:local
-    #     command: ["python", "-m", "job_apply.runtime.process", "bot"]
+    #     command: ["python", "-m", "apply_pilot.runtime.process", "bot"]
     #     depends_on:
     #       api: { condition: service_started }
     #       redis: { condition: service_healthy }
     #
     #   scheduler:
     #     image: apply-pilot:local
-    #     command: ["python", "-m", "job_apply.runtime.process", "scheduler"]
+    #     command: ["python", "-m", "apply_pilot.runtime.process", "scheduler"]
     #     depends_on:
     #       api: { condition: service_started }
     #       redis: { condition: service_healthy }
     #
     #   worker:
     #     image: apply-pilot:local
-    #     command: ["python", "-m", "job_apply.runtime.process", "worker"]
+    #     command: ["python", "-m", "apply_pilot.runtime.process", "worker"]
     #     depends_on:
     #       api: { condition: service_started }
     #       db: { condition: service_healthy }

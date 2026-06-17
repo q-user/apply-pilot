@@ -15,7 +15,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from job_apply.features.source_metrics.models import (
+from apply_pilot.features.source_metrics.models import (
     SourceMetricEvent,
     SourceMetricEventKind,
 )

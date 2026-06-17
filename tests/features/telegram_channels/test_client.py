@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import pytest
 
-from job_apply.features.telegram_channels import (
+from apply_pilot.features.telegram_channels import (
     InMemoryTelegramChannelClient,
     TelegramChannelClient,
     TelegramChannelConfig,

@@ -17,23 +17,23 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from job_apply.db import Base
-from job_apply.features.quick_filter.engine import QuickFilterEngine
-from job_apply.features.quick_filter.models import (
+from apply_pilot.db import Base
+from apply_pilot.features.quick_filter.engine import QuickFilterEngine
+from apply_pilot.features.quick_filter.models import (
     DECISION_ACCEPT,
     DECISION_REJECT,
     FilterDecision,
 )
-from job_apply.features.quick_filter.persistence import (
+from apply_pilot.features.quick_filter.persistence import (
     FilterDecisionRepository,
     FilterDecisionRow,
     InMemoryFilterDecisionRepository,
     SqlFilterDecisionRepository,
 )
-from job_apply.features.quick_filter.rules import default_rules
-from job_apply.features.quick_filter.service import QuickFilterService
-from job_apply.features.search_profiles.models import SearchProfile
-from job_apply.features.sources.models import Vacancy
+from apply_pilot.features.quick_filter.rules import default_rules
+from apply_pilot.features.quick_filter.service import QuickFilterService
+from apply_pilot.features.search_profiles.models import SearchProfile
+from apply_pilot.features.sources.models import Vacancy
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -288,9 +288,9 @@ def sql_repo(sql_session_factory) -> SqlFilterDecisionRepository:
 
 def _seed(session_factory) -> tuple[uuid.UUID, uuid.UUID]:
     """Insert a User, SearchProfile, Vacancy and return (profile_id, vacancy_id)."""
-    from job_apply.features.search_profiles.models import SearchProfile as SP
-    from job_apply.features.sources.models import Vacancy as V
-    from job_apply.features.users.models import User as U
+    from apply_pilot.features.search_profiles.models import SearchProfile as SP
+    from apply_pilot.features.sources.models import Vacancy as V
+    from apply_pilot.features.users.models import User as U
 
     session = session_factory()
     try:

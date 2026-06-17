@@ -25,21 +25,21 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
-from job_apply.db import Base
-from job_apply.features.screening import models as _screening_models  # noqa: F401
-from job_apply.features.screening.models import (
+from apply_pilot.db import Base
+from apply_pilot.features.screening import models as _screening_models  # noqa: F401
+from apply_pilot.features.screening.models import (
     ScreeningQuestion,
     ScreeningQuestionAnswer,
 )
-from job_apply.features.screening.repository import (
+from apply_pilot.features.screening.repository import (
     InMemoryScreeningAnswerRepository,
     InMemoryScreeningQuestionRepository,
     SqlScreeningAnswerRepository,
     SqlScreeningQuestionRepository,
 )
-from job_apply.features.sources.models import Vacancy
-from job_apply.features.users.models import User
-from job_apply.features.users.security import hash_password
+from apply_pilot.features.sources.models import Vacancy
+from apply_pilot.features.users.models import User
+from apply_pilot.features.users.security import hash_password
 
 # ---------------------------------------------------------------------------
 # In-memory: ScreeningQuestionRepository

@@ -30,7 +30,7 @@ Schema
   cap. Future slices may re-derive summaries from a single source of
   truth without joining another table.
 * ``style_summary`` — the deterministic, MVP summary produced by
-  :func:`job_apply.features.writing_style_memory.summariser.summarise_letter`.
+  :func:`apply_pilot.features.writing_style_memory.summariser.summarise_letter`.
   It is the primary surface the API exposes today, so callers do not
   need a second pass to compute it.
 * ``created_at`` — server-side timestamp with the standard

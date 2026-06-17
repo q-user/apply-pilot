@@ -23,8 +23,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from job_apply.app import create_app
-from job_apply.features.admin.health import (
+from apply_pilot.app import create_app
+from apply_pilot.features.admin.health import (
     HealthCheck,
     HealthCheckResult,
     HealthStatus,

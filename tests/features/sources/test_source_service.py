@@ -17,8 +17,8 @@ from __future__ import annotations
 
 import pytest
 
-from job_apply.features.sources.repository import InMemoryVacancyRepository
-from job_apply.features.sources.service import SourceService
+from apply_pilot.features.sources.repository import InMemoryVacancyRepository
+from apply_pilot.features.sources.service import SourceService
 
 
 @pytest.fixture

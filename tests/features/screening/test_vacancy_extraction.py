@@ -35,18 +35,18 @@ import uuid
 
 import pytest
 
-from job_apply.features.screening.extractor import (
+from apply_pilot.features.screening.extractor import (
     HhScreeningQuestionExtractor,
     ScreeningQuestionExtractor,
 )
-from job_apply.features.screening.models import ScreeningQuestion
-from job_apply.features.screening.repository import (
+from apply_pilot.features.screening.models import ScreeningQuestion
+from apply_pilot.features.screening.repository import (
     InMemoryScreeningQuestionRepository,
     ScreeningQuestionRepository,
 )
-from job_apply.features.sources.models import Vacancy
-from job_apply.features.sources.repository import InMemoryVacancyRepository
-from job_apply.features.sources.service import SourceService
+from apply_pilot.features.sources.models import Vacancy
+from apply_pilot.features.sources.repository import InMemoryVacancyRepository
+from apply_pilot.features.sources.service import SourceService
 
 # ---------------------------------------------------------------------------
 # Fixtures

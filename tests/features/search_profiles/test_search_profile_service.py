@@ -11,17 +11,17 @@ import uuid
 
 import pytest
 
-from job_apply.features.search_profiles.repository import InMemorySearchProfileRepository
-from job_apply.features.search_profiles.schemas import (
+from apply_pilot.features.search_profiles.repository import InMemorySearchProfileRepository
+from apply_pilot.features.search_profiles.schemas import (
     SearchProfileCreate,
     SearchProfileUpdate,
 )
-from job_apply.features.search_profiles.service import (
+from apply_pilot.features.search_profiles.service import (
     ProfileNotFoundError,
     ProfileOwnershipError,
     SearchProfileService,
 )
-from job_apply.shared.errors import ValidationError
+from apply_pilot.shared.errors import ValidationError
 
 
 @pytest.fixture

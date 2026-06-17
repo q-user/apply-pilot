@@ -12,7 +12,7 @@ import base64
 import pytest
 from cryptography.fernet import Fernet, InvalidToken
 
-from job_apply.features.hh.encryption import CredentialEncryptor
+from apply_pilot.features.hh.encryption import CredentialEncryptor
 
 
 def _key_material_strs(encryptor: CredentialEncryptor) -> tuple[str, str, str]:

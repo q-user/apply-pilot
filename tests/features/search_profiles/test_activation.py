@@ -19,18 +19,18 @@ from sqlalchemy import StaticPool, create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from job_apply.db import Base, get_db
-from job_apply.features.search_profiles import models as _sp_models  # noqa: F401
-from job_apply.features.search_profiles.api import router as sp_router
-from job_apply.features.search_profiles.repository import InMemorySearchProfileRepository
-from job_apply.features.search_profiles.schemas import SearchProfileCreate
-from job_apply.features.search_profiles.service import (
+from apply_pilot.db import Base, get_db
+from apply_pilot.features.search_profiles import models as _sp_models  # noqa: F401
+from apply_pilot.features.search_profiles.api import router as sp_router
+from apply_pilot.features.search_profiles.repository import InMemorySearchProfileRepository
+from apply_pilot.features.search_profiles.schemas import SearchProfileCreate
+from apply_pilot.features.search_profiles.service import (
     ProfileNotFoundError,
     ProfileOwnershipError,
     SearchProfileService,
 )
-from job_apply.features.users import models as _users_models  # noqa: F401
-from job_apply.features.users.api import router as auth_router
+from apply_pilot.features.users import models as _users_models  # noqa: F401
+from apply_pilot.features.users.api import router as auth_router
 
 # ---------------------------------------------------------------------------
 # Service-level fixtures

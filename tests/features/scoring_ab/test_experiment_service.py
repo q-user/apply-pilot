@@ -23,12 +23,12 @@ from datetime import UTC, datetime
 
 import pytest
 
-from job_apply.features.scoring_ab.experiments import (
+from apply_pilot.features.scoring_ab.experiments import (
     InMemoryScoringExperimentRepository,
     ScoringExperiment,
     ScoringVariant,
 )
-from job_apply.features.scoring_ab.service import ScoringExperimentService
+from apply_pilot.features.scoring_ab.service import ScoringExperimentService
 
 
 def _variant(name: str, prompt_version: str, weight: float) -> ScoringVariant:

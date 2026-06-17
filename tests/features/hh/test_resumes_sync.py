@@ -1,6 +1,6 @@
 """TDD tests for the hh.ru resume metadata sync (M2, issue #21).
 
-These tests cover the public surface of :mod:`job_apply.features.hh.resumes`:
+These tests cover the public surface of :mod:`apply_pilot.features.hh.resumes`:
 
 * :class:`HhResumesClient` Protocol — the narrow contract every
   collaborator depends on, with both the in-memory and the production
@@ -38,10 +38,10 @@ from sqlalchemy.orm import Session, sessionmaker
 # the dependency graph and would crash without a key.
 os.environ.setdefault("APP_HH_ENCRYPTION_KEY", Fernet.generate_key().decode())
 
-from job_apply.db import Base, get_db  # noqa: E402
-from job_apply.features.hh.api import router as hh_router  # noqa: E402
-from job_apply.features.hh.encryption import CredentialEncryptor  # noqa: E402
-from job_apply.features.hh.resumes import (  # noqa: E402
+from apply_pilot.db import Base, get_db  # noqa: E402
+from apply_pilot.features.hh.api import router as hh_router  # noqa: E402
+from apply_pilot.features.hh.encryption import CredentialEncryptor  # noqa: E402
+from apply_pilot.features.hh.resumes import (  # noqa: E402
     HhHttpResumesClient,
     HhResumeLink,
     HhResumeLinkRepository,
@@ -51,8 +51,8 @@ from job_apply.features.hh.resumes import (  # noqa: E402
     InMemoryHhResumesClient,
     SqlHhResumeLinkRepository,
 )
-from job_apply.features.hh.schemas import InternalCredentials  # noqa: E402
-from job_apply.features.users.api import router as auth_router  # noqa: E402
+from apply_pilot.features.hh.schemas import InternalCredentials  # noqa: E402
+from apply_pilot.features.users.api import router as auth_router  # noqa: E402
 
 _TEST_ENCRYPTOR = CredentialEncryptor(key=Fernet.generate_key())
 
@@ -64,7 +64,7 @@ def _install_test_encryptor() -> None:
     override it so tests do not have to plumb the env var through every
     request.
     """
-    from job_apply.features.hh import api as hh_api
+    from apply_pilot.features.hh import api as hh_api
 
     hh_api._get_encryptor = lambda: _TEST_ENCRYPTOR  # type: ignore[assignment]
 
@@ -346,7 +346,7 @@ def session_factory(engine: Engine) -> Callable[[], Session]:
 @pytest.fixture
 def user_id(session_factory: Callable[[], Session]) -> uuid.UUID:
     """Insert and return a real user row so the FK is satisfied."""
-    from job_apply.features.users.models import User
+    from apply_pilot.features.users.models import User
 
     sess = session_factory()
     try:

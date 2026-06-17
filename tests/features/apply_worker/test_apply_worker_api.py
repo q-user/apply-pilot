@@ -20,12 +20,12 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from job_apply.features.apply_worker import ApplyJobService
-from job_apply.features.apply_worker.repository import InMemoryApplyJobRepository
-from job_apply.features.apply_worker.schemas import ApplyJobRead
-from job_apply.features.matches.models import VacancyMatch
-from job_apply.features.search_profiles.models import SearchProfile
-from job_apply.features.users.security import issue_token
+from apply_pilot.features.apply_worker import ApplyJobService
+from apply_pilot.features.apply_worker.repository import InMemoryApplyJobRepository
+from apply_pilot.features.apply_worker.schemas import ApplyJobRead
+from apply_pilot.features.matches.models import VacancyMatch
+from apply_pilot.features.search_profiles.models import SearchProfile
+from apply_pilot.features.users.security import issue_token
 
 # ---------------------------------------------------------------------------
 # Local fakes (replacing the cross-slice lookups the service depends on)
@@ -104,7 +104,7 @@ def apply_world() -> _World:
     # M5 #49 — the service now requires a history repo. The router's
     # in-memory fakes use the same collaborator-injected fakes as the
     # rest of the test world.
-    from job_apply.features.apply_worker.repository import (
+    from apply_pilot.features.apply_worker.repository import (
         InMemoryApplyStatusHistoryRepository,
     )
 
@@ -130,10 +130,10 @@ def apply_world() -> _World:
 @pytest.fixture
 def app(apply_world: _World) -> Iterator[FastAPI]:
     application = FastAPI()
-    from job_apply.features.apply_worker.api import (
+    from apply_pilot.features.apply_worker.api import (
         get_apply_job_service,
     )
-    from job_apply.features.apply_worker.api import (
+    from apply_pilot.features.apply_worker.api import (
         router as apply_worker_router,
     )
 
@@ -372,7 +372,7 @@ def _make_other_user_job(world: _World) -> object:
         status="accepted",
     )
     # Build an ApplyJob directly so we can stamp a foreign user id.
-    from job_apply.features.apply_worker.models import (
+    from apply_pilot.features.apply_worker.models import (
         ApplyJob,
         compute_idempotency_key,
     )

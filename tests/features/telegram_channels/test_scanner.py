@@ -5,7 +5,7 @@ periodically polls the configured channels via the adapter's
 :meth:`search` and pipes the resulting raw dicts through
 :meth:`SourceService.ingest_vacancy_deduped`.
 
-The scanner is a :class:`~job_apply.runtime.process.BaseProcess` so it
+The scanner is a :class:`~apply_pilot.runtime.process.BaseProcess` so it
 inherits the SIGINT/SIGTERM handling and the
 ``await self.wait_for_shutdown()`` primitive. The tests focus on the
 slice-specific glue: the loop body, the shutdown interaction, and the
@@ -18,9 +18,9 @@ import asyncio
 
 import pytest
 
-from job_apply.features.sources.repository import InMemoryVacancyRepository
-from job_apply.features.sources.service import SourceService
-from job_apply.features.telegram_channels import (
+from apply_pilot.features.sources.repository import InMemoryVacancyRepository
+from apply_pilot.features.sources.service import SourceService
+from apply_pilot.features.telegram_channels import (
     InMemoryTelegramChannelClient,
     TelegramChannelClassifier,
     TelegramChannelConfig,

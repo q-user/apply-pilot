@@ -18,8 +18,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from job_apply.config import DigestSettings, get_digest_settings
-from job_apply.features.telegram.digest import DigestSender
+from apply_pilot.config import DigestSettings, get_digest_settings
+from apply_pilot.features.telegram.digest import DigestSender
 
 # ---------------------------------------------------------------------------
 # Test-only dependency override
@@ -40,7 +40,7 @@ class _StubDigestSender:
 
 def _build_test_app() -> tuple[FastAPI, _StubDigestSender]:
     """Build a minimal FastAPI app that mounts the digest router with a stub sender."""
-    from job_apply.features.telegram.digest import api as digest_api
+    from apply_pilot.features.telegram.digest import api as digest_api
 
     app = FastAPI()
     app.include_router(digest_api.router)
@@ -91,7 +91,7 @@ def test_get_digest_settings_default_is_nine() -> None:
     # reads the default branch.
     prior = os.environ.pop("APP_DIGEST_HOUR_UTC", None)
     try:
-        import job_apply.config as config_module
+        import apply_pilot.config as config_module
 
         importlib.reload(config_module)
         settings = config_module.get_digest_settings()
@@ -99,7 +99,7 @@ def test_get_digest_settings_default_is_nine() -> None:
     finally:
         if prior is not None:
             os.environ["APP_DIGEST_HOUR_UTC"] = prior
-        import job_apply.config as config_module  # noqa: F811
+        import apply_pilot.config as config_module  # noqa: F811
 
         importlib.reload(config_module)
 
@@ -136,6 +136,6 @@ def test_digest_sender_is_exported() -> None:
     """Smoke test: the digest sender can be imported through the package root."""
     # The ``__init__`` re-exports ``DigestSender``; importing it from
     # the package root keeps the public surface coherent.
-    from job_apply.features.telegram.digest import DigestSender as _DigestSender
+    from apply_pilot.features.telegram.digest import DigestSender as _DigestSender
 
     assert _DigestSender is DigestSender

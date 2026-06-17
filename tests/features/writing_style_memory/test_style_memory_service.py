@@ -15,8 +15,8 @@ import uuid
 
 import pytest
 
-from job_apply.features.writing_style_memory.repository import InMemoryStyleMemoryRepository
-from job_apply.features.writing_style_memory.service import StyleMemoryService
+from apply_pilot.features.writing_style_memory.repository import InMemoryStyleMemoryRepository
+from apply_pilot.features.writing_style_memory.service import StyleMemoryService
 
 # ---------------------------------------------------------------------------
 # Fixtures

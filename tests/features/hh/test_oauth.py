@@ -28,8 +28,8 @@ import httpx
 import pytest
 from cryptography.fernet import Fernet
 
-from job_apply.features.hh.encryption import CredentialEncryptor
-from job_apply.features.hh.oauth import (
+from apply_pilot.features.hh.encryption import CredentialEncryptor
+from apply_pilot.features.hh.oauth import (
     HhAuthService,
     HhHttpOAuthClient,
     HhOAuthStateStore,
@@ -38,9 +38,9 @@ from job_apply.features.hh.oauth import (
     InvalidOAuthStateError,
     MissingRefreshTokenError,
 )
-from job_apply.features.hh.repository import InMemoryHHCredentialRepository
-from job_apply.features.hh.service import HHCredentialService
-from job_apply.shared.errors import NotFoundError
+from apply_pilot.features.hh.repository import InMemoryHHCredentialRepository
+from apply_pilot.features.hh.service import HHCredentialService
+from apply_pilot.shared.errors import NotFoundError
 
 # ---------------------------------------------------------------------------
 # HhTokenResponse

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from job_apply.app import create_app
+from apply_pilot.app import create_app
 
 
 def test_landing_page_returns_200() -> None:

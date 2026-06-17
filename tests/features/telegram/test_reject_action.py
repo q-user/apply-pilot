@@ -23,24 +23,24 @@ import uuid
 
 import pytest
 
-from job_apply.features.audit.models import AuditEventType
-from job_apply.features.audit.repository import InMemoryAuditLogRepository
-from job_apply.features.audit.service import AuditService
-from job_apply.features.learning.repository import InMemoryLearningSignalRepository
-from job_apply.features.learning.service import LearningSignalsService
-from job_apply.features.matches.models import MatchStatus, VacancyMatch
-from job_apply.features.matches.repository import InMemoryVacancyMatchRepository
-from job_apply.features.matches.service import MatchService
-from job_apply.features.search_profiles.models import SearchProfile
-from job_apply.features.search_profiles.repository import InMemorySearchProfileRepository
-from job_apply.features.sources.models import Vacancy
-from job_apply.features.telegram.actions.reject import (
+from apply_pilot.features.audit.models import AuditEventType
+from apply_pilot.features.audit.repository import InMemoryAuditLogRepository
+from apply_pilot.features.audit.service import AuditService
+from apply_pilot.features.learning.repository import InMemoryLearningSignalRepository
+from apply_pilot.features.learning.service import LearningSignalsService
+from apply_pilot.features.matches.models import MatchStatus, VacancyMatch
+from apply_pilot.features.matches.repository import InMemoryVacancyMatchRepository
+from apply_pilot.features.matches.service import MatchService
+from apply_pilot.features.search_profiles.models import SearchProfile
+from apply_pilot.features.search_profiles.repository import InMemorySearchProfileRepository
+from apply_pilot.features.sources.models import Vacancy
+from apply_pilot.features.telegram.actions.reject import (
     RejectActionHandler,
     parse_reject_command,
 )
-from job_apply.features.telegram.bot import TelegramBot, TelegramSettings
-from job_apply.features.telegram.dto import SendMessageRequest
-from job_apply.features.telegram.repository import InMemoryTelegramAccountRepository
+from apply_pilot.features.telegram.bot import TelegramBot, TelegramSettings
+from apply_pilot.features.telegram.dto import SendMessageRequest
+from apply_pilot.features.telegram.repository import InMemoryTelegramAccountRepository
 
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
@@ -664,7 +664,7 @@ async def test_dispatcher_routes_reject_command(
 
 async def test_dispatcher_reject_command_without_args_returns_help() -> None:
     """``/reject`` without args must return the help text (not a crash)."""
-    from job_apply.config import TelegramSettings
+    from apply_pilot.config import TelegramSettings
 
     bot = TelegramBot(
         settings=TelegramSettings(bot_token="test-token", polling_timeout=30),
@@ -687,7 +687,7 @@ async def test_dispatcher_reject_command_without_args_returns_help() -> None:
 
 async def test_dispatcher_includes_reject_in_help() -> None:
     """``/help`` must list ``/reject`` so users discover the command."""
-    from job_apply.config import TelegramSettings
+    from apply_pilot.config import TelegramSettings
 
     bot = TelegramBot(settings=TelegramSettings(bot_token="test-token", polling_timeout=30))
 

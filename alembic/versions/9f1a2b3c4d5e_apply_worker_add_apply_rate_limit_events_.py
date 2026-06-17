@@ -5,9 +5,9 @@ Revises: 1d2e3f4a5b6c
 Create Date: 2026-06-16 18:00:00.000000
 
 Adds the ``apply_rate_limit_events`` table that backs the
-:class:`~job_apply.features.apply_worker.models.ApplyRateLimitEvent`
+:class:`~apply_pilot.features.apply_worker.models.ApplyRateLimitEvent`
 model introduced in M5, issue #46. Every successful
-:meth:`~job_apply.features.apply_worker.service.ApplyJobService.enqueue_for_match`
+:meth:`~apply_pilot.features.apply_worker.service.ApplyJobService.enqueue_for_match`
 call appends one row so the per-user hourly / daily windows can be
 computed by counting rows in the rolling ``[now - window, now]``
 range.

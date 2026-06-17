@@ -10,23 +10,23 @@ from __future__ import annotations
 
 import uuid
 
-from job_apply.features.quick_filter.engine import QuickFilterEngine
-from job_apply.features.quick_filter.models import (
+from apply_pilot.features.quick_filter.engine import QuickFilterEngine
+from apply_pilot.features.quick_filter.models import (
     DECISION_ACCEPT,
     DECISION_NEUTRAL,
     DECISION_REJECT,
     FilterDecision,
     RuleResult,
 )
-from job_apply.features.quick_filter.rules import (
+from apply_pilot.features.quick_filter.rules import (
     KeywordRule,
     LocationRule,
     SalaryRangeRule,
     ScheduleRule,
     TitleLengthRule,
 )
-from job_apply.features.search_profiles.models import SearchProfile
-from job_apply.features.sources.models import Vacancy
+from apply_pilot.features.search_profiles.models import SearchProfile
+from apply_pilot.features.sources.models import Vacancy
 
 # ---------------------------------------------------------------------------
 # Helpers

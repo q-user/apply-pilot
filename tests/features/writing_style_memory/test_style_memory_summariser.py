@@ -14,7 +14,7 @@ summarisation call without touching the rest of the slice.
 
 from __future__ import annotations
 
-from job_apply.features.writing_style_memory.summariser import summarise_letter
+from apply_pilot.features.writing_style_memory.summariser import summarise_letter
 
 
 def test_summarise_returns_empty_string_for_blank_input() -> None:

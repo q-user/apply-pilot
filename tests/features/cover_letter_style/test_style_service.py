@@ -12,14 +12,14 @@ import uuid
 import pytest
 import pytest as _pytest  # noqa: F401  (kept for symmetry with siblings)
 
-from job_apply.features.cover_letter_style.models import CoverLetterStyle
-from job_apply.features.cover_letter_style.repository import (
+from apply_pilot.features.cover_letter_style.models import CoverLetterStyle
+from apply_pilot.features.cover_letter_style.repository import (
     InMemoryCoverLetterStyleRepository,
 )
-from job_apply.features.cover_letter_style.schemas import (
+from apply_pilot.features.cover_letter_style.schemas import (
     CoverLetterStyleUpdate,
 )
-from job_apply.features.cover_letter_style.service import CoverLetterStyleService
+from apply_pilot.features.cover_letter_style.service import CoverLetterStyleService
 
 # ---------------------------------------------------------------------------
 # Fixtures

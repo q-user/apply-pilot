@@ -17,15 +17,15 @@ from sqlalchemy import StaticPool, create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from job_apply.db import Base, get_db
-from job_apply.features.cover_letter import models as _cover_letter_models  # noqa: F401
-from job_apply.features.users import models as _users_models  # noqa: F401
-from job_apply.features.users.api import router as auth_router
-from job_apply.features.users.security import default_token_store
-from job_apply.features.writing_style_memory import models  # noqa: F401  -- register table
-from job_apply.features.writing_style_memory.api import router as writing_style_memory_router
-from job_apply.features.writing_style_memory.repository import SqlStyleMemoryRepository
-from job_apply.features.writing_style_memory.service import StyleMemoryService
+from apply_pilot.db import Base, get_db
+from apply_pilot.features.cover_letter import models as _cover_letter_models  # noqa: F401
+from apply_pilot.features.users import models as _users_models  # noqa: F401
+from apply_pilot.features.users.api import router as auth_router
+from apply_pilot.features.users.security import default_token_store
+from apply_pilot.features.writing_style_memory import models  # noqa: F401  -- register table
+from apply_pilot.features.writing_style_memory.api import router as writing_style_memory_router
+from apply_pilot.features.writing_style_memory.repository import SqlStyleMemoryRepository
+from apply_pilot.features.writing_style_memory.service import StyleMemoryService
 
 
 def _register_and_login(client: TestClient, email: str, password: str) -> str:

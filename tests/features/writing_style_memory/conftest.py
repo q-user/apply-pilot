@@ -27,7 +27,7 @@ from __future__ import annotations
 # order matters: each ``import`` here is a no-op once the module is
 # already cached, so the cost is a single dict lookup per module in
 # the full-suite run.
-import job_apply.features.apply_worker.runtime  # noqa: F401  (closes the cycle)
-import job_apply.features.matches.service  # noqa: F401  (cycle participant)
-import job_apply.features.sources.models  # noqa: F401  (cycle participant)
-import job_apply.features.telegram.actions.accept  # noqa: F401  (cycle participant)
+import apply_pilot.features.apply_worker.runtime  # noqa: F401  (closes the cycle)
+import apply_pilot.features.matches.service  # noqa: F401  (cycle participant)
+import apply_pilot.features.sources.models  # noqa: F401  (cycle participant)
+import apply_pilot.features.telegram.actions.accept  # noqa: F401  (cycle participant)

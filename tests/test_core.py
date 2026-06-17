@@ -1,6 +1,6 @@
 """Tests for core module."""
 
-from job_apply.core import greet
+from apply_pilot.core import greet
 
 
 def test_greet() -> None:

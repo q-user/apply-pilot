@@ -16,18 +16,18 @@ from collections.abc import Sequence
 
 import pytest
 
-from job_apply.features.quick_filter.engine import QuickFilterEngine
-from job_apply.features.quick_filter.models import (
+from apply_pilot.features.quick_filter.engine import QuickFilterEngine
+from apply_pilot.features.quick_filter.models import (
     DECISION_ACCEPT,
     DECISION_REJECT,
     FilterDecision,
 )
-from job_apply.features.quick_filter.rules import (
+from apply_pilot.features.quick_filter.rules import (
     default_rules,
 )
-from job_apply.features.quick_filter.service import QuickFilterService
-from job_apply.features.search_profiles.models import SearchProfile
-from job_apply.features.sources.models import Vacancy
+from apply_pilot.features.quick_filter.service import QuickFilterService
+from apply_pilot.features.search_profiles.models import SearchProfile
+from apply_pilot.features.sources.models import Vacancy
 
 # ---------------------------------------------------------------------------
 # Helpers / fixtures

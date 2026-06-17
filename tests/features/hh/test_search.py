@@ -18,7 +18,7 @@ import asyncio
 import httpx
 import pytest
 
-from job_apply.features.hh.search import (
+from apply_pilot.features.hh.search import (
     HhHttpVacancySearchClient,
     HHQuery,
     InMemoryHhVacancySearchClient,

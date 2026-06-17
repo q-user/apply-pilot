@@ -8,31 +8,31 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from job_apply.features.audit.models import AuditEventType
-from job_apply.features.audit.repository import InMemoryAuditLogRepository
-from job_apply.features.audit.service import AuditService
-from job_apply.features.cover_letter.models import (
+from apply_pilot.features.audit.models import AuditEventType
+from apply_pilot.features.audit.repository import InMemoryAuditLogRepository
+from apply_pilot.features.audit.service import AuditService
+from apply_pilot.features.cover_letter.models import (
     CoverLetterDraft,
     CoverLetterDraftStatus,
 )
-from job_apply.features.cover_letter.repository import InMemoryCoverLetterDraftRepository
-from job_apply.features.cover_letter.service import CoverLetterService
-from job_apply.features.matches.models import MatchStatus, VacancyMatch
-from job_apply.features.matches.repository import InMemoryVacancyMatchRepository
-from job_apply.features.resumes.models import Resume
-from job_apply.features.scoring.llm import InMemoryLLMClient
-from job_apply.features.search_profiles.models import SearchProfile
-from job_apply.features.search_profiles.repository import InMemorySearchProfileRepository
-from job_apply.features.sources.models import Vacancy
-from job_apply.features.telegram.actions.regenerate import (
+from apply_pilot.features.cover_letter.repository import InMemoryCoverLetterDraftRepository
+from apply_pilot.features.cover_letter.service import CoverLetterService
+from apply_pilot.features.matches.models import MatchStatus, VacancyMatch
+from apply_pilot.features.matches.repository import InMemoryVacancyMatchRepository
+from apply_pilot.features.resumes.models import Resume
+from apply_pilot.features.scoring.llm import InMemoryLLMClient
+from apply_pilot.features.search_profiles.models import SearchProfile
+from apply_pilot.features.search_profiles.repository import InMemorySearchProfileRepository
+from apply_pilot.features.sources.models import Vacancy
+from apply_pilot.features.telegram.actions.regenerate import (
     RegenerateActionHandler,
     _escape_markdownv2,
     parse_regenerate_command,
 )
-from job_apply.features.telegram.bot import TelegramBot, TelegramSettings
-from job_apply.features.telegram.dto import SendMessageRequest
-from job_apply.features.telegram.repository import InMemoryTelegramAccountRepository
-from job_apply.features.users.models import User
+from apply_pilot.features.telegram.bot import TelegramBot, TelegramSettings
+from apply_pilot.features.telegram.dto import SendMessageRequest
+from apply_pilot.features.telegram.repository import InMemoryTelegramAccountRepository
+from apply_pilot.features.users.models import User
 
 
 @dataclass
@@ -83,7 +83,7 @@ class _FakeStyleRepo:
         return self.styles.get(user_id)
 
     def add(self, style: object) -> object:
-        from job_apply.features.cover_letter_style.models import CoverLetterStyle
+        from apply_pilot.features.cover_letter_style.models import CoverLetterStyle
 
         assert isinstance(style, CoverLetterStyle)
         self.styles[style.user_id] = style
@@ -162,7 +162,7 @@ def _make_world(
         raw_text="I am a senior engineer.",
         plain_text="I am a senior engineer.",
     )
-    from job_apply.features.cover_letter_style.models import CoverLetterStyle
+    from apply_pilot.features.cover_letter_style.models import CoverLetterStyle
 
     style = CoverLetterStyle(
         user_id=user.id,

@@ -15,12 +15,12 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from job_apply.db import Base
-from job_apply.features.audit import models as _audit_models  # noqa: F401
-from job_apply.features.resumes import models as _resumes_models  # noqa: F401
-from job_apply.features.search_profiles import models as _sp_models  # noqa: F401
-from job_apply.features.sources.models import Vacancy
-from job_apply.features.sources.repository import (
+from apply_pilot.db import Base
+from apply_pilot.features.audit import models as _audit_models  # noqa: F401
+from apply_pilot.features.resumes import models as _resumes_models  # noqa: F401
+from apply_pilot.features.search_profiles import models as _sp_models  # noqa: F401
+from apply_pilot.features.sources.models import Vacancy
+from apply_pilot.features.sources.repository import (
     InMemoryVacancyRepository,
     SqlVacancyRepository,
     VacancyRepository,

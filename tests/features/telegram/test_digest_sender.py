@@ -13,9 +13,9 @@ from typing import Any
 
 import pytest
 
-from job_apply.features.telegram.bot import TelegramSettings
-from job_apply.features.telegram.digest import DigestSender, UserStats
-from job_apply.features.telegram.repository import InMemoryTelegramAccountRepository
+from apply_pilot.features.telegram.bot import TelegramSettings
+from apply_pilot.features.telegram.digest import DigestSender, UserStats
+from apply_pilot.features.telegram.repository import InMemoryTelegramAccountRepository
 
 # ---------------------------------------------------------------------------
 # Fakes

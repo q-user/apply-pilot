@@ -1,11 +1,11 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from job_apply.db import Base
-from job_apply.features.orders.models import Order
-from job_apply.features.orders.repositories import OrdersRepository
-from job_apply.features.orders.schemas import CreateOrderInput
-from job_apply.features.orders.service import OrdersService
+from apply_pilot.db import Base
+from apply_pilot.features.orders.models import Order
+from apply_pilot.features.orders.repositories import OrdersRepository
+from apply_pilot.features.orders.schemas import CreateOrderInput
+from apply_pilot.features.orders.service import OrdersService
 
 
 def test_create_order_returns_created_entity() -> None:

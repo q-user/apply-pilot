@@ -19,7 +19,7 @@ Issue: #19 (M2 — hh account connection)
 
 ## VSA boundaries
 
-All new code lives in `src/job_apply/features/hh/`. The slice is wired
+All new code lives in `src/apply_pilot/features/hh/`. The slice is wired
 together with constructor-injected dependencies, so the OAuth client
 and the state store are swappable for fakes in tests.
 
@@ -68,7 +68,7 @@ narrow enough that swapping it in later is a 1-file change.
 
 ## Configuration
 
-`HhOAuthSettings` (in `src/job_apply/config.py`) reads:
+`HhOAuthSettings` (in `src/apply_pilot/config.py`) reads:
 
 * `APP_HH_CLIENT_ID` — required
 * `APP_HH_CLIENT_SECRET` — required

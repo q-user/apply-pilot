@@ -40,24 +40,24 @@ from datetime import UTC, datetime
 
 import pytest
 
-from job_apply.features.apply_worker.models import ApplyJobStatus
-from job_apply.features.apply_worker.repository import (
+from apply_pilot.features.apply_worker.models import ApplyJobStatus
+from apply_pilot.features.apply_worker.repository import (
     InMemoryApplyJobRepository,
     InMemoryApplyStatusHistoryRepository,
 )
-from job_apply.features.apply_worker.retry import RetryPolicy
-from job_apply.features.apply_worker.runtime import (
+from apply_pilot.features.apply_worker.retry import RetryPolicy
+from apply_pilot.features.apply_worker.runtime import (
     DEFAULT_MAX_ATTEMPTS,
     ApplyResult,
     ApplyWorker,
     ApplyWorkerProcess,
 )
-from job_apply.features.apply_worker.service import ApplyJobService
-from job_apply.features.matches.models import MatchStatus, VacancyMatch
-from job_apply.features.matches.repository import InMemoryVacancyMatchRepository
-from job_apply.features.matches.service import MatchService
-from job_apply.features.search_profiles.models import SearchProfile
-from job_apply.features.sources.models import Vacancy
+from apply_pilot.features.apply_worker.service import ApplyJobService
+from apply_pilot.features.matches.models import MatchStatus, VacancyMatch
+from apply_pilot.features.matches.repository import InMemoryVacancyMatchRepository
+from apply_pilot.features.matches.service import MatchService
+from apply_pilot.features.search_profiles.models import SearchProfile
+from apply_pilot.features.sources.models import Vacancy
 
 # ---------------------------------------------------------------------------
 # Fakes

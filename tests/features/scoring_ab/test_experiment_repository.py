@@ -31,8 +31,8 @@ from sqlalchemy import StaticPool, create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from job_apply.db import Base
-from job_apply.features.scoring_ab.experiments import (
+from apply_pilot.db import Base
+from apply_pilot.features.scoring_ab.experiments import (
     InMemoryScoringExperimentRepository,
     ScoringExperiment,
     ScoringExperimentRepository,
@@ -284,7 +284,7 @@ def engine() -> Iterator[Engine]:
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    from job_apply.features.scoring_ab.models import (
+    from apply_pilot.features.scoring_ab.models import (
         ScoringExperimentOutcomeRow,
         ScoringExperimentRow,
         ScoringVariantRow,

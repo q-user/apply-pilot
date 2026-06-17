@@ -20,19 +20,19 @@ from sqlalchemy import StaticPool, create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from job_apply.db import Base, get_db
-from job_apply.features.scoring.llm import InMemoryLLMClient
-from job_apply.features.screening import models as _screening_models  # noqa: F401
-from job_apply.features.screening.api import router as screening_router
-from job_apply.features.screening.repository import (
+from apply_pilot.db import Base, get_db
+from apply_pilot.features.scoring.llm import InMemoryLLMClient
+from apply_pilot.features.screening import models as _screening_models  # noqa: F401
+from apply_pilot.features.screening.api import router as screening_router
+from apply_pilot.features.screening.repository import (
     InMemoryScreeningAnswerRepository,
     InMemoryScreeningQuestionRepository,
 )
-from job_apply.features.screening.service import ScreeningService
-from job_apply.features.sources.models import Vacancy
-from job_apply.features.users import models as _users_models  # noqa: F401
-from job_apply.features.users.api import router as auth_router
-from job_apply.features.users.repository import InMemoryUsersRepository
+from apply_pilot.features.screening.service import ScreeningService
+from apply_pilot.features.sources.models import Vacancy
+from apply_pilot.features.users import models as _users_models  # noqa: F401
+from apply_pilot.features.users.api import router as auth_router
+from apply_pilot.features.users.repository import InMemoryUsersRepository
 
 
 def _register_and_login(client: TestClient, email: str, password: str) -> str:
@@ -97,7 +97,7 @@ def app(session_factory, screening_state) -> Iterator[FastAPI]:
 
     # Wire the screening service with the in-memory repos shared with
     # the test through the ``screening_state`` fixture.
-    from job_apply.features.screening.api import get_screening_service
+    from apply_pilot.features.screening.api import get_screening_service
 
     # The in-memory answer repo needs a question lookup to filter
     # ``list_by_user(vacancy_id=...)``. The SQL implementation does the
@@ -303,7 +303,7 @@ def test_list_answers_returns_only_callers(
     body = my_resp.json()
     assert len(body) == 1
     # Decoding the bearer token gives the user id used to filter.
-    from job_apply.features.users.security import default_token_store
+    from apply_pilot.features.users.security import default_token_store
 
     user_id_str = default_token_store().resolve(token)
     assert body[0]["user_id"] == user_id_str

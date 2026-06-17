@@ -19,29 +19,29 @@ from sqlalchemy import StaticPool, create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from job_apply.db import Base, get_db
-from job_apply.features.apply_worker import models as _apply_worker_models  # noqa: F401
-from job_apply.features.apply_worker.models import ApplyJob, ApplyJobStatus
-from job_apply.features.apply_worker.repository import InMemoryApplyJobRepository
-from job_apply.features.cover_letter import models as _cl_models  # noqa: F401
-from job_apply.features.cover_letter.models import CoverLetterDraft, CoverLetterDraftStatus
-from job_apply.features.cover_letter.repository import InMemoryCoverLetterDraftRepository
-from job_apply.features.dashboard.service import DashboardService
-from job_apply.features.matches import models as _matches_models  # noqa: F401
-from job_apply.features.matches.models import MatchStatus, VacancyMatch
-from job_apply.features.matches.repository import InMemoryVacancyMatchRepository
-from job_apply.features.search_profiles import models as _sp_models  # noqa: F401
-from job_apply.features.search_profiles.models import SearchProfile
-from job_apply.features.search_profiles.repository import InMemorySearchProfileRepository
-from job_apply.features.sources import models as _sources_models  # noqa: F401
-from job_apply.features.sources.repository import InMemoryVacancyRepository
-from job_apply.features.telegram import models as _telegram_models  # noqa: F401
-from job_apply.features.telegram.repository import InMemoryTelegramAccountRepository
-from job_apply.features.users import models as _users_models  # noqa: F401
-from job_apply.features.users.api import router as auth_router
-from job_apply.features.users.models import User
-from job_apply.features.users.repository import InMemoryUsersRepository
-from job_apply.features.users.security import hash_password
+from apply_pilot.db import Base, get_db
+from apply_pilot.features.apply_worker import models as _apply_worker_models  # noqa: F401
+from apply_pilot.features.apply_worker.models import ApplyJob, ApplyJobStatus
+from apply_pilot.features.apply_worker.repository import InMemoryApplyJobRepository
+from apply_pilot.features.cover_letter import models as _cl_models  # noqa: F401
+from apply_pilot.features.cover_letter.models import CoverLetterDraft, CoverLetterDraftStatus
+from apply_pilot.features.cover_letter.repository import InMemoryCoverLetterDraftRepository
+from apply_pilot.features.dashboard.service import DashboardService
+from apply_pilot.features.matches import models as _matches_models  # noqa: F401
+from apply_pilot.features.matches.models import MatchStatus, VacancyMatch
+from apply_pilot.features.matches.repository import InMemoryVacancyMatchRepository
+from apply_pilot.features.search_profiles import models as _sp_models  # noqa: F401
+from apply_pilot.features.search_profiles.models import SearchProfile
+from apply_pilot.features.search_profiles.repository import InMemorySearchProfileRepository
+from apply_pilot.features.sources import models as _sources_models  # noqa: F401
+from apply_pilot.features.sources.repository import InMemoryVacancyRepository
+from apply_pilot.features.telegram import models as _telegram_models  # noqa: F401
+from apply_pilot.features.telegram.repository import InMemoryTelegramAccountRepository
+from apply_pilot.features.users import models as _users_models  # noqa: F401
+from apply_pilot.features.users.api import router as auth_router
+from apply_pilot.features.users.models import User
+from apply_pilot.features.users.repository import InMemoryUsersRepository
+from apply_pilot.features.users.security import hash_password
 
 # ---------------------------------------------------------------------------
 # Helpers / fixtures — service-level (in-memory fakes only)
@@ -359,7 +359,7 @@ def app(session_factory) -> Iterator[FastAPI]:
 
     # Import the router lazily so a failure to import the slice (during
     # the TDD red phase) does not mask itself behind a fixture error.
-    from job_apply.features.dashboard.api import router as dashboard_router
+    from apply_pilot.features.dashboard.api import router as dashboard_router
 
     application = FastAPI()
     application.include_router(auth_router)

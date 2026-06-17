@@ -23,9 +23,9 @@ from sqlalchemy import StaticPool, create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from job_apply.db import Base
-from job_apply.features.cover_letter_style.models import CoverLetterStyle
-from job_apply.features.cover_letter_style.repository import (
+from apply_pilot.db import Base
+from apply_pilot.features.cover_letter_style.models import CoverLetterStyle
+from apply_pilot.features.cover_letter_style.repository import (
     InMemoryCoverLetterStyleRepository,
     SqlCoverLetterStyleRepository,
 )
@@ -200,7 +200,7 @@ def engine() -> Iterator[Engine]:
         poolclass=StaticPool,
     )
     # Import models so SQLAlchemy knows about the table.
-    from job_apply.features.cover_letter_style import models  # noqa: F401
+    from apply_pilot.features.cover_letter_style import models  # noqa: F401
 
     Base.metadata.create_all(bind=eng)
     try:

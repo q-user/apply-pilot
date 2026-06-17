@@ -1,7 +1,7 @@
 """Tests for the Telegram bot dispatcher.
 
 These tests exercise the pure dispatch logic in
-:class:`job_apply.features.telegram.bot.TelegramBot.handle_update` and verify
+:class:`apply_pilot.features.telegram.bot.TelegramBot.handle_update` and verify
 that the long-running :class:`TelegramBotProcess` extends the project's
 standard :class:`BaseProcess`. HTTP transport is intentionally not touched:
 a real :class:`httpx.AsyncClient` is only created lazily on first use, so
@@ -12,9 +12,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from job_apply.features.telegram.bot import TelegramBot, TelegramSettings
-from job_apply.features.telegram.process import TelegramBotProcess
-from job_apply.runtime.process import BaseProcess
+from apply_pilot.features.telegram.bot import TelegramBot, TelegramSettings
+from apply_pilot.features.telegram.process import TelegramBotProcess
+from apply_pilot.runtime.process import BaseProcess
 
 
 def _start_update(text: str, *, chat_id: int = 100) -> dict[str, Any]:
