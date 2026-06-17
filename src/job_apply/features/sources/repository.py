@@ -92,13 +92,24 @@ def _vacancy_matches(
     """
     if source is not None and vacancy.source != source:
         return False
-    if salary_min is not None and (vacancy.salary_from is None or vacancy.salary_from < salary_min):
-        return False
-    if location is not None and (
-        vacancy.location is None or location.lower() not in vacancy.location.lower()
-    ):
-        return False
-    return since is None or vacancy.created_at is not None and vacancy.created_at > since
+    if salary_min is not None:
+        # Vacancies with no ``salary_from`` never satisfy a minimum floor.
+        salary_from = vacancy.salary_from
+        if salary_from is None or salary_from < salary_min:
+            return False
+    if location is not None:
+        # Vacancies with no location never satisfy a substring filter.
+        vacancy_location = vacancy.location
+        if vacancy_location is None:
+            return False
+        if location.lower() not in vacancy_location.lower():
+            return False
+    if since is not None:
+        # Vacancies with no ``created_at`` are treated as "not after" the cutoff.
+        created_at = vacancy.created_at
+        if created_at is None or created_at <= since:
+            return False
+    return True
 
 
 class InMemoryVacancyRepository:
