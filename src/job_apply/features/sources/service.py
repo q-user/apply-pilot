@@ -77,7 +77,7 @@ class SourceService:
         source: str,
         raw_data: dict[str, Any],
         *,
-        screening_extractor: "ScreeningQuestionExtractor | None" = None,
+        screening_extractor: ScreeningQuestionExtractor | None = None,
     ) -> list[ScreeningQuestion]:
         """Normalise raw source data, upsert the vacancy, and capture screening questions.
 

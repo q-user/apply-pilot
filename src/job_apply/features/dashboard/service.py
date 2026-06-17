@@ -124,7 +124,7 @@ def _bucket_by_status(
     the dashboard front-end can iterate the keys without
     special-casing missing buckets.
     """
-    buckets: dict[str, int] = {value: 0 for value in statuses}
+    buckets: dict[str, int] = dict.fromkeys(statuses, 0)
     for row in rows:
         status = get_status(row)
         if status is None:

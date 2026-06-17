@@ -105,9 +105,7 @@ class InMemoryScreeningQuestionRepository:
         self._by_vacancy.setdefault(question.vacancy_id, []).append(question.id)
         return question
 
-    def create_many(
-        self, questions: Sequence[ScreeningQuestion]
-    ) -> Sequence[ScreeningQuestion]:
+    def create_many(self, questions: Sequence[ScreeningQuestion]) -> Sequence[ScreeningQuestion]:
         """Persist a batch of questions in the order they are supplied.
 
         Empty input is a no-op and returns an empty list. The method
@@ -179,9 +177,7 @@ class SqlScreeningQuestionRepository:
             if self._session_factory is not None:
                 session.close()
 
-    def create_many(
-        self, questions: Sequence[ScreeningQuestion]
-    ) -> Sequence[ScreeningQuestion]:
+    def create_many(self, questions: Sequence[ScreeningQuestion]) -> Sequence[ScreeningQuestion]:
         """Persist a batch of questions in a single transaction.
 
         All rows go in with one ``session.add_all`` call so a vacancy
