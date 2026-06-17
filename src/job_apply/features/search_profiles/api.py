@@ -5,9 +5,12 @@ Endpoints
 
 * ``POST /search-profiles`` — create a new search profile.
 * ``GET /search-profiles`` — list profiles belonging to the caller.
+* ``GET /search-profiles/preferred`` — return the user's "preferred" profile (M6 placeholder).
 * ``GET /search-profiles/{id}`` — get a single profile.
 * ``PUT /search-profiles/{id}`` — update a profile.
 * ``DELETE /search-profiles/{id}`` — delete a profile.
+* ``POST /search-profiles/{id}/activate`` — flip ``is_active`` to ``True``.
+* ``POST /search-profiles/{id}/deactivate`` — flip ``is_active`` to ``False``.
 
 All endpoints require a valid bearer token.
 """
@@ -119,6 +122,37 @@ def list_profiles(
 
 
 @router.get(
+    "/preferred",
+    response_model=SearchProfileRead,
+    responses={
+        401: {"description": "Missing or invalid bearer token"},
+        404: {"description": "The user has no preferred profile"},
+    },
+)
+def get_preferred_profile(
+    user_id_str: str = Depends(_resolve_user_id),  # noqa: B008
+    service: SearchProfileService = Depends(get_search_profile_service),  # noqa: B008
+) -> SearchProfileRead:
+    """Return the authenticated user's "preferred" search profile.
+
+    This endpoint is a placeholder for a future M6 feature: a dedicated
+    setter is not yet exposed, so every user currently gets ``404``. The
+    data-model column ``is_preferred`` lands in this milestone so the
+    follow-up issue can be picked up without a schema change.
+    """
+    import uuid
+
+    preferred = service.get_preferred(uuid.UUID(user_id_str))
+    if preferred is None:
+        raise _http_error(
+            status.HTTP_404_NOT_FOUND,
+            "no_preferred_profile",
+            "the user has no preferred search profile",
+        )
+    return preferred
+
+
+@router.get(
     "/{profile_id}",
     response_model=SearchProfileRead,
     responses={
@@ -203,6 +237,64 @@ def delete_profile(
         raise _http_error(status.HTTP_404_NOT_FOUND, "not_found", "invalid profile id") from exc
     try:
         service.delete(profile_uuid, user_id=uuid.UUID(user_id_str))
+    except ProfileNotFoundError as exc:
+        raise _http_error(status.HTTP_404_NOT_FOUND, exc.code, exc.message) from exc
+    except ProfileOwnershipError as exc:
+        raise _http_error(status.HTTP_403_FORBIDDEN, exc.code, exc.message) from exc
+
+
+@router.post(
+    "/{profile_id}/activate",
+    response_model=SearchProfileRead,
+    responses={
+        401: {"description": "Missing or invalid bearer token"},
+        403: {"description": "Profile does not belong to the caller"},
+        404: {"description": "Profile not found"},
+    },
+)
+def activate_profile(
+    profile_id: str,
+    user_id_str: str = Depends(_resolve_user_id),  # noqa: B008
+    service: SearchProfileService = Depends(get_search_profile_service),  # noqa: B008
+) -> SearchProfileRead:
+    """Flip ``is_active`` to ``True`` on the given profile."""
+    import uuid
+
+    try:
+        profile_uuid = uuid.UUID(profile_id)
+    except ValueError as exc:
+        raise _http_error(status.HTTP_404_NOT_FOUND, "not_found", "invalid profile id") from exc
+    try:
+        return service.set_active(profile_uuid, active=True, user_id=uuid.UUID(user_id_str))
+    except ProfileNotFoundError as exc:
+        raise _http_error(status.HTTP_404_NOT_FOUND, exc.code, exc.message) from exc
+    except ProfileOwnershipError as exc:
+        raise _http_error(status.HTTP_403_FORBIDDEN, exc.code, exc.message) from exc
+
+
+@router.post(
+    "/{profile_id}/deactivate",
+    response_model=SearchProfileRead,
+    responses={
+        401: {"description": "Missing or invalid bearer token"},
+        403: {"description": "Profile does not belong to the caller"},
+        404: {"description": "Profile not found"},
+    },
+)
+def deactivate_profile(
+    profile_id: str,
+    user_id_str: str = Depends(_resolve_user_id),  # noqa: B008
+    service: SearchProfileService = Depends(get_search_profile_service),  # noqa: B008
+) -> SearchProfileRead:
+    """Flip ``is_active`` to ``False`` on the given profile."""
+    import uuid
+
+    try:
+        profile_uuid = uuid.UUID(profile_id)
+    except ValueError as exc:
+        raise _http_error(status.HTTP_404_NOT_FOUND, "not_found", "invalid profile id") from exc
+    try:
+        return service.set_active(profile_uuid, active=False, user_id=uuid.UUID(user_id_str))
     except ProfileNotFoundError as exc:
         raise _http_error(status.HTTP_404_NOT_FOUND, exc.code, exc.message) from exc
     except ProfileOwnershipError as exc:

@@ -67,6 +67,7 @@ class SearchProfileRead(BaseModel):
     location: str | None = None
     schedule: str | None = None
     is_active: bool = True
+    is_preferred: bool = False
     created_at: datetime
     updated_at: datetime | None = None
 

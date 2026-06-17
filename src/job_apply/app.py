@@ -91,6 +91,7 @@ def create_app(settings: FastAPISettings | None = None) -> FastAPI:
     from job_apply.features.cover_letter_style.api import (
         router as cover_letter_style_router,
     )
+    from job_apply.features.dashboard.api import router as dashboard_router
     from job_apply.features.hh.api import router as hh_router
     from job_apply.features.matches.api import router as matches_router
     from job_apply.features.screening.api import router as screening_router
@@ -101,6 +102,7 @@ def create_app(settings: FastAPISettings | None = None) -> FastAPI:
     app.include_router(apply_worker_router)
     app.include_router(apply_history_router)
     app.include_router(cover_letter_style_router)
+    app.include_router(dashboard_router)
     app.include_router(hh_router)
     app.include_router(matches_router)
     app.include_router(screening_router)
