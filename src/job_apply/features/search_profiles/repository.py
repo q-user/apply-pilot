@@ -50,6 +50,8 @@ class InMemorySearchProfileRepository:
             profile.id = uuid.uuid4()
         if profile.is_active is None:
             profile.is_active = True
+        if profile.is_preferred is None:
+            profile.is_preferred = False
         profile.created_at = datetime.now(UTC)
         self._by_id[profile.id] = profile
         self._by_user.setdefault(profile.user_id, []).append(profile.id)

@@ -12,9 +12,12 @@ Endpoints
 
 * ``POST /search-profiles`` — create a new search profile.
 * ``GET /search-profiles`` — list profiles belonging to the caller.
+* ``GET /search-profiles/preferred`` — return the user's "preferred" profile (M6 placeholder).
 * ``GET /search-profiles/{id}`` — get a single profile.
 * ``PUT /search-profiles/{id}`` — update a profile.
 * ``DELETE /search-profiles/{id}`` — delete a profile.
+* ``POST /search-profiles/{id}/activate`` — flip ``is_active`` to ``True``.
+* ``POST /search-profiles/{id}/deactivate`` — flip ``is_active`` to ``False``.
 """
 
 from __future__ import annotations
