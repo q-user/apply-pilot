@@ -31,6 +31,7 @@ from job_apply.features.matches.service import (
 )
 from job_apply.features.telegram.dto import SendMessageRequest
 from job_apply.features.telegram.repository import TelegramAccountRepository
+from job_apply.features.writing_style_memory.service import StyleMemoryService
 
 _LOGGER = logging.getLogger("job_apply.features.telegram.actions.accept")
 
@@ -127,6 +128,36 @@ class ApplyJobEnqueuer(Protocol):
 
 
 # ---------------------------------------------------------------------------
+# Cover-letter draft dependency (M8, issue #66)
+# ---------------------------------------------------------------------------
+
+
+class CoverLetterDraftSource(Protocol):
+    """Minimal protocol for the cover-letter draft dependency.
+
+    The handler only needs ``get_by_match`` to look up the body of the
+    accepted letter; the protocol is duck-typed so the handler stays
+    decoupled from the ``cover_letter`` package and avoids the import
+    cycle through ``matches.service`` / ``telegram``.
+    """
+
+    def get_by_match(self, match_id: uuid.UUID) -> object | None:
+        """Return the draft for ``match_id`` or ``None`` if absent.
+
+        The returned object is duck-typed; the handler only reads
+        ``.content`` and ``.id`` when present.
+        """
+        ...
+
+
+class _NoopDraftSource:
+    """Sentinel for "no cover-letter source available"."""
+
+    def get_by_match(self, match_id: uuid.UUID) -> object | None:
+        return None
+
+
+# ---------------------------------------------------------------------------
 # Handler
 # ---------------------------------------------------------------------------
 
@@ -164,11 +195,22 @@ class AcceptActionHandler:
         telegram_account_repo: TelegramAccountRepository,
         audit_service: AuditService,
         apply_job_enqueuer: ApplyJobEnqueuer | None = None,
+        style_memory_service: StyleMemoryService | None = None,
+        draft_repository: CoverLetterDraftSource | None = None,
     ) -> None:
         self._match_service = match_service
         self._telegram_account_repo = telegram_account_repo
         self._audit_service = audit_service
         self._apply_job_enqueuer = apply_job_enqueuer
+        # The style memory layer (M8, issue #66) is optional: when
+        # ``None`` the accept still works but no style memory entry is
+        # recorded. The ``draft_repository`` is the cover-letter
+        # gateway the service uses to fetch the accepted letter's
+        # body; ``None`` falls back to the no-op source.
+        self._style_memory_service = style_memory_service
+        self._draft_repository: CoverLetterDraftSource = (
+            draft_repository if draft_repository is not None else _NoopDraftSource()
+        )
 
     def handle(
         self,
@@ -265,6 +307,15 @@ class AcceptActionHandler:
             details=audit_details,
         )
 
+        # Best-effort style-memory recording (M8, issue #66). The
+        # accept must not fail if the style memory layer is down: the
+        # match is already in the accepted state, the audit event
+        # is recorded, and a future reconciler (out of scope for the
+        # slice) can backfill the entry. We do not surface the
+        # failure to the chat reply.
+        if self._style_memory_service is not None:
+            self._record_style_memory(user_id=user_id, match_id=command.match_id)
+
         _LOGGER.info(
             "telegram.accept.success",
             extra={
@@ -277,6 +328,63 @@ class AcceptActionHandler:
             chat_id=chat_id,
             text=(f"✅ Match {command.match_id} accepted. It is now eligible for applying."),
         )
+
+    def _record_style_memory(
+        self,
+        *,
+        user_id: uuid.UUID,
+        match_id: uuid.UUID,
+    ) -> None:
+        """Best-effort style-memory recording for an accepted match.
+
+        The handler resolves the cover letter's body via the
+        injected :class:`CoverLetterDraftSource`. When the draft
+        cannot be found (no generation yet) the recording is
+        skipped silently — the ``/regenerate`` flow can re-trigger
+        the memory when the user accepts again with a draft in
+        place.
+
+        Any failure inside the style-memory layer is logged and
+        swallowed so the accept command can still succeed; the
+        audit event above is the source of truth for "match
+        accepted" state.
+        """
+        try:
+            draft = self._draft_repository.get_by_match(match_id)
+        except Exception:
+            _LOGGER.exception(
+                "telegram.accept.style_memory_draft_lookup_failed",
+                extra={
+                    "event": "telegram.accept.style_memory_draft_lookup_failed",
+                    "match_id": str(match_id),
+                    "user_id": str(user_id),
+                },
+            )
+            return
+        if draft is None:
+            return
+        body = str(getattr(draft, "content", "") or "").strip()
+        if not body:
+            return
+        # ``cover_letter_id`` must be the FK target — the draft's own
+        # id — so the ``style_memory_entries.cover_letter_id`` row is
+        # consistent with the ``cover_letter_drafts`` table.
+        cover_letter_id = getattr(draft, "id", None) or match_id
+        try:
+            self._style_memory_service.record_accepted_letter(  # type: ignore[union-attr]
+                user_id=user_id,
+                cover_letter_id=cover_letter_id,
+                letter_text=body,
+            )
+        except Exception:
+            _LOGGER.exception(
+                "telegram.accept.style_memory_failed",
+                extra={
+                    "event": "telegram.accept.style_memory_failed",
+                    "match_id": str(match_id),
+                    "user_id": str(user_id),
+                },
+            )
 
 
 # Help text for ``/accept``. Kept as a module constant so tests and the
