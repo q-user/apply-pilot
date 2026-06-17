@@ -1,6 +1,6 @@
 """TDD tests for the apply-worker notification slice (M5, issue #50).
 
-When an :class:`~job_apply.features.apply_worker.models.ApplyJob`
+When an :class:`~apply_pilot.features.apply_worker.models.ApplyJob`
 reaches a terminal state, the user gets a Telegram message. The
 :class:`ApplyNotifier` Protocol is the seam; the production
 implementation is :class:`TelegramApplyNotifier`; tests use recording
@@ -41,19 +41,19 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
-from job_apply.features.apply_worker.models import ApplyJob, ApplyJobStatus
-from job_apply.features.apply_worker.notifications import (
+from apply_pilot.features.apply_worker.models import ApplyJob, ApplyJobStatus
+from apply_pilot.features.apply_worker.notifications import (
     ApplyNotifier,
     TelegramApplyNotifier,
 )
-from job_apply.features.apply_worker.repository import (
+from apply_pilot.features.apply_worker.repository import (
     InMemoryApplyJobRepository,
     InMemoryApplyStatusHistoryRepository,
 )
-from job_apply.features.apply_worker.service import ApplyJobService
-from job_apply.features.matches.models import MatchStatus, VacancyMatch
-from job_apply.features.search_profiles.models import SearchProfile
-from job_apply.features.telegram.repository import InMemoryTelegramAccountRepository
+from apply_pilot.features.apply_worker.service import ApplyJobService
+from apply_pilot.features.matches.models import MatchStatus, VacancyMatch
+from apply_pilot.features.search_profiles.models import SearchProfile
+from apply_pilot.features.telegram.repository import InMemoryTelegramAccountRepository
 
 # ---------------------------------------------------------------------------
 # Fakes

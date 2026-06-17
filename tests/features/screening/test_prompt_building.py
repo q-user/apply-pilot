@@ -18,7 +18,7 @@ No LLM call is made; the prompt builder is a pure function.
 
 from __future__ import annotations
 
-from job_apply.features.screening.prompts import (
+from apply_pilot.features.screening.prompts import (
     SCREENING_ANSWER_PROMPT_V1,
     SCREENING_ANSWER_PROMPT_VERSION,
     build_screening_answer_prompt,

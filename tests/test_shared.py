@@ -13,14 +13,14 @@ import logging
 
 import pytest
 
-from job_apply.shared.errors import (
+from apply_pilot.shared.errors import (
     ConflictError,
     DomainError,
     NotFoundError,
     ValidationError,
 )
-from job_apply.shared.logging import configure_logging
-from job_apply.shared.schemas import IdentifiedSchema, TimestampedSchema
+from apply_pilot.shared.logging import configure_logging
+from apply_pilot.shared.schemas import IdentifiedSchema, TimestampedSchema
 
 # ---------- errors ----------
 
@@ -100,12 +100,12 @@ def test_configure_logging_json_emits_json(restore_root_logger: None) -> None:
     buffer = io.StringIO()
     configure_logging(level="INFO", json=True, stream=buffer)
 
-    logging.getLogger("job_apply.shared").info("hello %s", "world")
+    logging.getLogger("apply_pilot.shared").info("hello %s", "world")
 
     payload = json.loads(buffer.getvalue().splitlines()[-1])
     assert payload["message"] == "hello world"
     assert payload["level"] == "INFO"
-    assert payload["logger"] == "job_apply.shared"
+    assert payload["logger"] == "apply_pilot.shared"
 
 
 # ---------- schemas ----------

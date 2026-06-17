@@ -22,9 +22,9 @@ from datetime import UTC, datetime
 import httpx
 import pytest
 
-from job_apply.features.matches.models import MatchStatus, VacancyMatch
-from job_apply.features.matches.repository import InMemoryVacancyMatchRepository
-from job_apply.features.scoring.llm import (
+from apply_pilot.features.matches.models import MatchStatus, VacancyMatch
+from apply_pilot.features.matches.repository import InMemoryVacancyMatchRepository
+from apply_pilot.features.scoring.llm import (
     WILDCARD_PROMPT,
     HttpLLMClient,
     InMemoryLLMClient,
@@ -34,14 +34,14 @@ from job_apply.features.scoring.llm import (
     ScoreResult,
     parse_score_response,
 )
-from job_apply.features.scoring.prompts import build_vacancy_scoring_prompt
-from job_apply.features.scoring.registry import (
+from apply_pilot.features.scoring.prompts import build_vacancy_scoring_prompt
+from apply_pilot.features.scoring.registry import (
     InMemoryPromptVersionRegistry,
     PromptVersion,
 )
-from job_apply.features.scoring.service import ScoringService
-from job_apply.features.search_profiles.models import SearchProfile
-from job_apply.features.sources.models import Vacancy
+from apply_pilot.features.scoring.service import ScoringService
+from apply_pilot.features.search_profiles.models import SearchProfile
+from apply_pilot.features.sources.models import Vacancy
 
 # ---------------------------------------------------------------------------
 # Shared helpers

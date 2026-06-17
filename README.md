@@ -61,7 +61,7 @@ gh repo create apply-pilot --private \
 ## Layout
 
 ```text
-src/job_apply/
+src/apply_pilot/
   db.py
   config.py
   features/
@@ -87,7 +87,7 @@ userstory/
 For the full convention contract that every slice and the `shared/`
 package must follow, see [`docs/VSA.md`](docs/VSA.md). The short version:
 
-* Slices live under `src/job_apply/features/<slice>/` and own their
+* Slices live under `src/apply_pilot/features/<slice>/` and own their
   models, persistence, DTOs, and use cases.
 * Slices never import from another slice's private modules. The only
   allowed cross-slice imports are the public re-exports.
@@ -129,7 +129,7 @@ them.
 
 ```bash
 # Smoke check: import the package inside the built image
-docker compose run --rm api python -c "import job_apply; print('ok')"
+docker compose run --rm api python -c "import apply_pilot; print('ok')"
 
 # Run Alembic migrations against the compose-managed database
 docker compose run --rm api alembic upgrade head

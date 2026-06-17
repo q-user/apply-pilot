@@ -19,16 +19,16 @@ import uuid
 
 import pytest
 
-from job_apply.features.source_metrics.models import (
+from apply_pilot.features.source_metrics.models import (
     SourceMetricEventKind,
 )
-from job_apply.features.source_metrics.repository import (
+from apply_pilot.features.source_metrics.repository import (
     InMemorySourceMetricRepository,
 )
-from job_apply.features.source_metrics.service import SourceMetricsService
-from job_apply.features.sources.models import Vacancy
-from job_apply.features.sources.repository import InMemoryVacancyRepository
-from job_apply.features.sources.service import SourceService
+from apply_pilot.features.source_metrics.service import SourceMetricsService
+from apply_pilot.features.sources.models import Vacancy
+from apply_pilot.features.sources.repository import InMemoryVacancyRepository
+from apply_pilot.features.sources.service import SourceService
 
 
 @pytest.fixture

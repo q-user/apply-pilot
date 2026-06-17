@@ -32,23 +32,23 @@ import pytest
 # front means the cycle resolves the second time around — once
 # ``matches.service`` is fully loaded, subsequent re-imports return
 # the cached module from ``sys.modules`` and the cycle is broken.
-import job_apply.features.sources.models  # noqa: F401  (pre-load to break circular import)
-from job_apply.features.matches.models import MatchStatus, VacancyMatch
-from job_apply.features.matches.repository import InMemoryVacancyMatchRepository
-from job_apply.features.scoring.llm import (
+import apply_pilot.features.sources.models  # noqa: F401  (pre-load to break circular import)
+from apply_pilot.features.matches.models import MatchStatus, VacancyMatch
+from apply_pilot.features.matches.repository import InMemoryVacancyMatchRepository
+from apply_pilot.features.scoring.llm import (
     WILDCARD_PROMPT,
     InMemoryLLMClient,
     LLMScorer,
 )
-from job_apply.features.scoring.service import ScoringService
-from job_apply.features.scoring_ab.experiments import (
+from apply_pilot.features.scoring.service import ScoringService
+from apply_pilot.features.scoring_ab.experiments import (
     InMemoryScoringExperimentRepository,
     ScoringExperiment,
     ScoringVariant,
 )
-from job_apply.features.scoring_ab.service import ScoringExperimentService
-from job_apply.features.search_profiles.models import SearchProfile
-from job_apply.features.sources.models import Vacancy
+from apply_pilot.features.scoring_ab.service import ScoringExperimentService
+from apply_pilot.features.search_profiles.models import SearchProfile
+from apply_pilot.features.sources.models import Vacancy
 
 # ---------------------------------------------------------------------------
 # Fixtures

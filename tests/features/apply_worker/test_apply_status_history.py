@@ -46,21 +46,23 @@ from sqlalchemy import StaticPool, create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from job_apply.db import Base
-from job_apply.features.apply_worker.models import (
+from apply_pilot.db import Base
+from apply_pilot.features.apply_worker.models import (
     ApplyJobStatus,
 )
-from job_apply.features.apply_worker.repository import (
+from apply_pilot.features.apply_worker.repository import (
     InMemoryApplyJobRepository,
     SqlApplyStatusHistoryRepository,
 )
-from job_apply.features.apply_worker.service import ApplyJobService
-from job_apply.features.matches.models import VacancyMatch
-from job_apply.features.search_profiles.models import SearchProfile
-from job_apply.features.users.security import issue_token
+from apply_pilot.features.apply_worker.service import ApplyJobService
+from apply_pilot.features.matches.models import VacancyMatch
+from apply_pilot.features.search_profiles.models import SearchProfile
+from apply_pilot.features.users.security import issue_token
 
 # Local alias to keep the import footprint narrow.
-MatchStatus = __import__("job_apply.features.matches.models", fromlist=["MatchStatus"]).MatchStatus
+MatchStatus = __import__(
+    "apply_pilot.features.matches.models", fromlist=["MatchStatus"]
+).MatchStatus
 
 
 # ---------------------------------------------------------------------------
@@ -74,7 +76,7 @@ def test_model_columns_and_defaults() -> None:
     ``from_status`` is the only column that allows ``NULL`` — it is unset
     on the initial creation row.
     """
-    from job_apply.features.apply_worker.models import ApplyStatusHistory
+    from apply_pilot.features.apply_worker.models import ApplyStatusHistory
 
     job_id = uuid.uuid4()
     row = ApplyStatusHistory(
@@ -94,7 +96,7 @@ def test_model_columns_and_defaults() -> None:
 
 def test_model_allows_initial_creation_row() -> None:
     """The initial creation row has ``from_status=None``."""
-    from job_apply.features.apply_worker.models import ApplyStatusHistory
+    from apply_pilot.features.apply_worker.models import ApplyStatusHistory
 
     row = ApplyStatusHistory(
         job_id=uuid.uuid4(),
@@ -112,8 +114,8 @@ def test_model_allows_initial_creation_row() -> None:
 
 def test_in_memory_create_returns_persisted_row() -> None:
     """``create`` materialises ``id`` and ``created_at`` for the row."""
-    from job_apply.features.apply_worker.models import ApplyStatusHistory
-    from job_apply.features.apply_worker.repository import (
+    from apply_pilot.features.apply_worker.models import ApplyStatusHistory
+    from apply_pilot.features.apply_worker.repository import (
         InMemoryApplyStatusHistoryRepository,
     )
 
@@ -140,8 +142,8 @@ def test_in_memory_list_by_job_orders_by_created_at() -> None:
     in chronological order (oldest first) so the API consumer reads the
     timeline forwards.
     """
-    from job_apply.features.apply_worker.models import ApplyStatusHistory
-    from job_apply.features.apply_worker.repository import (
+    from apply_pilot.features.apply_worker.models import ApplyStatusHistory
+    from apply_pilot.features.apply_worker.repository import (
         InMemoryApplyStatusHistoryRepository,
     )
 
@@ -192,8 +194,8 @@ def test_in_memory_create_stamps_created_at_when_missing() -> None:
     fallback so a future refactor that drops the model default does
     not silently leave the in-memory rows without a timestamp.
     """
-    from job_apply.features.apply_worker.models import ApplyStatusHistory
-    from job_apply.features.apply_worker.repository import (
+    from apply_pilot.features.apply_worker.models import ApplyStatusHistory
+    from apply_pilot.features.apply_worker.repository import (
         InMemoryApplyStatusHistoryRepository,
     )
 
@@ -263,7 +265,7 @@ class _World:
 @pytest.fixture
 def world() -> _World:
     """Build a world with collaborator-injected in-memory fakes."""
-    from job_apply.features.apply_worker.repository import (
+    from apply_pilot.features.apply_worker.repository import (
         InMemoryApplyStatusHistoryRepository,
     )
 
@@ -311,7 +313,7 @@ def world() -> _World:
 
 def test_job_creation_writes_initial_history(world: _World) -> None:
     """Enqueueing writes a single creation row with ``from_status=None``."""
-    from job_apply.features.apply_worker.repository import (
+    from apply_pilot.features.apply_worker.repository import (
         InMemoryApplyStatusHistoryRepository,
     )
 
@@ -330,7 +332,7 @@ def test_job_creation_writes_initial_history(world: _World) -> None:
 
 def test_claim_next_writes_history(world: _World) -> None:
     """``claim_next`` writes a ``queued -> running`` history row."""
-    from job_apply.features.apply_worker.repository import (
+    from apply_pilot.features.apply_worker.repository import (
         InMemoryApplyStatusHistoryRepository,
     )
 
@@ -351,7 +353,7 @@ def test_claim_next_writes_history(world: _World) -> None:
 
 def test_complete_writes_history(world: _World) -> None:
     """``complete`` writes a ``running -> succeeded`` history row."""
-    from job_apply.features.apply_worker.repository import (
+    from apply_pilot.features.apply_worker.repository import (
         InMemoryApplyStatusHistoryRepository,
     )
 
@@ -380,7 +382,7 @@ def test_failure_writes_history_with_error(world: _World) -> None:
     ``next_run_at`` scheduled into the future. The history row must
     surface both branches and always carry the supplied ``error``.
     """
-    from job_apply.features.apply_worker.repository import (
+    from apply_pilot.features.apply_worker.repository import (
         InMemoryApplyStatusHistoryRepository,
     )
 
@@ -419,7 +421,7 @@ def test_failure_writes_history_with_error(world: _World) -> None:
 
 def test_cancel_writes_history(world: _World) -> None:
     """``cancel`` writes a ``queued -> cancelled`` history row."""
-    from job_apply.features.apply_worker.repository import (
+    from apply_pilot.features.apply_worker.repository import (
         InMemoryApplyStatusHistoryRepository,
     )
 
@@ -452,7 +454,7 @@ def engine() -> Iterator[Engine]:
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    from job_apply.features.apply_worker import models  # noqa: F401
+    from apply_pilot.features.apply_worker import models  # noqa: F401
 
     Base.metadata.create_all(bind=eng)
     try:
@@ -470,7 +472,7 @@ def session_factory(engine: Engine) -> Iterator[sessionmaker[Session]]:
 def sql_history_repo(
     session_factory: sessionmaker[Session],
 ) -> SqlApplyStatusHistoryRepository:
-    from job_apply.features.apply_worker.repository import (
+    from apply_pilot.features.apply_worker.repository import (
         SqlApplyStatusHistoryRepository,
     )
 
@@ -481,7 +483,7 @@ def test_sql_create_and_list_round_trip(
     sql_history_repo: Any,
 ) -> None:
     """The SQL repo persists a row and reads it back."""
-    from job_apply.features.apply_worker.models import ApplyStatusHistory
+    from apply_pilot.features.apply_worker.models import ApplyStatusHistory
 
     job_id = uuid.uuid4()
     row = ApplyStatusHistory(
@@ -504,7 +506,7 @@ def test_sql_list_by_job_filters_and_orders(
     sql_history_repo: Any,
 ) -> None:
     """``list_by_job`` only returns rows for the requested job, ordered by time."""
-    from job_apply.features.apply_worker.models import ApplyStatusHistory
+    from apply_pilot.features.apply_worker.models import ApplyStatusHistory
 
     job_id = uuid.uuid4()
     other_job_id = uuid.uuid4()
@@ -548,7 +550,7 @@ class _ApiWorld:
 @pytest.fixture
 def api_world() -> _ApiWorld:
     """In-memory fakes shared between the router and the API tests."""
-    from job_apply.features.apply_worker.repository import (
+    from apply_pilot.features.apply_worker.repository import (
         InMemoryApplyStatusHistoryRepository,
     )
 
@@ -593,10 +595,10 @@ def api_world() -> _ApiWorld:
 
 @pytest.fixture
 def app(api_world: _ApiWorld) -> Iterator[FastAPI]:
-    from job_apply.features.apply_worker.api import (
+    from apply_pilot.features.apply_worker.api import (
         get_apply_job_service,
     )
-    from job_apply.features.apply_worker.api import (
+    from apply_pilot.features.apply_worker.api import (
         router as apply_worker_router,
     )
 
@@ -656,7 +658,7 @@ def test_api_history_endpoint_403_for_other_users_job(
     client: TestClient, token: str, api_world: _ApiWorld
 ) -> None:
     """A job owned by a different user returns 403."""
-    from job_apply.features.apply_worker.models import (
+    from apply_pilot.features.apply_worker.models import (
         ApplyJob,
         compute_idempotency_key,
     )

@@ -4,7 +4,7 @@ These tests cover the public surface of the ``features.hh.apply`` module:
 
 * :class:`HhApplyAdapter` request shape (via ``httpx.MockTransport``) — no
   real network calls. The slice's narrow contract for issue #48 is that
-  :class:`~job_apply.features.apply_worker.models.ApplyJob.idempotency_key`
+  :class:`~apply_pilot.features.apply_worker.models.ApplyJob.idempotency_key`
   flows through to the outgoing request as an ``Idempotency-Key`` header
   so hh.ru can dedup retries within the same enqueue triple.
 """
@@ -16,8 +16,8 @@ import uuid
 import httpx
 import pytest
 
-from job_apply.features.apply_worker.models import ApplyJob
-from job_apply.features.hh.apply import HhApplyAdapter
+from apply_pilot.features.apply_worker.models import ApplyJob
+from apply_pilot.features.hh.apply import HhApplyAdapter
 
 # ---------------------------------------------------------------------------
 # Fixtures

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import pytest
 
-from job_apply.features.scoring.registry import (
+from apply_pilot.features.scoring.registry import (
     InMemoryPromptVersionRegistry,
     PromptVersion,
     seed_default_prompts,

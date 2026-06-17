@@ -27,15 +27,15 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from job_apply.features.apply_worker import ApplyJobService
-from job_apply.features.apply_worker.models import ApplyJobStatus
-from job_apply.features.apply_worker.repository import (
+from apply_pilot.features.apply_worker import ApplyJobService
+from apply_pilot.features.apply_worker.models import ApplyJobStatus
+from apply_pilot.features.apply_worker.repository import (
     InMemoryApplyJobRepository,
     InMemoryApplyStatusHistoryRepository,
 )
-from job_apply.features.matches.models import VacancyMatch
-from job_apply.features.search_profiles.models import SearchProfile
-from job_apply.features.users.security import issue_token
+from apply_pilot.features.matches.models import VacancyMatch
+from apply_pilot.features.search_profiles.models import SearchProfile
+from apply_pilot.features.users.security import issue_token
 
 MAX_LIMIT = 200
 DEFAULT_LIMIT = 50
@@ -152,12 +152,12 @@ def app(apply_world: _World) -> Iterator[FastAPI]:
     """FastAPI app with the apply-history router mounted and DI overridden.
 
     The apply-history router is a separate ``APIRouter`` living in
-    :mod:`job_apply.features.apply_worker.api` so the public path is
+    :mod:`apply_pilot.features.apply_worker.api` so the public path is
     ``/apply-history`` (not ``/apply-jobs/apply-history``). The same
     ``get_apply_job_service`` dependency is overridden so the
     collaborator-injected in-memory fakes are wired.
     """
-    from job_apply.features.apply_worker.api import (
+    from apply_pilot.features.apply_worker.api import (
         apply_history_router,
         get_apply_job_service,
     )
@@ -249,7 +249,7 @@ def test_history_isolates_users() -> None:
     caller_world = _build_user_world()
     other_world = _build_user_world()
 
-    from job_apply.features.apply_worker.api import (
+    from apply_pilot.features.apply_worker.api import (
         apply_history_router,
         get_apply_job_service,
     )

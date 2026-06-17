@@ -5,7 +5,7 @@ Revises: 9f1a2b3c4d5e
 Create Date: 2026-06-16 20:00:00.000000
 
 Adds the ``hh_resume_links`` table that backs the
-:class:`~job_apply.features.hh.resumes.HhResumeLink` model introduced in
+:class:`~apply_pilot.features.hh.resumes.HhResumeLink` model introduced in
 M2, issue #21. The table stores the link between a local user and an
 hh.ru resume, ready for the next slice to fetch full-text content and
 populate ``local_resume_id``.

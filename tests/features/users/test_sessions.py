@@ -9,13 +9,13 @@ from __future__ import annotations
 
 import pytest
 
-from job_apply.features.users.repository import (
+from apply_pilot.features.users.repository import (
     InMemoryUserSessionRepository,
     InMemoryUsersRepository,
 )
-from job_apply.features.users.schemas import UserCreate
-from job_apply.features.users.security import InvalidTokenError
-from job_apply.features.users.service import (
+from apply_pilot.features.users.schemas import UserCreate
+from apply_pilot.features.users.security import InvalidTokenError
+from apply_pilot.features.users.service import (
     AuthenticationError,
     AuthService,
 )

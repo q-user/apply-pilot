@@ -14,10 +14,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from job_apply.features.resumes.extractors import PlainTextExtractor
-from job_apply.features.resumes.schemas import UploadedFile
-from job_apply.features.resumes.service import ResumesService
-from job_apply.shared.errors import NotFoundError, ValidationError
+from apply_pilot.features.resumes.extractors import PlainTextExtractor
+from apply_pilot.features.resumes.schemas import UploadedFile
+from apply_pilot.features.resumes.service import ResumesService
+from apply_pilot.shared.errors import NotFoundError, ValidationError
 
 # ---------------------------------------------------------------------------
 # Test fakes
@@ -28,7 +28,7 @@ class InMemoryResumesRepository:
     """In-memory test double for :class:`ResumesRepository`.
 
     The class deliberately does **not** subclass
-    :class:`job_apply.features.resumes.repository.ResumesRepository`: that
+    :class:`apply_pilot.features.resumes.repository.ResumesRepository`: that
     would require standing up a SQLAlchemy session, which is exactly the
     coupling the tests are designed to avoid. Instead, this fake
     implements the same surface the service depends on (a duck-typed

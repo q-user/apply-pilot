@@ -18,12 +18,12 @@ from sqlalchemy import StaticPool, create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from job_apply.db import Base, get_db
-from job_apply.features.audit import models as _audit_models  # noqa: F401
-from job_apply.features.resumes import models as _resumes_models  # noqa: F401
-from job_apply.features.resumes.api import router as resumes_router
-from job_apply.features.users import models as _users_models  # noqa: F401
-from job_apply.features.users.api import router as auth_router
+from apply_pilot.db import Base, get_db
+from apply_pilot.features.audit import models as _audit_models  # noqa: F401
+from apply_pilot.features.resumes import models as _resumes_models  # noqa: F401
+from apply_pilot.features.resumes.api import router as resumes_router
+from apply_pilot.features.users import models as _users_models  # noqa: F401
+from apply_pilot.features.users.api import router as auth_router
 
 
 @pytest.fixture

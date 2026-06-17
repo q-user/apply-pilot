@@ -1,6 +1,6 @@
 # Vertical Slice Architecture — Conventions
 
-This document is the contract that every vertical slice in `job_apply` must
+This document is the contract that every vertical slice in `apply_pilot` must
 follow. It is intentionally opinionated: the goal is to make each slice
 **self-contained**, **independently testable**, and **easy to delete or
 replace** without rippling through the rest of the codebase.
@@ -22,7 +22,7 @@ to revisit the slice boundary — not the rule.
    `runtime`, and `shared`. Slices never depend on each other directly.
    If two slices need to coordinate, an application-level orchestrator
    (e.g. a FastAPI route, a worker tick, a CLI command) wires them.
-4. **Shared code is a last resort.** Anything in `src/job_apply/shared/`
+4. **Shared code is a last resort.** Anything in `src/apply_pilot/shared/`
    must be used by **more than one slice** and must be **stable**.
    Adding to `shared/` is a public-API decision: changing it later costs
    more than duplicating it once.
@@ -36,7 +36,7 @@ to revisit the slice boundary — not the rule.
 ## 2. Repository layout
 
 ```text
-src/job_apply/
+src/apply_pilot/
   app.py                # FastAPI factory and entry point (transport)
   config.py             # environment-driven settings dataclasses
   db.py                 # SQLAlchemy engine/session/base primitives
@@ -80,7 +80,7 @@ A typical slice is four small files, each with a focused responsibility.
 
 ### `models.py` — ORM models
 
-* Inherit from `job_apply.db.Base`.
+* Inherit from `apply_pilot.db.Base`.
 * One class per database table. Use `Mapped[...]` / `mapped_column` from
   SQLAlchemy 2.x; do not introduce legacy `Column` declarations.
 * Prefer narrow types (`String(64)`, `Enum[...]`) over free-form
@@ -128,7 +128,7 @@ A typical slice is four small files, each with a focused responsibility.
 * All cross-cutting collaborators (DB session, Redis, HTTP clients,
   clocks, idempotency stores) are passed in through constructors.
 * Slices do not import the module-level singletons from
-  `job_apply.db` or `job_apply.runtime` at use-case time. Production
+  `apply_pilot.db` or `apply_pilot.runtime` at use-case time. Production
   wiring (FastAPI dependency, worker constructor) is the only place
   that touches them.
 * For tests, prefer fakes: an in-memory `dict` stands in for a
@@ -183,7 +183,7 @@ tests/
 
 ## 6. Errors
 
-Slices raise `DomainError` subclasses from `job_apply.shared.errors`.
+Slices raise `DomainError` subclasses from `apply_pilot.shared.errors`.
 The transport layer (FastAPI handler, CLI, worker) is responsible for
 translating `code` / `message` into a response.
 
@@ -234,13 +234,13 @@ is small; the cost of removing a premature abstraction is not.
 
 ## 8. Logging
 
-* Use `configure_logging()` from `job_apply.shared.logging` at process
+* Use `configure_logging()` from `apply_pilot.shared.logging` at process
   start. It is safe to call from the FastAPI lifespan, from a CLI
   `main()`, and from a worker's `BaseProcess.run()`.
 * It honours `APP_LOG_LEVEL` and `APP_LOG_JSON`. JSON output is the
   default for production; human-readable text is opt-in for local
   development.
-* Loggers are named after the module path: `job_apply.features.orders.service`.
+* Loggers are named after the module path: `apply_pilot.features.orders.service`.
   Do not log from inside the repository except for debug-level
   diagnostics; the service is the right place for narrative logs.
 
@@ -250,7 +250,7 @@ is small; the cost of removing a premature abstraction is not.
 
 * Slices never read `os.environ` directly. Accept settings through the
   constructor; the entry point wires environment variables to
-  dataclasses from `job_apply.config`.
+  dataclasses from `apply_pilot.config`.
 * New settings dataclasses follow the same shape as the existing
   ones: a `@dataclass(frozen=True)` value type and a `get_*_settings()`
   builder that reads the environment.
@@ -276,7 +276,7 @@ is small; the cost of removing a premature abstraction is not.
 
 ## 11. Adding a new vertical slice — checklist
 
-1. Create the package: `src/job_apply/features/<slice>/` with an empty
+1. Create the package: `src/apply_pilot/features/<slice>/` with an empty
    `__init__.py`.
 2. Add ORM models in `models.py` (or a more descriptive name for the
    aggregate).
@@ -320,7 +320,7 @@ custom security primitive is laid out.
 ### Layout
 
 ```text
-src/job_apply/features/users/
+src/apply_pilot/features/users/
   __init__.py     # public re-exports (User, AuthService, schemas, security)
   models.py       # User ORM model + a cross-dialect GUID TypeDecorator
   schemas.py      # Pydantic v2 DTOs (UserCreate, UserRead, AuthToken, ...)
@@ -342,7 +342,7 @@ tests/features/users/
 ### Conventions worth copying
 
 * **Own your model.** Other slices import :class:`User` from
-  ``job_apply.features.users``. The field set — `id: UUID`,
+  ``apply_pilot.features.users``. The field set — `id: UUID`,
   `email: str` (unique), `hashed_password: str`, `is_active: bool`,
   `created_at` / `updated_at` — is the stable public surface. New
   fields are additive; renaming or removing anything is a SemVer-major

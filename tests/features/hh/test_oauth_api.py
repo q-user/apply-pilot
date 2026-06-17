@@ -17,21 +17,21 @@ from sqlalchemy import StaticPool, create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from job_apply.db import Base, get_db
-from job_apply.features.hh.api import (
+from apply_pilot.db import Base, get_db
+from apply_pilot.features.hh.api import (
     get_hh_oauth_client,
     get_hh_oauth_state_store,
 )
-from job_apply.features.hh.api import (
+from apply_pilot.features.hh.api import (
     router as hh_router,
 )
-from job_apply.features.hh.oauth import (
+from apply_pilot.features.hh.oauth import (
     HhOAuthStateStore,
     HhTokenResponse,
     InMemoryHhOAuthClient,
 )
-from job_apply.features.users import models as _users_models  # noqa: F401
-from job_apply.features.users.api import router as auth_router
+from apply_pilot.features.users import models as _users_models  # noqa: F401
+from apply_pilot.features.users.api import router as auth_router
 
 
 @pytest.fixture

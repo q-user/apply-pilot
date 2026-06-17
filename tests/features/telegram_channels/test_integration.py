@@ -11,10 +11,10 @@ from __future__ import annotations
 
 import asyncio
 
-from job_apply.features.sources.adapter import AdapterRegistry, SourceQuery
-from job_apply.features.sources.repository import InMemoryVacancyRepository
-from job_apply.features.sources.service import SourceService
-from job_apply.features.telegram_channels import (
+from apply_pilot.features.sources.adapter import AdapterRegistry, SourceQuery
+from apply_pilot.features.sources.repository import InMemoryVacancyRepository
+from apply_pilot.features.sources.service import SourceService
+from apply_pilot.features.telegram_channels import (
     InMemoryTelegramChannelClient,
     TelegramChannelClassifier,
     TelegramChannelConfig,

@@ -1,6 +1,6 @@
 """Unit tests for the health probe classes (M6, issue #56).
 
-The :mod:`job_apply.features.admin.health` module owns four concrete
+The :mod:`apply_pilot.features.admin.health` module owns four concrete
 probes:
 
 * :class:`DatabaseHealthCheck` — ``SELECT 1`` via SQLAlchemy
@@ -24,7 +24,7 @@ import pytest
 from sqlalchemy import StaticPool, create_engine, text
 from sqlalchemy.engine import Engine
 
-from job_apply.features.admin.health import (
+from apply_pilot.features.admin.health import (
     DatabaseHealthCheck,
     HealthStatus,
     LlmHealthCheck,
@@ -167,7 +167,7 @@ async def test_llm_health_check_unhealthy_when_api_key_missing() -> None:
 @pytest.mark.asyncio
 async def test_redis_health_check_unhealthy_when_unreachable() -> None:
     """An unreachable Redis must surface as ``unhealthy`` with the error detail."""
-    from job_apply.config import Settings
+    from apply_pilot.config import Settings
 
     bad_settings = Settings(
         database_url="sqlite:///:memory:",

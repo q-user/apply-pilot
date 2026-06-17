@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from job_apply.features.resumes.extractors import (
+from apply_pilot.features.resumes.extractors import (
     ExtractionNotSupportedError,
     PlainTextExtractor,
     TextExtractor,

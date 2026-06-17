@@ -34,7 +34,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import StaticPool, create_engine
 
-from job_apply.features.admin.integrations import (
+from apply_pilot.features.admin.integrations import (
     DatabaseChecker,
     HhOAuthChecker,
     InMemoryIntegrationStatusStore,
@@ -43,8 +43,8 @@ from job_apply.features.admin.integrations import (
     IntegrationStatusWorker,
     LlmChecker,
 )
-from job_apply.features.hh.oauth import HhHttpOAuthClient
-from job_apply.features.scoring.llm import HttpLLMClient, LLMSettings
+from apply_pilot.features.hh.oauth import HhHttpOAuthClient
+from apply_pilot.features.scoring.llm import HttpLLMClient, LLMSettings
 
 # ---------------------------------------------------------------------------
 # Fake checker used by the worker + API tests
@@ -405,7 +405,7 @@ def app(
     llm_checker: LlmChecker,
 ) -> Iterator[FastAPI]:
     """A minimal FastAPI app with the admin router and overridden DI."""
-    from job_apply.features.admin.api import (
+    from apply_pilot.features.admin.api import (
         get_integration_status_store,
         get_integration_status_worker,
         router,

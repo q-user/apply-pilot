@@ -7,8 +7,8 @@ import asyncio
 import fakeredis.aioredis
 import pytest
 
-from job_apply.config import Settings
-from job_apply.runtime.redis_client import create_redis_client
+from apply_pilot.config import Settings
+from apply_pilot.runtime.redis_client import create_redis_client
 
 
 @pytest.fixture

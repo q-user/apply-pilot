@@ -19,13 +19,13 @@ from collections.abc import Callable
 from datetime import UTC, date, datetime
 from typing import cast
 
-from job_apply.features.matches.models import MatchStatus, VacancyMatch
-from job_apply.features.matches.repository import InMemoryVacancyMatchRepository
-from job_apply.features.search_profiles.models import SearchProfile
-from job_apply.features.search_profiles.repository import InMemorySearchProfileRepository
-from job_apply.features.telegram.digest import StatsService
-from job_apply.features.telegram.repository import InMemoryTelegramAccountRepository
-from job_apply.features.users.repository import InMemoryUsersRepository
+from apply_pilot.features.matches.models import MatchStatus, VacancyMatch
+from apply_pilot.features.matches.repository import InMemoryVacancyMatchRepository
+from apply_pilot.features.search_profiles.models import SearchProfile
+from apply_pilot.features.search_profiles.repository import InMemorySearchProfileRepository
+from apply_pilot.features.telegram.digest import StatsService
+from apply_pilot.features.telegram.repository import InMemoryTelegramAccountRepository
+from apply_pilot.features.users.repository import InMemoryUsersRepository
 
 
 class _FakeClock:

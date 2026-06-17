@@ -29,15 +29,15 @@ from sqlalchemy import StaticPool, create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from job_apply.db import Base
-from job_apply.features.learning import models as _learning_models  # noqa: F401
-from job_apply.features.learning.models import LearningSignalRow
-from job_apply.features.learning.repository import (
+from apply_pilot.db import Base
+from apply_pilot.features.learning import models as _learning_models  # noqa: F401
+from apply_pilot.features.learning.models import LearningSignalRow
+from apply_pilot.features.learning.repository import (
     InMemoryLearningSignalRepository,
     LearningSignalRepository,
     SqlLearningSignalRepository,
 )
-from job_apply.features.learning.service import (
+from apply_pilot.features.learning.service import (
     LearningSignal,
     LearningSignalsService,
 )

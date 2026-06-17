@@ -3,7 +3,7 @@
 The adapter is the slice's public surface — the cross-source
 orchestration code (the future ``VacancySearchService`` migration, the
 :class:`ApplyWorker`) only ever sees a
-:class:`~job_apply.features.sources.adapter.SourceAdapter` Protocol.
+:class:`~apply_pilot.features.sources.adapter.SourceAdapter` Protocol.
 :class:`TelegramChannelSourceAdapter` is the concrete implementation:
 
 * :meth:`search` pulls messages from the configured
@@ -24,20 +24,20 @@ from dataclasses import dataclass
 
 import pytest
 
-from job_apply.features.apply_worker.models import ApplyJob
-from job_apply.features.sources.adapter import (
+from apply_pilot.features.apply_worker.models import ApplyJob
+from apply_pilot.features.sources.adapter import (
     AdapterRegistry,
     SourceAdapter,
     SourceQuery,
 )
-from job_apply.features.telegram_channels import (
+from apply_pilot.features.telegram_channels import (
     InMemoryTelegramChannelClient,
     TelegramChannelClassifier,
     TelegramChannelConfig,
     TelegramChannelMessage,
     TelegramChannelSourceAdapter,
 )
-from job_apply.features.telegram_channels.normalizer import TelegramChannelNormalizer
+from apply_pilot.features.telegram_channels.normalizer import TelegramChannelNormalizer
 
 # ---------------------------------------------------------------------------
 # World fixture

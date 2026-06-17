@@ -40,7 +40,7 @@ Schema
 * ``prompt_version``  — ``<name>@<semver>`` stamp mirroring the
                         :class:`PromptVersion` value object. The
                         service fills this with
-                        :data:`job_apply.features.screening.prompts.SCREENING_ANSWER_PROMPT_VERSION`.
+                        :data:`apply_pilot.features.screening.prompts.SCREENING_ANSWER_PROMPT_VERSION`.
 * ``model_used``      — the LLM model name that produced the text.
                         ``NULL`` when the client does not expose a
                         model attribute.

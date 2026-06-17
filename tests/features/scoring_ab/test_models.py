@@ -15,7 +15,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from job_apply.features.scoring_ab.experiments import (
+from apply_pilot.features.scoring_ab.experiments import (
     ScoringExperiment,
     ScoringVariant,
 )

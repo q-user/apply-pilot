@@ -16,13 +16,13 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from job_apply.app import create_app
-from job_apply.features.source_metrics.api import get_source_metric_repository
-from job_apply.features.source_metrics.models import (
+from apply_pilot.app import create_app
+from apply_pilot.features.source_metrics.api import get_source_metric_repository
+from apply_pilot.features.source_metrics.models import (
     SourceMetricEvent,
     SourceMetricEventKind,
 )
-from job_apply.features.source_metrics.repository import (
+from apply_pilot.features.source_metrics.repository import (
     InMemorySourceMetricRepository,
 )
 

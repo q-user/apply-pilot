@@ -11,9 +11,9 @@ import uuid
 
 import pytest
 
-from job_apply.features.audit.models import AuditEventType
-from job_apply.features.audit.repository import InMemoryAuditLogRepository
-from job_apply.features.audit.service import AuditService
+from apply_pilot.features.audit.models import AuditEventType
+from apply_pilot.features.audit.repository import InMemoryAuditLogRepository
+from apply_pilot.features.audit.service import AuditService
 
 
 @pytest.fixture

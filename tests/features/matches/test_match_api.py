@@ -17,17 +17,17 @@ from sqlalchemy import StaticPool, create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from job_apply.db import Base, get_db
-from job_apply.features.matches import models as _matches_models  # noqa: F401
-from job_apply.features.matches.api import router as matches_router
-from job_apply.features.search_profiles import models as _sp_models  # noqa: F401
-from job_apply.features.search_profiles.api import router as sp_router
-from job_apply.features.sources import models as _sources_models  # noqa: F401
-from job_apply.features.sources.models import Vacancy
-from job_apply.features.users import models as _users_models  # noqa: F401
-from job_apply.features.users.api import router as auth_router
-from job_apply.features.users.models import User
-from job_apply.features.users.security import hash_password
+from apply_pilot.db import Base, get_db
+from apply_pilot.features.matches import models as _matches_models  # noqa: F401
+from apply_pilot.features.matches.api import router as matches_router
+from apply_pilot.features.search_profiles import models as _sp_models  # noqa: F401
+from apply_pilot.features.search_profiles.api import router as sp_router
+from apply_pilot.features.sources import models as _sources_models  # noqa: F401
+from apply_pilot.features.sources.models import Vacancy
+from apply_pilot.features.users import models as _users_models  # noqa: F401
+from apply_pilot.features.users.api import router as auth_router
+from apply_pilot.features.users.models import User
+from apply_pilot.features.users.security import hash_password
 
 
 def _register_and_login(client: TestClient, email: str, password: str) -> str:
@@ -166,8 +166,8 @@ def test_list_matches_returns_only_own(
 
     # Seed matches directly through the SQL repos so the test isolates the
     # list endpoint from the create / bulk paths.
-    from job_apply.features.matches.models import VacancyMatch
-    from job_apply.features.matches.repository import SqlVacancyMatchRepository
+    from apply_pilot.features.matches.models import VacancyMatch
+    from apply_pilot.features.matches.repository import SqlVacancyMatchRepository
 
     repo = SqlVacancyMatchRepository(session_factory=session_factory)
     repo.create(VacancyMatch(search_profile_id=uuid.UUID(my_profile), vacancy_id=vacancy))
@@ -185,8 +185,8 @@ def test_list_matches_filters_by_status(token: str, client: TestClient, session_
     profile = _create_profile_via_api(client, token, "p")
     vacancy = _seed_vacancy(session_factory)
 
-    from job_apply.features.matches.models import VacancyMatch
-    from job_apply.features.matches.repository import SqlVacancyMatchRepository
+    from apply_pilot.features.matches.models import VacancyMatch
+    from apply_pilot.features.matches.repository import SqlVacancyMatchRepository
 
     repo = SqlVacancyMatchRepository(session_factory=session_factory)
     repo.create(VacancyMatch(search_profile_id=uuid.UUID(profile), vacancy_id=vacancy))
@@ -217,8 +217,8 @@ def test_get_match_returns_200(token: str, client: TestClient, session_factory) 
     profile = _create_profile_via_api(client, token, "p")
     vacancy = _seed_vacancy(session_factory)
 
-    from job_apply.features.matches.models import VacancyMatch
-    from job_apply.features.matches.repository import SqlVacancyMatchRepository
+    from apply_pilot.features.matches.models import VacancyMatch
+    from apply_pilot.features.matches.repository import SqlVacancyMatchRepository
 
     match = SqlVacancyMatchRepository(session_factory=session_factory).create(
         VacancyMatch(search_profile_id=uuid.UUID(profile), vacancy_id=vacancy)
@@ -239,8 +239,8 @@ def test_get_match_of_other_user_returns_403(
     profile = _create_profile_via_api(client, other_token, "p")
     vacancy = _seed_vacancy(session_factory)
 
-    from job_apply.features.matches.models import VacancyMatch
-    from job_apply.features.matches.repository import SqlVacancyMatchRepository
+    from apply_pilot.features.matches.models import VacancyMatch
+    from apply_pilot.features.matches.repository import SqlVacancyMatchRepository
 
     match = SqlVacancyMatchRepository(session_factory=session_factory).create(
         VacancyMatch(search_profile_id=uuid.UUID(profile), vacancy_id=vacancy)
@@ -272,8 +272,8 @@ def test_patch_match_status_returns_200(token: str, client: TestClient, session_
     profile = _create_profile_via_api(client, token, "p")
     vacancy = _seed_vacancy(session_factory)
 
-    from job_apply.features.matches.models import VacancyMatch
-    from job_apply.features.matches.repository import SqlVacancyMatchRepository
+    from apply_pilot.features.matches.models import VacancyMatch
+    from apply_pilot.features.matches.repository import SqlVacancyMatchRepository
 
     match = SqlVacancyMatchRepository(session_factory=session_factory).create(
         VacancyMatch(search_profile_id=uuid.UUID(profile), vacancy_id=vacancy)
@@ -296,8 +296,8 @@ def test_patch_match_status_with_score_returns_200(
     profile = _create_profile_via_api(client, token, "p")
     vacancy = _seed_vacancy(session_factory)
 
-    from job_apply.features.matches.models import VacancyMatch
-    from job_apply.features.matches.repository import SqlVacancyMatchRepository
+    from apply_pilot.features.matches.models import VacancyMatch
+    from apply_pilot.features.matches.repository import SqlVacancyMatchRepository
 
     match = SqlVacancyMatchRepository(session_factory=session_factory).create(
         VacancyMatch(search_profile_id=uuid.UUID(profile), vacancy_id=vacancy)
@@ -324,8 +324,8 @@ def test_patch_match_other_user_returns_403(
     profile = _create_profile_via_api(client, other_token, "p")
     vacancy = _seed_vacancy(session_factory)
 
-    from job_apply.features.matches.models import VacancyMatch
-    from job_apply.features.matches.repository import SqlVacancyMatchRepository
+    from apply_pilot.features.matches.models import VacancyMatch
+    from apply_pilot.features.matches.repository import SqlVacancyMatchRepository
 
     match = SqlVacancyMatchRepository(session_factory=session_factory).create(
         VacancyMatch(search_profile_id=uuid.UUID(profile), vacancy_id=vacancy)
@@ -355,8 +355,8 @@ def test_patch_match_invalid_status_returns_422(
     profile = _create_profile_via_api(client, token, "p")
     vacancy = _seed_vacancy(session_factory)
 
-    from job_apply.features.matches.models import VacancyMatch
-    from job_apply.features.matches.repository import SqlVacancyMatchRepository
+    from apply_pilot.features.matches.models import VacancyMatch
+    from apply_pilot.features.matches.repository import SqlVacancyMatchRepository
 
     match = SqlVacancyMatchRepository(session_factory=session_factory).create(
         VacancyMatch(search_profile_id=uuid.UUID(profile), vacancy_id=vacancy)

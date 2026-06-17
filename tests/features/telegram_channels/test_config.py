@@ -1,7 +1,7 @@
 """TDD tests for the Telegram-channels configuration (M7, issue #58).
 
 The slice reads its configuration from environment variables via
-:func:`job_apply.features.telegram_channels.config.get_telegram_channels_settings`.
+:func:`apply_pilot.features.telegram_channels.config.get_telegram_channels_settings`.
 The list of watched channels is a comma-separated string of
 ``@username`` or numeric channel ids; the poll interval is a
 positive float (seconds). The tests pin the env contract and the
@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from job_apply.features.telegram_channels import (
+from apply_pilot.features.telegram_channels import (
     TelegramChannelConfig,
     get_telegram_channels_settings,
 )

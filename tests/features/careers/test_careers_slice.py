@@ -1,7 +1,7 @@
 """TDD tests for the careers vertical slice (M7, issue #59).
 
 The slice adds a *company-careers-page* source adapter to the
-cross-source :class:`~job_apply.features.sources.adapter.SourceAdapter`
+cross-source :class:`~apply_pilot.features.sources.adapter.SourceAdapter`
 contract. The tests cover four surfaces:
 
 1. **Parsers** — :func:`parse_rss` (XML, stdlib only) and
@@ -13,7 +13,7 @@ contract. The tests cover four surfaces:
    :class:`SourceAdapter`, retries on transient errors with the
    per-site backoff, parses with the configured parser, and
    normalises via the shared
-   :class:`~job_apply.features.sources.normalizer.VacancyNormalizer`.
+   :class:`~apply_pilot.features.sources.normalizer.VacancyNormalizer`.
 4. **Config** — :class:`CareersPageSite` / :class:`CareersPageConfig`
    validate input (positive retry count, valid kind, non-empty URL).
 
@@ -34,19 +34,19 @@ from dataclasses import dataclass, field
 import httpx
 import pytest
 
-from job_apply.features.careers.adapter import CareersPageSourceAdapter
-from job_apply.features.careers.client import (
+from apply_pilot.features.careers.adapter import CareersPageSourceAdapter
+from apply_pilot.features.careers.client import (
     HttpCareersClient,
     InMemoryCareersHttpClient,
 )
-from job_apply.features.careers.config import CareersPageConfig, CareersPageSite
-from job_apply.features.careers.parser import (
+from apply_pilot.features.careers.config import CareersPageConfig, CareersPageSite
+from apply_pilot.features.careers.parser import (
     CareersParserKind,
     parse_html,
     parse_rss,
 )
-from job_apply.features.sources.adapter import AdapterRegistry, SourceAdapter, SourceQuery
-from job_apply.features.sources.normalizer import VacancyNormalizer
+from apply_pilot.features.sources.adapter import AdapterRegistry, SourceAdapter, SourceQuery
+from apply_pilot.features.sources.normalizer import VacancyNormalizer
 
 
 def asyncio_run(coro):  # type: ignore[no-untyped-def]
@@ -438,7 +438,7 @@ class TestAdapterConformance:
     def test_apply_raises_not_implemented(self) -> None:
         """Career pages have no programmatic apply — surface that explicitly."""
         world = _make_world()
-        from job_apply.features.apply_worker.models import ApplyJob
+        from apply_pilot.features.apply_worker.models import ApplyJob
 
         job = ApplyJob(  # type: ignore[call-arg]
             match_id=uuid.UUID(int=1),
@@ -521,7 +521,7 @@ class TestAdapterSearchHtml:
         "defensive" check: the operator gets a clear ``ValueError``
         at wire-up time, well before the network call.
         """
-        from job_apply.features.careers.adapter import CareersAdapterError
+        from apply_pilot.features.careers.adapter import CareersAdapterError
 
         with pytest.raises(ValueError, match="kind"):
             CareersPageSite(
@@ -597,7 +597,7 @@ class TestAdapterRetry:
 
     def test_retries_on_transport_error(self) -> None:
         """A transport error counts as transient; the adapter retries."""
-        from job_apply.features.careers.client import CareersTransportError
+        from apply_pilot.features.careers.client import CareersTransportError
 
         url = "https://acme.example/jobs"
         client = InMemoryCareersHttpClient(responses={})
@@ -627,7 +627,7 @@ class TestAdapterRetry:
 
     def test_exhausts_retry_budget(self) -> None:
         """When every attempt is 5xx, the adapter raises after ``retry_count``."""
-        from job_apply.features.careers.adapter import CareersAdapterError
+        from apply_pilot.features.careers.adapter import CareersAdapterError
 
         url = "https://acme.example/jobs"
         world = _make_world(
@@ -643,7 +643,7 @@ class TestAdapterRetry:
 
     def test_does_not_retry_on_4xx(self) -> None:
         """A 4xx response is permanent: no retry, the error propagates."""
-        from job_apply.features.careers.adapter import CareersAdapterError
+        from apply_pilot.features.careers.adapter import CareersAdapterError
 
         url = "https://acme.example/jobs"
         world = _make_world(

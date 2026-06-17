@@ -21,25 +21,25 @@ from dataclasses import dataclass
 
 import pytest
 
-from job_apply.features.audit.models import AuditEventType
-from job_apply.features.audit.repository import InMemoryAuditLogRepository
-from job_apply.features.audit.service import AuditService
-from job_apply.features.cover_letter.models import CoverLetterDraft
-from job_apply.features.cover_letter.repository import InMemoryCoverLetterDraftRepository
-from job_apply.features.matches.models import MatchStatus, VacancyMatch
-from job_apply.features.matches.repository import InMemoryVacancyMatchRepository
-from job_apply.features.matches.service import MatchService
-from job_apply.features.search_profiles.models import SearchProfile
-from job_apply.features.search_profiles.repository import InMemorySearchProfileRepository
-from job_apply.features.sources.models import Vacancy
-from job_apply.features.telegram.actions.accept import (
+from apply_pilot.features.audit.models import AuditEventType
+from apply_pilot.features.audit.repository import InMemoryAuditLogRepository
+from apply_pilot.features.audit.service import AuditService
+from apply_pilot.features.cover_letter.models import CoverLetterDraft
+from apply_pilot.features.cover_letter.repository import InMemoryCoverLetterDraftRepository
+from apply_pilot.features.matches.models import MatchStatus, VacancyMatch
+from apply_pilot.features.matches.repository import InMemoryVacancyMatchRepository
+from apply_pilot.features.matches.service import MatchService
+from apply_pilot.features.search_profiles.models import SearchProfile
+from apply_pilot.features.search_profiles.repository import InMemorySearchProfileRepository
+from apply_pilot.features.sources.models import Vacancy
+from apply_pilot.features.telegram.actions.accept import (
     AcceptActionHandler,
     parse_accept_command,
 )
-from job_apply.features.telegram.dto import SendMessageRequest
-from job_apply.features.telegram.repository import InMemoryTelegramAccountRepository
-from job_apply.features.writing_style_memory.repository import InMemoryStyleMemoryRepository
-from job_apply.features.writing_style_memory.service import StyleMemoryService
+from apply_pilot.features.telegram.dto import SendMessageRequest
+from apply_pilot.features.telegram.repository import InMemoryTelegramAccountRepository
+from apply_pilot.features.writing_style_memory.repository import InMemoryStyleMemoryRepository
+from apply_pilot.features.writing_style_memory.service import StyleMemoryService
 
 # ---------------------------------------------------------------------------
 # Helpers / fixtures

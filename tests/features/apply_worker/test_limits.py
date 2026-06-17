@@ -1,6 +1,6 @@
 """TDD tests for the ``apply_worker`` rate limiter (M5, issue #46).
 
-The rate limiter lives in :mod:`job_apply.features.apply_worker.limits`
+The rate limiter lives in :mod:`apply_pilot.features.apply_worker.limits`
 and gates :meth:`ApplyJobService.enqueue_for_match` on a per-user
 hourly / daily cap. The slice is wired through DI: tests construct
 :class:`InMemoryRateLimiter` directly, production wires the
@@ -33,21 +33,21 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from job_apply.config import ApplyWorkerSettings
-from job_apply.features.apply_worker.limits import (
+from apply_pilot.config import ApplyWorkerSettings
+from apply_pilot.features.apply_worker.limits import (
     InMemoryRateLimiter,
     RateLimiter,
     RateLimitExceeded,
     SqlRateLimiter,
 )
-from job_apply.features.apply_worker.repository import (
+from apply_pilot.features.apply_worker.repository import (
     InMemoryApplyJobRepository,
     InMemoryApplyStatusHistoryRepository,
 )
-from job_apply.features.apply_worker.service import ApplyJobService
-from job_apply.features.matches.models import VacancyMatch
-from job_apply.features.search_profiles.models import SearchProfile
-from job_apply.features.users.security import issue_token
+from apply_pilot.features.apply_worker.service import ApplyJobService
+from apply_pilot.features.matches.models import VacancyMatch
+from apply_pilot.features.search_profiles.models import SearchProfile
+from apply_pilot.features.users.security import issue_token
 
 # ---------------------------------------------------------------------------
 # Fakes / helpers
@@ -370,10 +370,10 @@ def test_api_limits_endpoint() -> None:
     world.rate_limiter.record(world.user_id, key="apply")
 
     application = FastAPI()
-    from job_apply.features.apply_worker.api import (
+    from apply_pilot.features.apply_worker.api import (
         get_apply_job_service,
     )
-    from job_apply.features.apply_worker.api import (
+    from apply_pilot.features.apply_worker.api import (
         router as apply_worker_router,
     )
 
@@ -419,8 +419,8 @@ def test_sql_rate_limiter_round_trip() -> None:
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
-    from job_apply.db import Base
-    from job_apply.features.apply_worker.models import ApplyRateLimitEvent
+    from apply_pilot.db import Base
+    from apply_pilot.features.apply_worker.models import ApplyRateLimitEvent
 
     engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
     Base.metadata.create_all(engine)

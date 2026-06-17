@@ -24,22 +24,22 @@ import uuid
 
 import pytest
 
-from job_apply.features.cover_letter.models import CoverLetterDraft
-from job_apply.features.cover_letter.repository import InMemoryCoverLetterDraftRepository
-from job_apply.features.matches.models import MatchStatus, VacancyMatch
-from job_apply.features.matches.repository import InMemoryVacancyMatchRepository
-from job_apply.features.matches.service import MatchService
-from job_apply.features.search_profiles.models import SearchProfile
-from job_apply.features.search_profiles.repository import InMemorySearchProfileRepository
-from job_apply.features.sources.models import Vacancy
-from job_apply.features.sources.repository import InMemoryVacancyRepository
-from job_apply.features.telegram.actions.review import (
+from apply_pilot.features.cover_letter.models import CoverLetterDraft
+from apply_pilot.features.cover_letter.repository import InMemoryCoverLetterDraftRepository
+from apply_pilot.features.matches.models import MatchStatus, VacancyMatch
+from apply_pilot.features.matches.repository import InMemoryVacancyMatchRepository
+from apply_pilot.features.matches.service import MatchService
+from apply_pilot.features.search_profiles.models import SearchProfile
+from apply_pilot.features.search_profiles.repository import InMemorySearchProfileRepository
+from apply_pilot.features.sources.models import Vacancy
+from apply_pilot.features.sources.repository import InMemoryVacancyRepository
+from apply_pilot.features.telegram.actions.review import (
     ReviewActionHandler,
     render_review_card,
 )
-from job_apply.features.telegram.bot import TelegramBot, TelegramSettings
-from job_apply.features.telegram.dto import SendMessageRequest
-from job_apply.features.telegram.repository import InMemoryTelegramAccountRepository
+from apply_pilot.features.telegram.bot import TelegramBot, TelegramSettings
+from apply_pilot.features.telegram.dto import SendMessageRequest
+from apply_pilot.features.telegram.repository import InMemoryTelegramAccountRepository
 
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
@@ -197,7 +197,7 @@ def _link_telegram(
 def test_parse_review_command() -> None:
     """``/review <match_id>`` parses to a ReviewCommand with the match_id."""
     match_id = "11111111-1111-1111-1111-111111111111"
-    from job_apply.features.telegram.actions.review import parse_review_command
+    from apply_pilot.features.telegram.actions.review import parse_review_command
 
     command = parse_review_command(f"/review {match_id}")
 
@@ -207,7 +207,7 @@ def test_parse_review_command() -> None:
 
 def test_parse_review_command_without_args_returns_none() -> None:
     """``/review`` with no args must return None so the caller shows help text."""
-    from job_apply.features.telegram.actions.review import parse_review_command
+    from apply_pilot.features.telegram.actions.review import parse_review_command
 
     assert parse_review_command("/review") is None
     assert parse_review_command("/review   ") is None
@@ -215,7 +215,7 @@ def test_parse_review_command_without_args_returns_none() -> None:
 
 def test_parse_review_command_with_invalid_uuid_returns_none() -> None:
     """``/review <garbage>`` must return None so the caller shows usage text."""
-    from job_apply.features.telegram.actions.review import parse_review_command
+    from apply_pilot.features.telegram.actions.review import parse_review_command
 
     assert parse_review_command("/review not-a-uuid") is None
 

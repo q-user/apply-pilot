@@ -39,20 +39,20 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
-from job_apply.db import Base
-from job_apply.features.apply_worker.models import (
+from apply_pilot.db import Base
+from apply_pilot.features.apply_worker.models import (
     ApplyJob,
     ApplyJobStatus,
     compute_idempotency_key,
 )
-from job_apply.features.apply_worker.repository import (
+from apply_pilot.features.apply_worker.repository import (
     ApplyJobRepository,
     InMemoryApplyJobRepository,
     SqlApplyJobRepository,
 )
-from job_apply.features.matches import models as _match_models  # noqa: F401
-from job_apply.features.sources import models as _vacancy_models  # noqa: F401
-from job_apply.features.users import models as _user_models  # noqa: F401
+from apply_pilot.features.matches import models as _match_models  # noqa: F401
+from apply_pilot.features.sources import models as _vacancy_models  # noqa: F401
+from apply_pilot.features.users import models as _user_models  # noqa: F401
 
 
 def _make_job(**overrides: Any) -> ApplyJob:
@@ -229,7 +229,7 @@ def engine() -> Iterator[Engine]:
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    from job_apply.features.apply_worker import models  # noqa: F401
+    from apply_pilot.features.apply_worker import models  # noqa: F401
 
     Base.metadata.create_all(bind=eng)
     try:

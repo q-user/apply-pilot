@@ -29,39 +29,39 @@ from typing import Any, cast
 import httpx
 import pytest
 
-from job_apply.features.audit.models import AuditEventType
-from job_apply.features.audit.repository import InMemoryAuditLogRepository
-from job_apply.features.audit.service import AuditService
-from job_apply.features.cover_letter.models import (
+from apply_pilot.features.audit.models import AuditEventType
+from apply_pilot.features.audit.repository import InMemoryAuditLogRepository
+from apply_pilot.features.audit.service import AuditService
+from apply_pilot.features.cover_letter.models import (
     CoverLetterDraft,
     CoverLetterDraftStatus,
 )
-from job_apply.features.cover_letter.repository import InMemoryCoverLetterDraftRepository
-from job_apply.features.cover_letter.service import CoverLetterService
-from job_apply.features.cover_letter_style.models import CoverLetterStyle
-from job_apply.features.cover_letter_style.repository import (
+from apply_pilot.features.cover_letter.repository import InMemoryCoverLetterDraftRepository
+from apply_pilot.features.cover_letter.service import CoverLetterService
+from apply_pilot.features.cover_letter_style.models import CoverLetterStyle
+from apply_pilot.features.cover_letter_style.repository import (
     InMemoryCoverLetterStyleRepository,
 )
-from job_apply.features.matches.models import MatchStatus, VacancyMatch
-from job_apply.features.matches.repository import InMemoryVacancyMatchRepository
-from job_apply.features.matches.service import MatchService
-from job_apply.features.resumes.models import Resume
-from job_apply.features.scoring.llm import InMemoryLLMClient
-from job_apply.features.search_profiles.models import SearchProfile
-from job_apply.features.search_profiles.repository import InMemorySearchProfileRepository
-from job_apply.features.sources.models import Vacancy
-from job_apply.features.telegram.actions.accept import AcceptActionHandler
-from job_apply.features.telegram.actions.defer import DeferActionHandler
-from job_apply.features.telegram.actions.regenerate import RegenerateActionHandler
-from job_apply.features.telegram.actions.reject import RejectActionHandler
-from job_apply.features.telegram.actions.review import ReviewActionHandler
-from job_apply.features.telegram.bot import TelegramBot, TelegramSettings
-from job_apply.features.telegram.digest import StatsService
-from job_apply.features.telegram.digest.sender import DigestSender
-from job_apply.features.telegram.linking import TelegramLinkingService
-from job_apply.features.telegram.repository import InMemoryTelegramAccountRepository
-from job_apply.features.users.models import User
-from job_apply.features.users.repository import InMemoryUsersRepository
+from apply_pilot.features.matches.models import MatchStatus, VacancyMatch
+from apply_pilot.features.matches.repository import InMemoryVacancyMatchRepository
+from apply_pilot.features.matches.service import MatchService
+from apply_pilot.features.resumes.models import Resume
+from apply_pilot.features.scoring.llm import InMemoryLLMClient
+from apply_pilot.features.search_profiles.models import SearchProfile
+from apply_pilot.features.search_profiles.repository import InMemorySearchProfileRepository
+from apply_pilot.features.sources.models import Vacancy
+from apply_pilot.features.telegram.actions.accept import AcceptActionHandler
+from apply_pilot.features.telegram.actions.defer import DeferActionHandler
+from apply_pilot.features.telegram.actions.regenerate import RegenerateActionHandler
+from apply_pilot.features.telegram.actions.reject import RejectActionHandler
+from apply_pilot.features.telegram.actions.review import ReviewActionHandler
+from apply_pilot.features.telegram.bot import TelegramBot, TelegramSettings
+from apply_pilot.features.telegram.digest import StatsService
+from apply_pilot.features.telegram.digest.sender import DigestSender
+from apply_pilot.features.telegram.linking import TelegramLinkingService
+from apply_pilot.features.telegram.repository import InMemoryTelegramAccountRepository
+from apply_pilot.features.users.models import User
+from apply_pilot.features.users.repository import InMemoryUsersRepository
 
 # ---------------------------------------------------------------------------
 # Fake repositories the slices need (the same shape used by

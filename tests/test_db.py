@@ -14,8 +14,8 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from job_apply.config import DatabaseSettings, get_database_settings
-from job_apply.db import (
+from apply_pilot.config import DatabaseSettings, get_database_settings
+from apply_pilot.db import (
     Base,
     SessionLocal,
     engine,
@@ -23,7 +23,7 @@ from job_apply.db import (
     get_engine,
     init_db,
 )
-from job_apply.features.orders import models as _orders_models  # noqa: F401  (register Order)
+from apply_pilot.features.orders import models as _orders_models  # noqa: F401  (register Order)
 
 # ---------------------------------------------------------------------------
 # Base metadata

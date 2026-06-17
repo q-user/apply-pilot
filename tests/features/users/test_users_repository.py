@@ -14,9 +14,9 @@ from sqlalchemy import StaticPool, create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from job_apply.db import Base
-from job_apply.features.users import models as _users_models  # noqa: F401
-from job_apply.features.users.repository import SqlAlchemyUsersRepository
+from apply_pilot.db import Base
+from apply_pilot.features.users import models as _users_models  # noqa: F401
+from apply_pilot.features.users.repository import SqlAlchemyUsersRepository
 
 
 @pytest.fixture

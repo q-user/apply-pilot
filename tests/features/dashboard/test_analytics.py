@@ -1,6 +1,6 @@
 """TDD tests for the dashboard analytics endpoints (M8, issue #67).
 
-The slice extends the existing :mod:`job_apply.features.dashboard` package
+The slice extends the existing :mod:`apply_pilot.features.dashboard` package
 with three new read-only endpoints:
 
 * ``GET /dashboard/funnel``           — funnel counts per source
@@ -27,28 +27,28 @@ from sqlalchemy import StaticPool, create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from job_apply.db import Base, get_db
-from job_apply.features.apply_worker import models as _apply_worker_models  # noqa: F401
-from job_apply.features.apply_worker.models import ApplyJob, ApplyJobStatus
-from job_apply.features.apply_worker.repository import InMemoryApplyJobRepository
-from job_apply.features.cover_letter import models as _cl_models  # noqa: F401
-from job_apply.features.cover_letter.repository import InMemoryCoverLetterDraftRepository
-from job_apply.features.dashboard.service import DashboardService
-from job_apply.features.matches import models as _matches_models  # noqa: F401
-from job_apply.features.matches.models import MatchStatus, VacancyMatch
-from job_apply.features.matches.repository import InMemoryVacancyMatchRepository
-from job_apply.features.search_profiles import models as _sp_models  # noqa: F401
-from job_apply.features.search_profiles.models import SearchProfile
-from job_apply.features.search_profiles.repository import InMemorySearchProfileRepository
-from job_apply.features.sources import models as _sources_models  # noqa: F401
-from job_apply.features.sources.models import Vacancy
-from job_apply.features.sources.repository import InMemoryVacancyRepository
-from job_apply.features.telegram import models as _telegram_models  # noqa: F401
-from job_apply.features.telegram.repository import InMemoryTelegramAccountRepository
-from job_apply.features.users import models as _users_models  # noqa: F401
-from job_apply.features.users.api import router as auth_router
-from job_apply.features.users.repository import InMemoryUsersRepository
-from job_apply.features.users.security import hash_password
+from apply_pilot.db import Base, get_db
+from apply_pilot.features.apply_worker import models as _apply_worker_models  # noqa: F401
+from apply_pilot.features.apply_worker.models import ApplyJob, ApplyJobStatus
+from apply_pilot.features.apply_worker.repository import InMemoryApplyJobRepository
+from apply_pilot.features.cover_letter import models as _cl_models  # noqa: F401
+from apply_pilot.features.cover_letter.repository import InMemoryCoverLetterDraftRepository
+from apply_pilot.features.dashboard.service import DashboardService
+from apply_pilot.features.matches import models as _matches_models  # noqa: F401
+from apply_pilot.features.matches.models import MatchStatus, VacancyMatch
+from apply_pilot.features.matches.repository import InMemoryVacancyMatchRepository
+from apply_pilot.features.search_profiles import models as _sp_models  # noqa: F401
+from apply_pilot.features.search_profiles.models import SearchProfile
+from apply_pilot.features.search_profiles.repository import InMemorySearchProfileRepository
+from apply_pilot.features.sources import models as _sources_models  # noqa: F401
+from apply_pilot.features.sources.models import Vacancy
+from apply_pilot.features.sources.repository import InMemoryVacancyRepository
+from apply_pilot.features.telegram import models as _telegram_models  # noqa: F401
+from apply_pilot.features.telegram.repository import InMemoryTelegramAccountRepository
+from apply_pilot.features.users import models as _users_models  # noqa: F401
+from apply_pilot.features.users.api import router as auth_router
+from apply_pilot.features.users.repository import InMemoryUsersRepository
+from apply_pilot.features.users.security import hash_password
 
 # ---------------------------------------------------------------------------
 # Helpers / fixtures — service-level (in-memory fakes only)
@@ -701,7 +701,7 @@ def app(session_factory) -> Iterator[FastAPI]:
         finally:
             session.close()
 
-    from job_apply.features.dashboard.api import router as dashboard_router
+    from apply_pilot.features.dashboard.api import router as dashboard_router
 
     application = FastAPI()
     application.include_router(auth_router)
@@ -817,15 +817,15 @@ def sql_service(session_factory) -> DashboardService:
     methods as the unit tests. Coverage of the Python-side branch is
     handled by the in-memory fakes above.
     """
-    from job_apply.features.apply_worker.repository import SqlApplyJobRepository
-    from job_apply.features.cover_letter.repository import SqlCoverLetterDraftRepository
-    from job_apply.features.matches.repository import SqlVacancyMatchRepository
-    from job_apply.features.search_profiles.repository import SqlSearchProfileRepository
-    from job_apply.features.sources.repository import SqlVacancyRepository
-    from job_apply.features.telegram.repository import (
+    from apply_pilot.features.apply_worker.repository import SqlApplyJobRepository
+    from apply_pilot.features.cover_letter.repository import SqlCoverLetterDraftRepository
+    from apply_pilot.features.matches.repository import SqlVacancyMatchRepository
+    from apply_pilot.features.search_profiles.repository import SqlSearchProfileRepository
+    from apply_pilot.features.sources.repository import SqlVacancyRepository
+    from apply_pilot.features.telegram.repository import (
         SqlAlchemyTelegramAccountRepository,
     )
-    from job_apply.features.users.repository import SqlAlchemyUsersRepository
+    from apply_pilot.features.users.repository import SqlAlchemyUsersRepository
 
     # Repos that accept ``session=`` share the same session so the
     # SQL aggregations see the rows we insert below. The remaining
@@ -843,7 +843,7 @@ def sql_service(session_factory) -> DashboardService:
 
 
 def _insert_user(session: Session, *, email: str = "sql@example.com") -> uuid.UUID:
-    from job_apply.features.users.models import User
+    from apply_pilot.features.users.models import User
 
     user = User(
         id=uuid.uuid4(),
@@ -903,7 +903,7 @@ def _insert_apply_job(
     status: str,
     finished_at: datetime | None = None,
 ) -> None:
-    from job_apply.features.apply_worker.models import (
+    from apply_pilot.features.apply_worker.models import (
         ApplyJob,
         compute_idempotency_key,
     )

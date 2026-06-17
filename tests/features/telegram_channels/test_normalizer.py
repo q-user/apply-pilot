@@ -2,7 +2,7 @@
 
 The normaliser maps a raw :class:`TelegramChannelMessage` dict (the
 adapter's "raw" payload) into the canonical
-:class:`~job_apply.features.sources.models.Vacancy` row. It is
+:class:`~apply_pilot.features.sources.models.Vacancy` row. It is
 intentionally a pure mapper: classification has already happened by
 the time we get here, so the normaliser assumes the message *is* a
 vacancy post.
@@ -15,8 +15,8 @@ from __future__ import annotations
 
 import pytest
 
-from job_apply.features.telegram_channels import TelegramChannelMessage
-from job_apply.features.telegram_channels.normalizer import TelegramChannelNormalizer
+from apply_pilot.features.telegram_channels import TelegramChannelMessage
+from apply_pilot.features.telegram_channels.normalizer import TelegramChannelNormalizer
 
 
 def _msg(

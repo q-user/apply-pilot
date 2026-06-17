@@ -17,20 +17,20 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from job_apply.db import Base
-from job_apply.features.audit.repository import SqlAuditLogRepository
-from job_apply.features.audit.service import AuditService
-from job_apply.features.matches import models as _matches_models  # noqa: F401
-from job_apply.features.matches.models import MatchStatus, VacancyMatch
-from job_apply.features.scoring_review.repository import SqlScoringReviewQueue
-from job_apply.features.scoring_review.service import ScoringReviewService
-from job_apply.features.search_profiles import models as _sp_models  # noqa: F401
-from job_apply.features.search_profiles.models import SearchProfile
-from job_apply.features.sources import models as _sources_models  # noqa: F401
-from job_apply.features.sources.models import Vacancy
-from job_apply.features.users import models as _users_models  # noqa: F401
-from job_apply.features.users.models import User
-from job_apply.shared.errors import NotFoundError
+from apply_pilot.db import Base
+from apply_pilot.features.audit.repository import SqlAuditLogRepository
+from apply_pilot.features.audit.service import AuditService
+from apply_pilot.features.matches import models as _matches_models  # noqa: F401
+from apply_pilot.features.matches.models import MatchStatus, VacancyMatch
+from apply_pilot.features.scoring_review.repository import SqlScoringReviewQueue
+from apply_pilot.features.scoring_review.service import ScoringReviewService
+from apply_pilot.features.search_profiles import models as _sp_models  # noqa: F401
+from apply_pilot.features.search_profiles.models import SearchProfile
+from apply_pilot.features.sources import models as _sources_models  # noqa: F401
+from apply_pilot.features.sources.models import Vacancy
+from apply_pilot.features.users import models as _users_models  # noqa: F401
+from apply_pilot.features.users.models import User
+from apply_pilot.shared.errors import NotFoundError
 
 
 @pytest.fixture

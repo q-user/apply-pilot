@@ -13,11 +13,11 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from job_apply.features.source_metrics.models import (
+from apply_pilot.features.source_metrics.models import (
     SourceMetricEvent,
     SourceMetricEventKind,
 )
-from job_apply.features.source_metrics.repository import (
+from apply_pilot.features.source_metrics.repository import (
     InMemorySourceMetricRepository,
 )
 

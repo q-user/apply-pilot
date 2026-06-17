@@ -37,8 +37,8 @@ from sqlalchemy import StaticPool, create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from job_apply.db import Base
-from job_apply.features.cover_letter import (
+from apply_pilot.db import Base
+from apply_pilot.features.cover_letter import (
     CoverLetterDraft,
     CoverLetterDraftRepository,
     CoverLetterDraftStatus,
@@ -47,14 +47,14 @@ from job_apply.features.cover_letter import (
     SqlCoverLetterDraftRepository,
     build_cover_letter_prompt,
 )
-from job_apply.features.cover_letter_style.models import CoverLetterStyle
-from job_apply.features.matches.models import VacancyMatch
-from job_apply.features.matches.repository import InMemoryVacancyMatchRepository
-from job_apply.features.resumes.models import Resume
-from job_apply.features.scoring.llm import InMemoryLLMClient
-from job_apply.features.search_profiles.models import SearchProfile
-from job_apply.features.sources.models import Vacancy
-from job_apply.features.users.models import User
+from apply_pilot.features.cover_letter_style.models import CoverLetterStyle
+from apply_pilot.features.matches.models import VacancyMatch
+from apply_pilot.features.matches.repository import InMemoryVacancyMatchRepository
+from apply_pilot.features.resumes.models import Resume
+from apply_pilot.features.scoring.llm import InMemoryLLMClient
+from apply_pilot.features.search_profiles.models import SearchProfile
+from apply_pilot.features.sources.models import Vacancy
+from apply_pilot.features.users.models import User
 
 # ---------------------------------------------------------------------------
 # Fakes
@@ -523,7 +523,7 @@ def engine() -> Iterator[Engine]:
         poolclass=StaticPool,
     )
     # Register the cover_letter model on the declarative base.
-    from job_apply.features.cover_letter import models  # noqa: F401
+    from apply_pilot.features.cover_letter import models  # noqa: F401
 
     Base.metadata.create_all(bind=eng)
     try:

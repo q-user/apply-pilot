@@ -27,10 +27,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from job_apply.db import Base
-from job_apply.features.scoring import models as _scoring_models  # noqa: F401
-from job_apply.features.scoring.models import PromptVersionRow
-from job_apply.features.scoring.registry import (
+from apply_pilot.db import Base
+from apply_pilot.features.scoring import models as _scoring_models  # noqa: F401
+from apply_pilot.features.scoring.models import PromptVersionRow
+from apply_pilot.features.scoring.registry import (
     InMemoryPromptVersionRegistry,
     PromptVersion,
     SqlPromptVersionRegistry,
@@ -303,7 +303,7 @@ def test_sql_unique_active_per_name_at_db_level(
     sql_repo.register(_prompt(version="1.0.0", is_active=True))
     session_factory = sql_repo._session_factory  # noqa: SLF001
     with session_factory() as session:
-        from job_apply.features.scoring.models import PromptVersionRow
+        from apply_pilot.features.scoring.models import PromptVersionRow
 
         row = PromptVersionRow(
             id=uuid.uuid4(),

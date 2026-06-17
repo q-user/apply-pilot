@@ -37,18 +37,18 @@ from dataclasses import dataclass
 
 import pytest
 
-from job_apply.features.apply_worker.models import ApplyJob
-from job_apply.features.apply_worker.runtime import ApplyResult
-from job_apply.features.hh.adapter import HhSourceAdapter
-from job_apply.features.hh.search import InMemoryHhVacancySearchClient
-from job_apply.features.screening.extractor import HhScreeningQuestionExtractor
-from job_apply.features.screening.repository import InMemoryScreeningQuestionRepository
-from job_apply.features.sources.adapter import (
+from apply_pilot.features.apply_worker.models import ApplyJob
+from apply_pilot.features.apply_worker.runtime import ApplyResult
+from apply_pilot.features.hh.adapter import HhSourceAdapter
+from apply_pilot.features.hh.search import InMemoryHhVacancySearchClient
+from apply_pilot.features.screening.extractor import HhScreeningQuestionExtractor
+from apply_pilot.features.screening.repository import InMemoryScreeningQuestionRepository
+from apply_pilot.features.sources.adapter import (
     AdapterRegistry,
     SourceAdapter,
     SourceQuery,
 )
-from job_apply.features.sources.normalizer import VacancyNormalizer
+from apply_pilot.features.sources.normalizer import VacancyNormalizer
 
 # ---------------------------------------------------------------------------
 # Fakes — recording in-memory stand-ins for the hh cross-slice collaborators.
@@ -58,7 +58,7 @@ from job_apply.features.sources.normalizer import VacancyNormalizer
 class _RecordingApplyAdapter:
     """In-memory :class:`ApplyAdapter` that records calls and returns a fixed result.
 
-    The real :class:`~job_apply.features.hh.apply.HhApplyAdapter` is
+    The real :class:`~apply_pilot.features.hh.apply.HhApplyAdapter` is
     integration-tested separately against ``httpx.MockTransport``; here
     we want to assert *delegation* — that :class:`HhSourceAdapter.apply`
     forwards the job to the injected adapter and returns its result

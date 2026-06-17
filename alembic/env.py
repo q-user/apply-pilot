@@ -6,38 +6,38 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from job_apply.config import get_database_settings
-from job_apply.db import Base
-from job_apply.features.apply_worker import (
+from apply_pilot.config import get_database_settings
+from apply_pilot.db import Base
+from apply_pilot.features.apply_worker import (
     models as _apply_worker_models,  # noqa: F401  (register ApplyJob, ApplyStatusHistory, ApplyRateLimitEvent)
 )
-from job_apply.features.audit import models as _audit_models  # noqa: F401  (register AuditLog)
-from job_apply.features.cover_letter import (
+from apply_pilot.features.audit import models as _audit_models  # noqa: F401  (register AuditLog)
+from apply_pilot.features.cover_letter import (
     models as _cover_letter_models,  # noqa: F401  (register CoverLetterDraft)
 )
-from job_apply.features.cover_letter_style import (
+from apply_pilot.features.cover_letter_style import (
     models as _cover_letter_style_models,  # noqa: F401  (register CoverLetterStyle)
 )
-from job_apply.features.hh import models as _hh_models  # noqa: F401  (register HHCredential)
-from job_apply.features.matches import (
+from apply_pilot.features.hh import models as _hh_models  # noqa: F401  (register HHCredential)
+from apply_pilot.features.matches import (
     models as _matches_models,  # noqa: F401  (register VacancyMatch)
 )
-from job_apply.features.orders import models as _orders_models  # noqa: F401  (register Order)
-from job_apply.features.resumes import models as _resumes_models  # noqa: F401  (register Resume)
-from job_apply.features.scoring import (
+from apply_pilot.features.orders import models as _orders_models  # noqa: F401  (register Order)
+from apply_pilot.features.resumes import models as _resumes_models  # noqa: F401  (register Resume)
+from apply_pilot.features.scoring import (
     models as _scoring_models,  # noqa: F401  (register PromptVersionRow)
 )
-from job_apply.features.scoring_ab import (
+from apply_pilot.features.scoring_ab import (
     models as _scoring_ab_models,  # noqa: F401  (register ScoringExperimentRow, ScoringVariantRow, ScoringExperimentOutcomeRow)
 )
-from job_apply.features.search_profiles import (
+from apply_pilot.features.search_profiles import (
     models as _sp_models,  # noqa: F401  (register SearchProfile)
 )
-from job_apply.features.source_metrics import (
+from apply_pilot.features.source_metrics import (
     models as _source_metrics_models,  # noqa: F401  (register SourceMetricEventORM)
 )
-from job_apply.features.sources import models as _sources_models  # noqa: F401  (register Vacancy)
-from job_apply.features.users import models as _users_models  # noqa: F401  (register User)
+from apply_pilot.features.sources import models as _sources_models  # noqa: F401  (register Vacancy)
+from apply_pilot.features.users import models as _users_models  # noqa: F401  (register User)
 
 config = context.config
 

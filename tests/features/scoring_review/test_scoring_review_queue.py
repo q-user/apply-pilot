@@ -20,15 +20,15 @@ from datetime import UTC, datetime
 
 import pytest
 
-from job_apply.features.audit.repository import InMemoryAuditLogRepository
-from job_apply.features.audit.service import AuditService
-from job_apply.features.matches.models import MatchStatus, VacancyMatch
-from job_apply.features.matches.repository import InMemoryVacancyMatchRepository
-from job_apply.features.scoring_review.models import LowConfidenceMatch
-from job_apply.features.scoring_review.repository import InMemoryScoringReviewQueue
-from job_apply.features.scoring_review.service import ScoringReviewService
-from job_apply.features.search_profiles.models import SearchProfile
-from job_apply.features.search_profiles.repository import InMemorySearchProfileRepository
+from apply_pilot.features.audit.repository import InMemoryAuditLogRepository
+from apply_pilot.features.audit.service import AuditService
+from apply_pilot.features.matches.models import MatchStatus, VacancyMatch
+from apply_pilot.features.matches.repository import InMemoryVacancyMatchRepository
+from apply_pilot.features.scoring_review.models import LowConfidenceMatch
+from apply_pilot.features.scoring_review.repository import InMemoryScoringReviewQueue
+from apply_pilot.features.scoring_review.service import ScoringReviewService
+from apply_pilot.features.search_profiles.models import SearchProfile
+from apply_pilot.features.search_profiles.repository import InMemorySearchProfileRepository
 
 # ---------------------------------------------------------------------------
 # LowConfidenceMatch dataclass
@@ -218,7 +218,7 @@ class TestInMemoryQueue:
         service = ScoringReviewService(
             queue=queue, audit_service=AuditService(audit_repo=audit_repo)
         )
-        from job_apply.shared.errors import NotFoundError
+        from apply_pilot.shared.errors import NotFoundError
 
         with pytest.raises(NotFoundError):
             service.mark_reviewed(uuid.uuid4(), reviewer_note="x")

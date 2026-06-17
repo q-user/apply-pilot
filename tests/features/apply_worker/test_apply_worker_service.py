@@ -38,20 +38,20 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from job_apply.features.apply_worker.models import (
+from apply_pilot.features.apply_worker.models import (
     ApplyJobStatus,
     compute_idempotency_key,
 )
-from job_apply.features.apply_worker.repository import InMemoryApplyJobRepository
-from job_apply.features.apply_worker.service import (
+from apply_pilot.features.apply_worker.repository import InMemoryApplyJobRepository
+from apply_pilot.features.apply_worker.service import (
     ApplyJobAlreadyTerminalError,
     ApplyJobDependencyMissingError,
     ApplyJobNotFoundError,
     ApplyJobOwnershipError,
     ApplyJobService,
 )
-from job_apply.features.matches.models import VacancyMatch
-from job_apply.features.search_profiles.models import SearchProfile
+from apply_pilot.features.matches.models import VacancyMatch
+from apply_pilot.features.search_profiles.models import SearchProfile
 
 # ---------------------------------------------------------------------------
 # Fakes
@@ -126,7 +126,7 @@ def _make_world() -> _World:
     # M5 #49 — every test world also wires the history repo so the
     # slice's status transitions get logged. The repo is the in-memory
     # fake, matching the rest of the collaborator-injected fakes.
-    from job_apply.features.apply_worker.repository import (
+    from apply_pilot.features.apply_worker.repository import (
         InMemoryApplyStatusHistoryRepository,
     )
 
@@ -151,7 +151,9 @@ def _make_world() -> _World:
 
 
 # Local alias to avoid a top-level import we have not pinned down.
-MatchStatus = __import__("job_apply.features.matches.models", fromlist=["MatchStatus"]).MatchStatus
+MatchStatus = __import__(
+    "apply_pilot.features.matches.models", fromlist=["MatchStatus"]
+).MatchStatus
 
 
 # ---------------------------------------------------------------------------

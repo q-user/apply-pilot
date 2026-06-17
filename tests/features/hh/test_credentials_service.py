@@ -14,11 +14,11 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from cryptography.fernet import Fernet
 
-from job_apply.features.hh.encryption import CredentialEncryptor
-from job_apply.features.hh.repository import InMemoryHHCredentialRepository
-from job_apply.features.hh.schemas import CredentialCheck, RedactedCredentials
-from job_apply.features.hh.service import HHCredentialService
-from job_apply.shared.errors import NotFoundError
+from apply_pilot.features.hh.encryption import CredentialEncryptor
+from apply_pilot.features.hh.repository import InMemoryHHCredentialRepository
+from apply_pilot.features.hh.schemas import CredentialCheck, RedactedCredentials
+from apply_pilot.features.hh.service import HHCredentialService
+from apply_pilot.shared.errors import NotFoundError
 
 # ---------------------------------------------------------------------------
 # Fixtures

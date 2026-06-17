@@ -22,18 +22,18 @@ import pytest
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
-from job_apply.db import Base
-from job_apply.features.matches import models as _matches_models  # noqa: F401
-from job_apply.features.matches.models import MatchStatus, VacancyMatch
-from job_apply.features.matches.repository import InMemoryVacancyMatchRepository
-from job_apply.features.matches.schemas import VacancyMatchRead
-from job_apply.features.matches.service import MatchService
-from job_apply.features.search_profiles import models as _sp_models  # noqa: F401
-from job_apply.features.search_profiles.models import SearchProfile
-from job_apply.features.search_profiles.repository import InMemorySearchProfileRepository
-from job_apply.features.sources import models as _sources_models  # noqa: F401
-from job_apply.features.sources.models import Vacancy
-from job_apply.features.users import models as _users_models  # noqa: F401
+from apply_pilot.db import Base
+from apply_pilot.features.matches import models as _matches_models  # noqa: F401
+from apply_pilot.features.matches.models import MatchStatus, VacancyMatch
+from apply_pilot.features.matches.repository import InMemoryVacancyMatchRepository
+from apply_pilot.features.matches.schemas import VacancyMatchRead
+from apply_pilot.features.matches.service import MatchService
+from apply_pilot.features.search_profiles import models as _sp_models  # noqa: F401
+from apply_pilot.features.search_profiles.models import SearchProfile
+from apply_pilot.features.search_profiles.repository import InMemorySearchProfileRepository
+from apply_pilot.features.sources import models as _sources_models  # noqa: F401
+from apply_pilot.features.sources.models import Vacancy
+from apply_pilot.features.users import models as _users_models  # noqa: F401
 
 
 def _vacancy(source_id: str = "hh-1") -> Vacancy:
@@ -220,7 +220,7 @@ def test_migration_scoring_columns_default_to_null(migrated_engine) -> None:
     session = SessionLocal()
     try:
         # Pre-flight: we need a user + profile + vacancy for the FK chain.
-        from job_apply.features.users.models import User
+        from apply_pilot.features.users.models import User
 
         user_id = uuid.uuid4()
         profile_id = uuid.uuid4()

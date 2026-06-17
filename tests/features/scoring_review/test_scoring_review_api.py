@@ -22,17 +22,17 @@ from sqlalchemy import StaticPool, create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from job_apply.db import Base, get_db
-from job_apply.features.audit import models as _audit_models  # noqa: F401
-from job_apply.features.matches import models as _matches_models  # noqa: F401
-from job_apply.features.matches.models import MatchStatus, VacancyMatch
-from job_apply.features.scoring_review.api import router as scoring_review_router
-from job_apply.features.search_profiles import models as _sp_models  # noqa: F401
-from job_apply.features.search_profiles.models import SearchProfile
-from job_apply.features.sources import models as _sources_models  # noqa: F401
-from job_apply.features.sources.models import Vacancy
-from job_apply.features.users import models as _users_models  # noqa: F401
-from job_apply.features.users.models import User
+from apply_pilot.db import Base, get_db
+from apply_pilot.features.audit import models as _audit_models  # noqa: F401
+from apply_pilot.features.matches import models as _matches_models  # noqa: F401
+from apply_pilot.features.matches.models import MatchStatus, VacancyMatch
+from apply_pilot.features.scoring_review.api import router as scoring_review_router
+from apply_pilot.features.search_profiles import models as _sp_models  # noqa: F401
+from apply_pilot.features.search_profiles.models import SearchProfile
+from apply_pilot.features.sources import models as _sources_models  # noqa: F401
+from apply_pilot.features.sources.models import Vacancy
+from apply_pilot.features.users import models as _users_models  # noqa: F401
+from apply_pilot.features.users.models import User
 
 
 @pytest.fixture

@@ -17,10 +17,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from job_apply.db import Base, get_db
-from job_apply.features.resumes.api import StubAuthDep
-from job_apply.features.resumes.api import router as resumes_router
-from job_apply.features.users import models as _users_models  # noqa: F401  (register User)
+from apply_pilot.db import Base, get_db
+from apply_pilot.features.resumes.api import StubAuthDep
+from apply_pilot.features.resumes.api import router as resumes_router
+from apply_pilot.features.users import models as _users_models  # noqa: F401  (register User)
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -278,6 +278,6 @@ def test_stub_auth_dep_returns_deterministic_uuid() -> None:
     # will replace; make sure it is a real dependency alias.
     assert StubAuthDep is not None
     # And the underlying function returns the expected UUID.
-    from job_apply.features.resumes.api import _stub_current_user
+    from apply_pilot.features.resumes.api import _stub_current_user
 
     assert _stub_current_user() == uuid.UUID("00000000-0000-0000-0000-000000000001")

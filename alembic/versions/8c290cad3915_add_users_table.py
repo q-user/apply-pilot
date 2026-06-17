@@ -4,7 +4,7 @@ Revision ID: 8c290cad3915
 Revises: c31323bea8d1
 Create Date: 2026-06-14 22:25:57.069961
 
-Hand-written to mirror :class:`job_apply.features.users.models.User`.
+Hand-written to mirror :class:`apply_pilot.features.users.models.User`.
 We deliberately do not autogenerate: the dev DB is sqlite, but the
 production target is Postgres, and Alembic's sqlite-flavoured output
 for the ``UUID`` column would be wrong on the other side. The hand

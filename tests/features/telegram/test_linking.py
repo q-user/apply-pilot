@@ -15,12 +15,12 @@ import time
 
 import pytest
 
-from job_apply.features.telegram.linking import (
+from apply_pilot.features.telegram.linking import (
     InvalidLinkingTokenError,
     TelegramAccountAlreadyLinkedError,
     TelegramLinkingService,
 )
-from job_apply.features.telegram.repository import InMemoryTelegramAccountRepository
+from apply_pilot.features.telegram.repository import InMemoryTelegramAccountRepository
 
 
 @pytest.fixture
@@ -192,8 +192,8 @@ def _link_update(
 
 async def test_link_command_with_valid_code_returns_success() -> None:
     """``/link <code>`` with a valid code must return a success message."""
-    from job_apply.config import TelegramSettings
-    from job_apply.features.telegram.bot import TelegramBot
+    from apply_pilot.config import TelegramSettings
+    from apply_pilot.features.telegram.bot import TelegramBot
 
     service = TelegramLinkingService()
     token = service.generate_token(user_id="linked-user-1")
@@ -212,8 +212,8 @@ async def test_link_command_with_valid_code_returns_success() -> None:
 
 async def test_link_command_persists_account_when_repo_injected() -> None:
     """When a TelegramAccountRepository is injected, /link must persist the row."""
-    from job_apply.config import TelegramSettings
-    from job_apply.features.telegram.bot import TelegramBot
+    from apply_pilot.config import TelegramSettings
+    from apply_pilot.features.telegram.bot import TelegramBot
 
     service = TelegramLinkingService()
     repo = InMemoryTelegramAccountRepository()
@@ -243,8 +243,8 @@ async def test_link_command_persists_account_when_repo_injected() -> None:
 
 async def test_link_command_with_invalid_code_returns_error() -> None:
     """``/link <bad code>`` must return an error message."""
-    from job_apply.config import TelegramSettings
-    from job_apply.features.telegram.bot import TelegramBot
+    from apply_pilot.config import TelegramSettings
+    from apply_pilot.features.telegram.bot import TelegramBot
 
     service = TelegramLinkingService()
     bot = TelegramBot(
@@ -262,8 +262,8 @@ async def test_link_command_with_invalid_code_returns_error() -> None:
 
 async def test_link_command_without_code_returns_usage_hint() -> None:
     """``/link`` without a code must return a usage hint."""
-    from job_apply.config import TelegramSettings
-    from job_apply.features.telegram.bot import TelegramBot
+    from apply_pilot.config import TelegramSettings
+    from apply_pilot.features.telegram.bot import TelegramBot
 
     bot = TelegramBot(
         settings=TelegramSettings(bot_token="test-token", polling_timeout=30),
@@ -280,8 +280,8 @@ async def test_link_command_without_code_returns_usage_hint() -> None:
 
 async def test_link_command_duplicate_telegram_account_returns_error() -> None:
     """``/link`` with an already-linked Telegram account must return an error."""
-    from job_apply.config import TelegramSettings
-    from job_apply.features.telegram.bot import TelegramBot
+    from apply_pilot.config import TelegramSettings
+    from apply_pilot.features.telegram.bot import TelegramBot
 
     service = TelegramLinkingService()
     # Link user-1 first

@@ -15,8 +15,8 @@ from typing import Any
 
 import pytest
 
-from job_apply.features.telegram.digest import DigestRunner
-from job_apply.runtime.process import BaseProcess
+from apply_pilot.features.telegram.digest import DigestRunner
+from apply_pilot.runtime.process import BaseProcess
 
 # ---------------------------------------------------------------------------
 # Fakes

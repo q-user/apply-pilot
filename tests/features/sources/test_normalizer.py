@@ -13,7 +13,7 @@ from datetime import datetime
 
 import pytest
 
-from job_apply.features.sources.normalizer import (
+from apply_pilot.features.sources.normalizer import (
     VacancyNormalizer,
     _compute_content_hash,
     _parse_hh_datetime,
