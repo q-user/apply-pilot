@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import create_engine
@@ -275,3 +276,169 @@ class TestSqlRepository:
         persisted = sql_repo.upsert(v)
         assert persisted.salary_gross is False
         assert persisted.salary_currency == "RUR"
+
+
+# ---------------------------------------------------------------------------
+# Filter-aware list/count (powers GET /vacancies)
+# ---------------------------------------------------------------------------
+
+
+def _store_with_created_at(
+    repo: VacancyRepository,
+    *,
+    source: str,
+    source_id: str,
+    created_at,
+    **overrides,
+) -> Vacancy:
+    """Persist a Vacancy and pin its ``created_at`` for deterministic ordering.
+
+    Both implementations stamp ``created_at = now`` on insert, so we
+    need to mutate the row in place to set a known timestamp.
+    """
+    payload = {
+        "source": source,
+        "title": overrides.pop("title", f"V-{source_id}"),
+        "location": overrides.pop("location", "Moscow"),
+        "salary_from": overrides.pop("salary_from", 100000),
+        "salary_to": overrides.pop("salary_to", 200000),
+        "salary_currency": "RUR",
+        "salary_gross": False,
+        "raw_data": {"id": source_id},
+    }
+    payload.update(overrides)
+    row = repo.upsert(Vacancy(source_id=source_id, **payload))
+    row.created_at = created_at
+    return row
+
+
+class TestInMemoryFilterList:
+    def test_list_with_filters_returns_newest_first(self, repo: InMemoryVacancyRepository) -> None:
+        old = _store_with_created_at(
+            repo, source="hh", source_id="a", created_at=datetime(2024, 1, 1, tzinfo=UTC)
+        )
+        new = _store_with_created_at(
+            repo, source="hh", source_id="b", created_at=datetime(2024, 6, 1, tzinfo=UTC)
+        )
+        items = list(
+            repo.list_with_filters(
+                source="hh", salary_min=None, location=None, since=None, limit=10, offset=0
+            )
+        )
+        assert [v.id for v in items] == [new.id, old.id]
+
+    def test_list_with_filters_combines_all_filters(self, repo: InMemoryVacancyRepository) -> None:
+        match = _store_with_created_at(
+            repo,
+            source="hh",
+            source_id="match",
+            created_at=datetime(2024, 6, 1, tzinfo=UTC),
+            title="Match",
+            salary_from=200_000,
+            location="Moscow",
+        )
+        _store_with_created_at(
+            repo,
+            source="habr",
+            source_id="other",
+            created_at=datetime(2024, 6, 1, tzinfo=UTC),
+            title="Other",
+            salary_from=200_000,
+            location="Moscow",
+        )
+        items = list(
+            repo.list_with_filters(
+                source="hh",
+                salary_min=100_000,
+                location="moscow",
+                since=datetime(2024, 1, 1, tzinfo=UTC),
+                limit=10,
+                offset=0,
+            )
+        )
+        assert len(items) == 1
+        assert items[0].id == match.id
+
+    def test_count_with_filters_matches_list_length(self, repo: InMemoryVacancyRepository) -> None:
+        for i in range(3):
+            _store_with_created_at(
+                repo,
+                source="hh",
+                source_id=f"hh-{i}",
+                created_at=datetime(2024, 1, 1, tzinfo=UTC) + timedelta(days=i),
+            )
+        _store_with_created_at(
+            repo,
+            source="habr",
+            source_id="habr-1",
+            created_at=datetime(2024, 6, 1, tzinfo=UTC),
+        )
+        total = repo.count_with_filters(source="hh")
+        items = list(
+            repo.list_with_filters(
+                source="hh", salary_min=None, location=None, since=None, limit=10, offset=0
+            )
+        )
+        assert total == 3
+        assert len(items) == 3
+
+    def test_list_with_filters_respects_offset_and_limit(
+        self, repo: InMemoryVacancyRepository
+    ) -> None:
+        for i in range(5):
+            _store_with_created_at(
+                repo,
+                source="hh",
+                source_id=f"hh-{i}",
+                created_at=datetime(2024, 1, 1, tzinfo=UTC) + timedelta(minutes=i),
+                title=f"V{i}",
+            )
+        # Newest first → V4, V3, V2, V1, V0; skip the first 2.
+        items = list(
+            repo.list_with_filters(
+                source=None, salary_min=None, location=None, since=None, limit=2, offset=2
+            )
+        )
+        assert [v.title for v in items] == ["V2", "V1"]
+
+
+class TestSqlFilterList:
+    def test_list_with_filters_applies_all_predicates(self, sql_repo: SqlVacancyRepository) -> None:
+        """All four filters must compose as a logical AND.
+
+        Insertion order does not need to be deterministic — the
+        ``created_at`` column has a server-side default (``func.now()``)
+        so a client-side override does not stick. Asserting only on
+        the filtered subset keeps the test robust against clock
+        resolution on the in-memory SQLite engine.
+        """
+        for sid, salary in [("a", 100_000), ("b", 200_000), ("c", 350_000)]:
+            _store_with_created_at(
+                sql_repo,
+                source="hh",
+                source_id=sid,
+                created_at=datetime(2024, 1, 1, tzinfo=UTC),
+                salary_from=salary,
+                location="Moscow",
+            )
+        _store_with_created_at(
+            sql_repo,
+            source="habr",
+            source_id="d",
+            created_at=datetime(2024, 1, 1, tzinfo=UTC),
+            salary_from=200_000,
+            location="Moscow",
+        )
+
+        items = list(
+            sql_repo.list_with_filters(
+                source="hh",
+                salary_min=150_000,
+                location="moscow",
+                since=datetime(2023, 1, 1, tzinfo=UTC),
+                limit=10,
+                offset=0,
+            )
+        )
+        assert {v.source_id for v in items} == {"b", "c"}
+        assert sql_repo.count_with_filters(source="hh", salary_min=150_000, location="moscow") == 2

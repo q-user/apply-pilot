@@ -20,7 +20,7 @@ from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
@@ -35,6 +35,13 @@ class VacancyRepository(Protocol):
     ``INSERT ... ON CONFLICT (source, source_id) DO UPDATE`` so a re-ingest
     of the same natural key mutates the existing row in place (preserving
     the canonical ``id`` and ``created_at``).
+
+    Read-side helpers are intentionally narrow: ``list_by_source`` and
+    ``list_recent`` cover the simple "show me everything from X" use
+    case, while :meth:`list_with_filters` /
+    :meth:`count_with_filters` back the public ``GET /vacancies``
+    endpoint (filters: source, salary_min, location, since; ordering
+    by ``created_at`` desc for a stable newest-first pagination).
     """
 
     def upsert(self, vacancy: Vacancy) -> Vacancy: ...
@@ -43,11 +50,66 @@ class VacancyRepository(Protocol):
     def list_recent(self, *, limit: int) -> Sequence[Vacancy]: ...
     def find_by_source(self, source: str, source_id: str) -> list[Vacancy]: ...
     def find_by_content_hash(self, content_hash: str) -> list[Vacancy]: ...
+    def list_with_filters(
+        self,
+        *,
+        source: str | None = None,
+        salary_min: int | None = None,
+        location: str | None = None,
+        since: datetime | None = None,
+        limit: int,
+        offset: int,
+    ) -> Sequence[Vacancy]: ...
+    def count_with_filters(
+        self,
+        *,
+        source: str | None = None,
+        salary_min: int | None = None,
+        location: str | None = None,
+        since: datetime | None = None,
+    ) -> int: ...
 
 
 # ---------------------------------------------------------------------------
 # In-memory implementation
 # ---------------------------------------------------------------------------
+
+
+def _vacancy_matches(
+    vacancy: Vacancy,
+    *,
+    source: str | None,
+    salary_min: int | None,
+    location: str | None,
+    since: datetime | None,
+) -> bool:
+    """Apply the ``GET /vacancies`` filter set to a single vacancy.
+
+    All filters combine as a logical AND; a ``None`` filter is "not
+    applied". The location filter is a case-insensitive substring
+    match; the salary filter rejects vacancies whose
+    :attr:`Vacancy.salary_from` is unknown or below the floor.
+    """
+    if source is not None and vacancy.source != source:
+        return False
+    if salary_min is not None:
+        # Vacancies with no ``salary_from`` never satisfy a minimum floor.
+        salary_from = vacancy.salary_from
+        if salary_from is None or salary_from < salary_min:
+            return False
+    if location is not None:
+        # Vacancies with no location never satisfy a substring filter.
+        vacancy_location = vacancy.location
+        if vacancy_location is None:
+            return False
+        if location.lower() not in vacancy_location.lower():
+            return False
+    if since is not None:
+        # Vacancies with no ``created_at`` are treated as "not after" the cutoff.
+        created_at = vacancy.created_at
+        if created_at is None or created_at <= since:
+            return False
+    return True
 
 
 class InMemoryVacancyRepository:
@@ -139,6 +201,58 @@ class InMemoryVacancyRepository:
         rows from different sources.
         """
         return [v for v in self._by_id.values() if v.content_hash == content_hash]
+
+    def list_with_filters(
+        self,
+        *,
+        source: str | None = None,
+        salary_min: int | None = None,
+        location: str | None = None,
+        since: datetime | None = None,
+        limit: int,
+        offset: int,
+    ) -> Sequence[Vacancy]:
+        """Return a sorted, filtered, paginated slice of vacancies.
+
+        The ordering matches the SQL implementation: ``created_at``
+        desc, with rows missing a ``created_at`` (shouldn't happen in
+        practice) sorted last so they do not pollute the head of the
+        list.
+        """
+        sentinel = datetime.min.replace(tzinfo=UTC)
+        matched = [
+            v
+            for v in self._by_id.values()
+            if _vacancy_matches(
+                v,
+                source=source,
+                salary_min=salary_min,
+                location=location,
+                since=since,
+            )
+        ]
+        matched.sort(key=lambda v: v.created_at or sentinel, reverse=True)
+        return matched[offset : offset + limit]
+
+    def count_with_filters(
+        self,
+        *,
+        source: str | None = None,
+        salary_min: int | None = None,
+        location: str | None = None,
+        since: datetime | None = None,
+    ) -> int:
+        return sum(
+            1
+            for v in self._by_id.values()
+            if _vacancy_matches(
+                v,
+                source=source,
+                salary_min=salary_min,
+                location=location,
+                since=since,
+            )
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -318,6 +432,85 @@ class SqlVacancyRepository:
             return list(session.execute(statement).scalars().all())
         finally:
             session.close()
+
+    def list_with_filters(
+        self,
+        *,
+        source: str | None = None,
+        salary_min: int | None = None,
+        location: str | None = None,
+        since: datetime | None = None,
+        limit: int,
+        offset: int,
+    ) -> Sequence[Vacancy]:
+        """Return a filtered, paginated slice ordered by ``created_at`` desc.
+
+        Filters compose as a logical AND. ``location`` is matched
+        case-insensitively via ``LOWER(location) LIKE %pattern%`` —
+        SQLite's default ``LIKE`` is case-insensitive for ASCII only,
+        so we wrap both sides in ``func.lower`` to behave identically
+        on PostgreSQL.
+        """
+        session = self._scope()
+        try:
+            statement = self._build_filtered_query(
+                source=source,
+                salary_min=salary_min,
+                location=location,
+                since=since,
+            )
+            statement = statement.order_by(Vacancy.created_at.desc())
+            statement = statement.limit(limit).offset(offset)
+            return list(session.execute(statement).scalars().all())
+        finally:
+            session.close()
+
+    def count_with_filters(
+        self,
+        *,
+        source: str | None = None,
+        salary_min: int | None = None,
+        location: str | None = None,
+        since: datetime | None = None,
+    ) -> int:
+        session = self._scope()
+        try:
+            statement = self._build_filtered_query(
+                source=source,
+                salary_min=salary_min,
+                location=location,
+                since=since,
+            )
+            count_stmt = select(func.count()).select_from(statement.subquery())
+            return int(session.execute(count_stmt).scalar_one())
+        finally:
+            session.close()
+
+    @staticmethod
+    def _build_filtered_query(
+        *,
+        source: str | None,
+        salary_min: int | None,
+        location: str | None,
+        since: datetime | None,
+    ):
+        """Build a ``select(Vacancy)`` statement with the filter set applied.
+
+        Centralised so :meth:`list_with_filters` and
+        :meth:`count_with_filters` stay in lock-step on the predicate
+        set — adding a new filter means editing one place, not two.
+        """
+        statement = select(Vacancy)
+        if source is not None:
+            statement = statement.where(Vacancy.source == source)
+        if salary_min is not None:
+            statement = statement.where(Vacancy.salary_from >= salary_min)
+        if location is not None:
+            pattern = f"%{location.lower()}%"
+            statement = statement.where(func.lower(Vacancy.location).like(pattern))
+        if since is not None:
+            statement = statement.where(Vacancy.created_at > since)
+        return statement
 
 
 __all__ = [

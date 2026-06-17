@@ -12,7 +12,9 @@ screening schema.
 from __future__ import annotations
 
 import logging
-from typing import Any, TYPE_CHECKING
+from dataclasses import dataclass
+from datetime import datetime
+from typing import TYPE_CHECKING, Any
 
 from job_apply.features.screening.models import ScreeningQuestion
 from job_apply.features.sources.dedup import VacancyDeduplicator
@@ -97,9 +99,7 @@ class SourceService:
             return []
         return screening_extractor.extract_from_vacancy(vacancy, raw_data)
 
-    async def ingest_vacancy_deduped(
-        self, source: str, raw_data: dict
-    ) -> Vacancy | None:
+    async def ingest_vacancy_deduped(self, source: str, raw_data: dict) -> Vacancy | None:
         """Normalise, dedup, and (only if new) persist a single vacancy.
 
         Returns the persisted :class:`Vacancy` or ``None`` when the
@@ -141,5 +141,59 @@ class SourceService:
         )
         return new, duplicates
 
+    def list_vacancies(
+        self,
+        *,
+        source: str | None = None,
+        salary_min: int | None = None,
+        location: str | None = None,
+        since: datetime | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> VacancyListResult:
+        """Return a paginated, filtered slice of vacancies.
 
-__all__ = ["SourceService"]
+        Thin orchestration over the repository: a ``COUNT(*)`` for the
+        total and a ``SELECT`` for the page. The API layer maps
+        :class:`VacancyListResult` onto :class:`VacancyListResponse`.
+
+        All filter arguments are optional; ``None`` means "do not
+        filter on this dimension". The repository is responsible for
+        applying the predicates consistently in both the count and the
+        list call (they share a single filter-builder so the two cannot
+        drift apart).
+        """
+        total = self._repo.count_with_filters(
+            source=source,
+            salary_min=salary_min,
+            location=location,
+            since=since,
+        )
+        items = list(
+            self._repo.list_with_filters(
+                source=source,
+                salary_min=salary_min,
+                location=location,
+                since=since,
+                limit=limit,
+                offset=offset,
+            )
+        )
+        return VacancyListResult(items=items, total=total)
+
+
+@dataclass(frozen=True, slots=True)
+class VacancyListResult:
+    """The outcome of :meth:`SourceService.list_vacancies`.
+
+    ``items`` is the current page (already ordered by ``created_at``
+    desc by the repository), ``total`` is the total row count that
+    matched the filter set, regardless of pagination. The API layer
+    wraps this in :class:`VacancyListResponse`.
+    """
+
+    items: list[Vacancy]
+    total: int
+
+
+__all__ = ["SourceService", "VacancyListResult"]
