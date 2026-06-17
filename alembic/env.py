@@ -27,6 +27,9 @@ from job_apply.features.resumes import models as _resumes_models  # noqa: F401  
 from job_apply.features.scoring import (
     models as _scoring_models,  # noqa: F401  (register PromptVersionRow)
 )
+from job_apply.features.scoring_ab import (
+    models as _scoring_ab_models,  # noqa: F401  (register ScoringExperimentRow, ScoringVariantRow, ScoringExperimentOutcomeRow)
+)
 from job_apply.features.search_profiles import (
     models as _sp_models,  # noqa: F401  (register SearchProfile)
 )

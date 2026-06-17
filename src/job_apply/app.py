@@ -137,6 +137,12 @@ _LANDING_HTML = """<!doctype html>
           </a>
         </li>
         <li>
+          <a href="/admin/scoring/experiments">
+            Scoring experiments
+            <small>A/B experiments and outcome aggregates for the scoring slice.</small>
+          </a>
+        </li>
+        <li>
           <a href="/dashboard">
             Dashboard
             <small>Per-user summary of matches, applications, and digest.</small>
@@ -226,6 +232,7 @@ def create_app(settings: FastAPISettings | None = None) -> FastAPI:
     from job_apply.features.hh.api import router as hh_router
     from job_apply.features.learning.api import router as learning_router
     from job_apply.features.matches.api import router as matches_router
+    from job_apply.features.scoring_ab import router as scoring_ab_router
     from job_apply.features.scoring_review.api import router as scoring_review_router
     from job_apply.features.screening.api import router as screening_router
     from job_apply.features.search_profiles.api import router as search_profiles_router
@@ -243,6 +250,7 @@ def create_app(settings: FastAPISettings | None = None) -> FastAPI:
     app.include_router(hh_router)
     app.include_router(learning_router)
     app.include_router(matches_router)
+    app.include_router(scoring_ab_router)
     app.include_router(scoring_review_router)
     app.include_router(screening_router)
     app.include_router(search_profiles_router)

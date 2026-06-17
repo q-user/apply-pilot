@@ -451,25 +451,35 @@ class LLMScorer:
         profile: Any,
         *,
         resume_text: str | None = None,
+        prompt_version: str | None = None,
     ) -> ScoreResult:
         """Score ``vacancy`` against ``profile`` and return a :class:`ScoreResult`.
 
         The LLM is expected to return a strict JSON object that
         :func:`parse_score_response` can decode. The scorer's
-        ``prompt_version`` is resolved from the injected
-        :class:`PromptVersionRegistry` when one is available; otherwise
-        it falls back to the canonical
-        :data:`~job_apply.features.scoring.prompts.VACANCY_SCORING_PROMPT_VERSION`
-        constant. The LLM's own ``prompt_version`` field, if any, is
-        discarded.
+        ``prompt_version`` stamp is resolved in this order:
+
+        1. an explicit ``prompt_version`` argument (used by the
+           scoring service when an A/B experiment assigns a variant
+           to the current user);
+        2. the active row in the injected
+           :class:`PromptVersionRegistry` when one is available;
+        3. the canonical
+           :data:`~job_apply.features.scoring.prompts.VACANCY_SCORING_PROMPT_VERSION`
+           constant as the final fallback.
+
+        The LLM's own ``prompt_version`` field, if any, is discarded.
         """
         prompt = build_vacancy_scoring_prompt(vacancy, profile, resume_text=resume_text)
         raw = await self._llm.complete(prompt)
         result = parse_score_response(raw)
+        resolved_version = (
+            prompt_version if prompt_version is not None else self._resolve_prompt_version()
+        )
         return ScoreResult(
             score=result.score,
             explanation=result.explanation,
-            prompt_version=self._resolve_prompt_version(),
+            prompt_version=resolved_version,
             confidence=result.confidence,
         )
 
