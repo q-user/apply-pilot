@@ -535,6 +535,95 @@ class TestAdapterSearchHtml:
         assert CareersAdapterError is not None
 
 
+class TestAdapterSearchParseErrors:
+    """The adapter translates parser-internal errors into :class:`CareersAdapterError`.
+
+    The cross-source :class:`~apply_pilot.features.sources.adapter.SourceAdapter`
+    contract says ``search`` raises only :class:`CareersAdapterError`
+    on the careers slice. Without the translation a 200 OK with a
+    broken body would let ``xml.etree.ElementTree.ParseError`` (RSS)
+    or ``re.error`` (HTML, defensive) escape — and the caller would
+    need a separate ``except`` for stdlib exceptions. Issue #140.
+    """
+
+    def test_malformed_rss_translates_to_careers_adapter_error(self) -> None:
+        """A 200 OK with non-XML body raises :class:`CareersAdapterError`.
+
+        ``parse_rss`` delegates to :func:`xml.etree.ElementTree.fromstring`,
+        which raises :class:`xml.etree.ElementTree.ParseError` on a
+        broken body. The adapter must catch it and re-raise as
+        :class:`CareersAdapterError` so callers do not have to know
+        about the stdlib type.
+        """
+        import xml.etree.ElementTree as ET
+
+        from apply_pilot.features.careers.adapter import CareersAdapterError
+
+        world = _make_world(
+            responses={"https://acme.example/jobs": _ok_response("<invalid xml <<<")},
+        )
+        with pytest.raises(CareersAdapterError) as excinfo:
+            asyncio_run(world.adapter.search(SourceQuery()))
+
+        # The error message must point at the root cause ("invalid RSS XML")
+        # so operators can tell apart transport, 4xx and parse failures.
+        assert "invalid RSS XML" in str(excinfo.value)
+        # And the stdlib exception must be chained (not silently swallowed)
+        # so debuggers can still see the original ``ParseError``.
+        assert isinstance(excinfo.value.__cause__, ET.ParseError)
+
+    def test_empty_rss_body_translates_to_careers_adapter_error(self) -> None:
+        """An empty body is not valid XML and must surface as a domain error."""
+        from apply_pilot.features.careers.adapter import CareersAdapterError
+
+        world = _make_world(
+            responses={"https://acme.example/jobs": _ok_response("")},
+        )
+        with pytest.raises(CareersAdapterError, match="invalid RSS XML"):
+            asyncio_run(world.adapter.search(SourceQuery()))
+
+    def test_html_re_error_translates_to_careers_adapter_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An ``re.error`` from the HTML parser is caught at the boundary.
+
+        The current regex is constant and cannot fail on its own, but
+        a future regex change (or a malformed pattern supplied by a
+        plugin) could surface :class:`re.error`. The adapter must
+        translate it the same way it translates :class:`ParseError`
+        for RSS — the caller should only ever see
+        :class:`CareersAdapterError`.
+        """
+        import re as _re
+
+        from apply_pilot.features.careers import parser as careers_parser
+        from apply_pilot.features.careers.adapter import CareersAdapterError
+
+        class _ExplodingPattern:
+            """Stand-in for the compiled regex that raises on ``finditer``."""
+
+            def finditer(self, _body: str):  # type: ignore[no-untyped-def]
+                raise _re.error("simulated malformed pattern")
+
+        # ``re.Pattern`` is a built-in C type whose methods are
+        # read-only, so we swap the *object* the parser module holds
+        # rather than patching its method.
+        monkeypatch.setattr(careers_parser, "_VACANCY_LINK_RE", _ExplodingPattern())
+
+        world = _make_world(
+            kind=CareersParserKind.HTML,
+            parser_id="html-default",
+            responses={"https://acme.example/jobs": _ok_response(_HTML_BODY)},
+        )
+        with pytest.raises(CareersAdapterError) as excinfo:
+            asyncio_run(world.adapter.search(SourceQuery()))
+
+        assert "invalid HTML markup" in str(excinfo.value)
+        # The stdlib ``re.error`` is preserved on ``__cause__`` so it
+        # is not lost for debugging.
+        assert isinstance(excinfo.value.__cause__, _re.error)
+
+
 # ---------------------------------------------------------------------------
 # Adapter — normalise
 # ---------------------------------------------------------------------------

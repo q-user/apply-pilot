@@ -50,6 +50,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
+import xml.etree.ElementTree as ET
 from typing import Any
 
 import httpx
@@ -174,12 +176,31 @@ class CareersPageSourceAdapter:
 
         Raises:
             CareersAdapterError: when the retry budget is exhausted
-                on transient errors, or when the page returns a
-                non-2xx / non-5xx response (i.e. 4xx).
+                on transient errors, when the page returns a non-2xx /
+                non-5xx response (i.e. 4xx), or when the body fails
+                to parse (malformed XML for RSS sites, malformed
+                HTML/regex error for HTML sites).
         """
         del query  # unused — careers pages are a fixed URL
         body = await self._fetch_with_retry()
-        items = parse_payload(self._site.kind, body, base_url=self._base_url())
+        try:
+            items = parse_payload(self._site.kind, body, base_url=self._base_url())
+        except ET.ParseError as exc:
+            # The RSS parser delegates to ``xml.etree.ElementTree``,
+            # which raises ``ParseError`` on malformed XML. Without
+            # this translation a 200 OK with a broken body would leak
+            # the stdlib exception past the adapter contract.
+            raise CareersAdapterError(
+                f"invalid RSS XML from careers page {self._site.name!r}: {exc}"
+            ) from exc
+        except re.error as exc:
+            # The HTML parser uses a compiled regex; ``re.error`` is
+            # only raised for a malformed pattern, but we translate
+            # defensively so a future regex change cannot widen the
+            # surface that escapes the adapter contract.
+            raise CareersAdapterError(
+                f"invalid HTML markup from careers page {self._site.name!r}: {exc}"
+            ) from exc
         return [self._tag(item) for item in items]
 
     def normalize(self, raw: dict[str, Any]) -> Vacancy:
