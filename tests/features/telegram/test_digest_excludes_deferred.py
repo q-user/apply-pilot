@@ -104,7 +104,7 @@ async def test_stats_exclude_deferred_matches() -> None:
         now=cast("Callable[[], datetime]", _FakeClock(datetime(2026, 6, 15, 9, 0, tzinfo=UTC))),
     )
 
-    stats = await service.get_user_stats(user_id, on_date=date(2026, 6, 15))
+    stats = service.get_user_stats(user_id, on_date=date(2026, 6, 15))
 
     assert stats.matches_total == 8  # all rows except the 2 deferred
     assert stats.matches_new == 3  # 2 new + 1 scored
@@ -138,7 +138,7 @@ async def test_stats_digest_does_not_mention_deferred_for_user_with_only_deferre
         now=cast("Callable[[], datetime]", _FakeClock(datetime(2026, 6, 15, 9, 0, tzinfo=UTC))),
     )
 
-    stats = await service.get_user_stats(user_id, on_date=date(2026, 6, 15))
+    stats = service.get_user_stats(user_id, on_date=date(2026, 6, 15))
 
     assert stats.matches_total == 0
     assert stats.matches_new == 0

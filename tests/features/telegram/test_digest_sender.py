@@ -40,7 +40,7 @@ class _FakeStatsService:
         self._by_user = by_user
         self.requested: list[tuple[uuid.UUID, date | None]] = []
 
-    async def get_user_stats(self, user_id: uuid.UUID, *, on_date: date | None = None) -> UserStats:
+    def get_user_stats(self, user_id: uuid.UUID, *, on_date: date | None = None) -> UserStats:
         self.requested.append((user_id, on_date))
         return self._by_user[user_id]
 

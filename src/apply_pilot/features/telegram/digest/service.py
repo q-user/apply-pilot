@@ -92,7 +92,7 @@ class StatsService:
     # Per-user aggregation
     # ------------------------------------------------------------------
 
-    async def get_user_stats(
+    def get_user_stats(
         self,
         user_id: uuid.UUID,
         *,
@@ -104,6 +104,13 @@ class StatsService:
         want a deterministic boundary (tests, backfills) can pass it
         explicitly. The aggregation is a single ``list_by_user`` call
         followed by an in-memory bucket-by-status walk.
+
+        The method is intentionally sync: there is no ``await`` in
+        the body, and making it async forced every caller (including
+        :class:`apply_pilot.features.dashboard.service.DashboardService.get_summary`)
+        to bridge back to sync via :func:`asyncio.run`, which raised
+        ``RuntimeError`` when called from inside a running event loop
+        (issue #138).
         """
         target_date = on_date or self._now().date()
         matches = list(self._match_repo.list_by_user(user_id))

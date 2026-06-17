@@ -25,7 +25,7 @@ _LOGGER = logging.getLogger("apply_pilot.features.telegram.digest.sender")
 
 
 class _StatsServiceLike(Protocol):
-    async def get_user_stats(
+    def get_user_stats(
         self,
         user_id: uuid.UUID,
         *,
@@ -141,7 +141,7 @@ class DigestSender:
         on_date: date | None,
     ) -> bool:
         target_date = on_date or self._now().date()
-        stats = await self._stats_service.get_user_stats(user_id, on_date=target_date)
+        stats = self._stats_service.get_user_stats(user_id, on_date=target_date)
         text = render_digest_message(stats)
         try:
             await self._telegram_bot.send_message(chat_id, text)
