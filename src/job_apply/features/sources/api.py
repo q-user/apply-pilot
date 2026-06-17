@@ -10,6 +10,12 @@ and any future read-only client can list vacancies without
 authentication. The slice does not yet need a write surface here —
 ingest goes through the canonical :class:`SourceService` and is owned
 by the M2 collector slices (hh, telegram).
+
+As of M7 (issue #62) the wired :class:`SourceService` also carries
+an injected :class:`SourceMetricsService` so every ingest call
+records per-source metric events. The metrics service is built by
+its own dependency factory so tests can override it independently
+of the vacancy repository.
 """
 
 from __future__ import annotations
@@ -21,6 +27,10 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from job_apply.db import get_db
+from job_apply.features.source_metrics.repository import (
+    SqlSourceMetricRepository,
+)
+from job_apply.features.source_metrics.service import SourceMetricsService
 from job_apply.features.sources.repository import SqlVacancyRepository
 from job_apply.features.sources.schemas import VacancyListResponse, VacancyRead
 from job_apply.features.sources.service import SourceService, VacancyListResult
@@ -34,17 +44,32 @@ _LOGGER = logging.getLogger("job_apply.features.sources.api")
 router = APIRouter(tags=["vacancies"])
 
 
+def get_source_metrics_service(
+    session: Session = Depends(get_db),  # noqa: B008
+) -> SourceMetricsService:
+    """Build a :class:`SourceMetricsService` for the current request.
+
+    Tests override this dependency to inject the in-memory fake. The
+    default wires the SQL-backed repository off the request-scoped
+    session from :func:`get_db`.
+    """
+    metric_repo = SqlSourceMetricRepository(session_factory=lambda: session)
+    return SourceMetricsService(metric_repo=metric_repo)
+
+
 def get_vacancy_list_service(
     session: Session = Depends(get_db),  # noqa: B008
+    metrics: SourceMetricsService = Depends(get_source_metrics_service),  # noqa: B008
 ) -> SourceService:
     """Build a :class:`SourceService` for the current request.
 
     The service is reused for both ingest (later) and read here, so
     tests only need to override a single dependency to swap the
-    repository backing.
+    repository backing. The metrics service is wired in too so every
+    ingest call records the per-source event set (M7, issue #62).
     """
     repo = SqlVacancyRepository(session_factory=lambda: session)
-    return SourceService(repository=repo)
+    return SourceService(repository=repo, metrics=metrics)
 
 
 # ---------------------------------------------------------------------------

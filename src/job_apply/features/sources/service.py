@@ -7,11 +7,19 @@ screening-question capture to an optional
 :class:`~job_apply.features.screening.extractor.ScreeningQuestionExtractor`
 that the caller injects; the sources slice stays agnostic of the
 screening schema.
+
+As of M7 (issue #62) the service also records per-source ingest metrics
+(via an optional
+:class:`~job_apply.features.source_metrics.service.SourceMetricsService`).
+The metrics service is constructor-injected; ``None`` disables
+recording so existing call-sites that do not need metrics stay
+metric-free.
 """
 
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
@@ -24,6 +32,7 @@ from job_apply.features.sources.repository import VacancyRepository
 
 if TYPE_CHECKING:
     from job_apply.features.screening.extractor import ScreeningQuestionExtractor
+    from job_apply.features.source_metrics.service import SourceMetricsService
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +53,14 @@ class SourceService:
     vacancy is upserted, persists the resulting screening questions
     and returns them. When not supplied the service still upserts the
     vacancy but the screening-capture step is a no-op.
+
+    A fifth collaborator — a
+    :class:`~job_apply.features.source_metrics.service.SourceMetricsService`
+    — is also **optional**. When supplied, every public ingest call
+    records a set of four metric events (FETCH / NORMALIZE / DEDUPE /
+    FAIL) with the same ``timestamp`` and ``duration_ms`` so the
+    operator can see what happened during that call. When not
+    supplied the service stays metric-free.
     """
 
     def __init__(
@@ -52,10 +69,12 @@ class SourceService:
         *,
         normalizer: VacancyNormalizer | None = None,
         deduplicator: VacancyDeduplicator | None = None,
+        metrics: SourceMetricsService | None = None,
     ) -> None:
         self._repo = repository
         self._normalizer = normalizer or VacancyNormalizer()
         self._deduplicator = deduplicator or VacancyDeduplicator(repository)
+        self._metrics = metrics
 
     @property
     def repo(self) -> VacancyRepository:
@@ -71,6 +90,11 @@ class SourceService:
     def deduplicator(self) -> VacancyDeduplicator:
         """Expose the deduplicator for tests that need to assert state."""
         return self._deduplicator
+
+    @property
+    def metrics(self) -> SourceMetricsService | None:
+        """Expose the metrics service for tests that need to assert state."""
+        return self._metrics
 
     def ingest_vacancy(
         self,
@@ -104,16 +128,51 @@ class SourceService:
 
         Returns the persisted :class:`Vacancy` or ``None`` when the
         incoming row is detected as a duplicate.
+
+        When a :class:`SourceMetricsService` was injected, the call
+        records one set of four metric events with
+        ``fetched=normalized=1`` and ``deduped=0`` or ``1`` depending
+        on whether the row was a duplicate.
         """
-        vacancy = self._normalizer.normalize(source, raw_data)
-        if await self._deduplicator.is_duplicate(vacancy):
-            logger.info(
-                "Skipping duplicate vacancy source=%s source_id=%s",
-                vacancy.source,
-                vacancy.source_id,
+        metrics = self._metrics
+        started = time.monotonic() if metrics is not None else None
+        try:
+            vacancy = self._normalizer.normalize(source, raw_data)
+            if await self._deduplicator.is_duplicate(vacancy):
+                logger.info(
+                    "Skipping duplicate vacancy source=%s source_id=%s",
+                    vacancy.source,
+                    vacancy.source_id,
+                )
+                self._record_metrics(
+                    source=vacancy.source,
+                    fetched=1,
+                    normalized=1,
+                    deduped=1,
+                    failed=0,
+                    started=started,
+                )
+                return None
+            persisted = self._repo.upsert(vacancy)
+            self._record_metrics(
+                source=persisted.source,
+                fetched=1,
+                normalized=1,
+                deduped=0,
+                failed=0,
+                started=started,
             )
-            return None
-        return self._repo.upsert(vacancy)
+            return persisted
+        except Exception:
+            self._record_metrics(
+                source=source,
+                fetched=1,
+                normalized=0,
+                deduped=0,
+                failed=1,
+                started=started,
+            )
+            raise
 
     async def ingest_batch(self, vacancies: list[Vacancy]) -> tuple[list[Vacancy], list[Vacancy]]:
         """Deduplicate then persist a batch of vacancies.
@@ -131,15 +190,66 @@ class SourceService:
 
         The number of skipped duplicates is logged at ``info`` level.
         """
-        new, duplicates = await self._deduplicator.deduplicate_batch(vacancies)
-        for vacancy in new:
-            self._repo.upsert(vacancy)
-        logger.info(
-            "Ingest batch processed: persisted=%d skipped=%d",
-            len(new),
-            len(duplicates),
+        metrics = self._metrics
+        started = time.monotonic() if metrics is not None else None
+        source_name = vacancies[0].source if vacancies else "unknown"
+        try:
+            new, duplicates = await self._deduplicator.deduplicate_batch(vacancies)
+            for vacancy in new:
+                self._repo.upsert(vacancy)
+            logger.info(
+                "Ingest batch processed: persisted=%d skipped=%d",
+                len(new),
+                len(duplicates),
+            )
+            self._record_metrics(
+                source=source_name,
+                fetched=len(vacancies),
+                normalized=len(vacancies),
+                deduped=len(duplicates),
+                failed=0,
+                started=started,
+            )
+            return new, duplicates
+        except Exception:
+            self._record_metrics(
+                source=source_name,
+                fetched=len(vacancies),
+                normalized=len(vacancies),
+                deduped=0,
+                failed=1,
+                started=started,
+            )
+            raise
+
+    def _record_metrics(
+        self,
+        *,
+        source: str,
+        fetched: int,
+        normalized: int,
+        deduped: int,
+        failed: int,
+        started: float | None,
+    ) -> None:
+        """Record one set of metric events for an ingest call.
+
+        No-op when ``metrics`` is ``None`` or when ``started`` is
+        ``None`` (the caller did not start a monotonic clock because
+        no metrics service was injected).
+        """
+        metrics = self._metrics
+        if metrics is None or started is None:
+            return
+        duration_ms = max(0, int((time.monotonic() - started) * 1000))
+        metrics.record_ingest(
+            source_name=source,
+            fetched=fetched,
+            normalized=normalized,
+            deduped=deduped,
+            failed=failed,
+            duration_ms=duration_ms,
         )
-        return new, duplicates
 
     def list_vacancies(
         self,

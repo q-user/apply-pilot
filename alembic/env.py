@@ -30,6 +30,9 @@ from job_apply.features.scoring import (
 from job_apply.features.search_profiles import (
     models as _sp_models,  # noqa: F401  (register SearchProfile)
 )
+from job_apply.features.source_metrics import (
+    models as _source_metrics_models,  # noqa: F401  (register SourceMetricEventORM)
+)
 from job_apply.features.sources import models as _sources_models  # noqa: F401  (register Vacancy)
 from job_apply.features.users import models as _users_models  # noqa: F401  (register User)
 
