@@ -26,6 +26,8 @@ import pytest
 from job_apply.features.audit.models import AuditEventType
 from job_apply.features.audit.repository import InMemoryAuditLogRepository
 from job_apply.features.audit.service import AuditService
+from job_apply.features.learning.repository import InMemoryLearningSignalRepository
+from job_apply.features.learning.service import LearningSignalsService
 from job_apply.features.matches.models import MatchStatus, VacancyMatch
 from job_apply.features.matches.repository import InMemoryVacancyMatchRepository
 from job_apply.features.matches.service import MatchService
@@ -113,15 +115,29 @@ def audit_service(audit_repo: InMemoryAuditLogRepository) -> AuditService:
 
 
 @pytest.fixture
+def learning_repo() -> InMemoryLearningSignalRepository:
+    return InMemoryLearningSignalRepository()
+
+
+@pytest.fixture
+def learning_service(
+    learning_repo: InMemoryLearningSignalRepository,
+) -> LearningSignalsService:
+    return LearningSignalsService(repo=learning_repo)
+
+
+@pytest.fixture
 def handler(
     match_service: MatchService,
     telegram_account_repo: InMemoryTelegramAccountRepository,
     audit_service: AuditService,
+    learning_service: LearningSignalsService,
 ) -> RejectActionHandler:
     return RejectActionHandler(
         match_service=match_service,
         telegram_account_repo=telegram_account_repo,
         audit_service=audit_service,
+        learning_signals=learning_service,
     )
 
 
@@ -427,6 +443,164 @@ def test_handle_rejects_unlinked_telegram_account(
     assert "link" in text or "not linked" in text or "unknown" in text
     # State was not updated.
     assert match_repo.get_by_id(match.id).status == MatchStatus.NEW.value
+
+
+# ---------------------------------------------------------------------------
+# Learning signals integration (M8, issue #63)
+# ---------------------------------------------------------------------------
+
+
+def test_handle_records_learning_signal_with_reason(
+    handler: RejectActionHandler,
+    match_repo: InMemoryVacancyMatchRepository,
+    profile_repo: InMemorySearchProfileRepository,
+    telegram_account_repo: InMemoryTelegramAccountRepository,
+    learning_repo: InMemoryLearningSignalRepository,
+    user_id: uuid.UUID,
+    telegram_user_id: int,
+) -> None:
+    """A successful reject must also record a structured learning signal."""
+    match = _seed_match(match_repo, profile_repo, user_id=user_id)
+    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+
+    handler.handle(
+        chat_id=100,
+        telegram_user_id=telegram_user_id,
+        command=parse_reject_command(f"/reject {match.id} salary too low"),
+    )
+
+    signals = learning_repo.list_for_user(user_id)
+    assert len(signals) == 1
+    signal = signals[0]
+    assert signal.user_id == user_id
+    assert signal.match_id == match.id
+    assert signal.vacancy_id == match.vacancy_id
+    assert signal.search_profile_id == match.search_profile_id
+    assert signal.rejection_reason == "salary too low"
+    assert signal.signal_type == "rejection"
+    # Score and prompt_version are NULL on a freshly-ingested match.
+    assert signal.score is None
+    assert signal.prompt_version is None
+
+
+def test_handle_records_learning_signal_without_reason(
+    handler: RejectActionHandler,
+    match_repo: InMemoryVacancyMatchRepository,
+    profile_repo: InMemorySearchProfileRepository,
+    telegram_account_repo: InMemoryTelegramAccountRepository,
+    learning_repo: InMemoryLearningSignalRepository,
+    user_id: uuid.UUID,
+    telegram_user_id: int,
+) -> None:
+    """A reject without an explicit reason must still record a signal."""
+    match = _seed_match(match_repo, profile_repo, user_id=user_id)
+    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+
+    handler.handle(
+        chat_id=100,
+        telegram_user_id=telegram_user_id,
+        command=parse_reject_command(f"/reject {match.id}"),
+    )
+
+    signals = learning_repo.list_for_user(user_id)
+    assert len(signals) == 1
+    assert signals[0].rejection_reason is None
+
+
+def test_handle_records_score_and_prompt_version_when_present(
+    handler: RejectActionHandler,
+    match_repo: InMemoryVacancyMatchRepository,
+    profile_repo: InMemorySearchProfileRepository,
+    telegram_account_repo: InMemoryTelegramAccountRepository,
+    learning_repo: InMemoryLearningSignalRepository,
+    user_id: uuid.UUID,
+    telegram_user_id: int,
+) -> None:
+    """A match that already carries a score and prompt_version propagates to the signal."""
+    from datetime import UTC, datetime
+
+    match = _seed_match(match_repo, profile_repo, user_id=user_id)
+    # Simulate a match that has been through the LLM scoring pipeline.
+    match_repo.update_scoring(
+        match.id,
+        score=75,
+        explanation="good fit",
+        prompt_version="1.2.0",
+        confidence=0.9,
+        scored_at=datetime(2026, 6, 17, 12, 0, 0, tzinfo=UTC),
+    )
+    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+
+    handler.handle(
+        chat_id=100,
+        telegram_user_id=telegram_user_id,
+        command=parse_reject_command(f"/reject {match.id} bad fit"),
+    )
+
+    signals = learning_repo.list_for_user(user_id)
+    assert len(signals) == 1
+    assert signals[0].score == 75.0
+    assert signals[0].prompt_version == "1.2.0"
+
+
+def test_handle_does_not_record_learning_signal_for_unlinked_account(
+    match_repo: InMemoryVacancyMatchRepository,
+    profile_repo: InMemorySearchProfileRepository,
+    telegram_account_repo: InMemoryTelegramAccountRepository,
+    learning_repo: InMemoryLearningSignalRepository,
+    match_service: MatchService,
+    audit_service: AuditService,
+    learning_service: LearningSignalsService,
+    user_id: uuid.UUID,
+    telegram_user_id: int,
+) -> None:
+    """An unlinked Telegram account must not record a learning signal."""
+    match = _seed_match(match_repo, profile_repo, user_id=user_id)
+    handler = RejectActionHandler(
+        match_service=match_service,
+        telegram_account_repo=telegram_account_repo,
+        audit_service=audit_service,
+        learning_signals=learning_service,
+    )
+
+    handler.handle(
+        chat_id=100,
+        telegram_user_id=telegram_user_id,
+        command=parse_reject_command(f"/reject {match.id}"),
+    )
+
+    assert learning_repo.list_for_user(user_id) == []
+
+
+def test_handle_does_not_record_learning_signal_for_non_owner(
+    match_repo: InMemoryVacancyMatchRepository,
+    profile_repo: InMemorySearchProfileRepository,
+    telegram_account_repo: InMemoryTelegramAccountRepository,
+    learning_repo: InMemoryLearningSignalRepository,
+    match_service: MatchService,
+    audit_service: AuditService,
+    learning_service: LearningSignalsService,
+    user_id: uuid.UUID,
+    other_user_id: uuid.UUID,
+    telegram_user_id: int,
+) -> None:
+    """A user who doesn't own the match must not record a learning signal."""
+    match = _seed_match(match_repo, profile_repo, user_id=other_user_id)
+    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+    handler = RejectActionHandler(
+        match_service=match_service,
+        telegram_account_repo=telegram_account_repo,
+        audit_service=audit_service,
+        learning_signals=learning_service,
+    )
+
+    handler.handle(
+        chat_id=100,
+        telegram_user_id=telegram_user_id,
+        command=parse_reject_command(f"/reject {match.id}"),
+    )
+
+    assert learning_repo.list_for_user(user_id) == []
 
 
 # ---------------------------------------------------------------------------
