@@ -48,6 +48,7 @@ that performs the join.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Protocol, runtime_checkable
@@ -59,6 +60,8 @@ from apply_pilot.features.scoring_ab.experiments import ScoringVariant
 from apply_pilot.features.scoring_ab.service import ScoringExperimentService
 from apply_pilot.features.search_profiles.models import SearchProfile
 from apply_pilot.features.sources.models import Vacancy
+
+_LOGGER = logging.getLogger("apply_pilot.features.scoring.service")
 
 #: The default experiment name the scoring service looks up. Stays in
 #: sync with :data:`~apply_pilot.features.scoring.llm.LLM_SCORING_PROMPT_NAME`
@@ -265,15 +268,23 @@ class ScoringService:
         """Score every match in the pending queue, capped at ``limit``.
 
         Returns the number of matches successfully scored. The method
-        is fail-soft: a per-match scoring error is logged via the
-        underlying :class:`LLMScorer` exception path and the loop
-        continues. Failures bubble up unhandled today; the slice does
+        is fail-soft: a per-match scoring error is logged with the
+        match id and exception class, and the loop continues to the
+        next match. Failures do not abort the batch; the slice does
         not yet own a retry policy.
         """
         pending = self._match_repo.list_pending(limit=limit)
         scored = 0
         for match in pending:
-            await self.score_match(match)
+            try:
+                await self.score_match(match)
+            except Exception as exc:  # noqa: BLE001 - fail-soft per match
+                _LOGGER.exception(
+                    "scoring failed for match_id=%s (%s); continuing",
+                    match.id,
+                    type(exc).__name__,
+                )
+                continue
             scored += 1
         return scored
 
