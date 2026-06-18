@@ -368,8 +368,16 @@ class AcceptActionHandler:
             return
         # ``cover_letter_id`` must be the FK target — the draft's own
         # id — so the ``style_memory_entries.cover_letter_id`` row is
-        # consistent with the ``cover_letter_drafts`` table.
-        cover_letter_id = getattr(draft, "id", None) or match_id
+        # consistent with the ``cover_letter_drafts`` table. Use a
+        # strict ``is None`` check: a falsy but non-None ``id`` (e.g.
+        # the zero UUID ``00000000-0000-0000-0000-000000000000``) is
+        # a real value and must not silently fall back to ``match_id``,
+        # which would break the FK constraint. The zero UUID is
+        # also rejected as a sentinel "missing" value — it cannot
+        # satisfy the ``cover_letter_drafts.id`` FK in production.
+        cover_letter_id = getattr(draft, "id", None)
+        if cover_letter_id is None or cover_letter_id == uuid.UUID(int=0):
+            return
         try:
             self._style_memory_service.record_accepted_letter(  # type: ignore[union-attr]
                 user_id=user_id,

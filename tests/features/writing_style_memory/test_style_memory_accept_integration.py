@@ -370,3 +370,104 @@ def test_existing_accept_action_tests_still_pass(
     assert len(logs) == 1
     details = json.loads(logs[0].details)
     assert details["match_id"] == str(match.id)
+
+
+# ---------------------------------------------------------------------------
+# Regression: issue #148 — zero-UUID draft.id must not fall back to match_id
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _RecordingStyleMemoryService:
+    """A ``StyleMemoryService``-shaped collaborator that records every call.
+
+    The handler must NOT call :meth:`record_accepted_letter` when the
+    draft's ``id`` is a falsy but non-``None`` value (e.g. the zero
+    UUID). The old implementation used ``getattr(draft, "id", None)
+    or match_id`` which silently substituted ``match_id`` for the zero
+    UUID, producing a ``style_memory_entries.cover_letter_id`` value
+    that points at a ``vacancy_match`` row rather than a
+    ``cover_letter_drafts`` row — a foreign-key violation under SQL.
+    The fix (issue #148) bails out with a strict ``is None`` check.
+    """
+
+    calls: list[dict[str, object]]
+
+    def __init__(self) -> None:
+        self.calls = []
+
+    def record_accepted_letter(
+        self,
+        *,
+        user_id: uuid.UUID,
+        cover_letter_id: uuid.UUID,
+        letter_text: str,
+    ) -> None:
+        self.calls.append(
+            {
+                "user_id": user_id,
+                "cover_letter_id": cover_letter_id,
+                "letter_text": letter_text,
+            }
+        )
+
+
+def test_record_style_memory_skips_when_draft_id_is_zero_uuid(
+    match_service: MatchService,
+    match_repo: InMemoryVacancyMatchRepository,
+    profile_repo: InMemorySearchProfileRepository,
+    draft_repo: InMemoryCoverLetterDraftRepository,
+    telegram_account_repo: InMemoryTelegramAccountRepository,
+    audit_service: AuditService,
+    user_id: uuid.UUID,
+    telegram_user_id: int,
+) -> None:
+    """Regression for issue #148.
+
+    A draft with the zero UUID as its ``id`` is a real value — it is
+    not ``None`` and it must not be treated as missing. The old
+    ``getattr(draft, "id", None) or match_id`` expression evaluated
+    the zero UUID as falsy and silently substituted ``match_id``,
+    breaking the ``style_memory_entries.cover_letter_id`` FK. The
+    handler must now skip the recording entirely.
+    """
+    match = _seed_match(match_repo, profile_repo, user_id=user_id)
+    zero_uuid = uuid.UUID("00000000-0000-0000-0000-000000000000")
+    # Inject a draft with a falsy-but-non-None id (the zero UUID) so
+    # we can prove the strict None check is what protects the FK.
+    draft_repo.create(
+        CoverLetterDraft(
+            id=zero_uuid,
+            match_id=match.id,
+            user_id=user_id,
+            content="This draft has a zero-UUID id; recording must be skipped.",
+            prompt_version="cover-letter@1.0.0",
+            model_used="gpt-test",
+            status="draft",
+        )
+    )
+    _link(telegram_account_repo, user_id=user_id, tg=telegram_user_id)
+
+    style_memory = _RecordingStyleMemoryService()
+    handler = AcceptActionHandler(
+        match_service=match_service,
+        telegram_account_repo=telegram_account_repo,
+        audit_service=audit_service,
+        style_memory_service=style_memory,  # type: ignore[arg-type]
+        draft_repository=draft_repo,
+    )
+
+    response = handler.handle(
+        chat_id=1,
+        telegram_user_id=telegram_user_id,
+        command=parse_accept_command(f"/accept {match.id}"),
+    )
+
+    # Accept itself still succeeds — the user-facing behaviour is
+    # unchanged; only the style-memory recording is skipped.
+    assert isinstance(response, SendMessageRequest)
+    assert "accepted" in response.text.lower()
+    # The style memory service was never called: the zero UUID must
+    # not flow through as the FK target, and the old ``or match_id``
+    # fallback must not fire either.
+    assert style_memory.calls == []
