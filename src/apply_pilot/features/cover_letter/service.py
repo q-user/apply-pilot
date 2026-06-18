@@ -335,11 +335,16 @@ class CoverLetterService:
 
         existing = self._draft_repo.get_by_match(match_id)
         if existing is not None:
-            existing.content = content
-            existing.prompt_version = self._prompt_version
-            existing.model_used = model_used
-            existing.updated_at = datetime.now(UTC)
-            return existing
+            # ``update_content`` is the durable path: the SQL repo
+            # closes its session inside ``get_by_match``, so the
+            # instance it returns is detached and a direct attribute
+            # write on it would be silently lost. Issue #144.
+            return self._draft_repo.update_content(
+                match_id=match_id,
+                content=content,
+                prompt_version=self._prompt_version,
+                model_used=model_used,
+            )
 
         draft = CoverLetterDraft(
             match_id=match_id,
