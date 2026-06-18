@@ -138,9 +138,15 @@ class TelegramChannelScanner(BaseProcess):
                         "telegram_channels.scanner.tick_failed",
                         extra={"event": "telegram_channels.scanner.tick_failed"},
                     )
+                    # ``wait_for`` cancels the underlying ``Event.wait()`` on
+                    # timeout, so no extra task is leaked across cycles. We
+                    # call ``_shutdown_event.wait()`` directly instead of
+                    # ``BaseProcess.wait_for_shutdown()`` because the latter
+                    # logs a ``process.shutdown`` event that is misleading
+                    # while the worker is still alive and just backing off.
                     with contextlib.suppress(TimeoutError):
                         await asyncio.wait_for(
-                            self._wait_for_shutdown_no_log(),
+                            self._shutdown_event.wait(),
                             timeout=_ERROR_BACKOFF_SECONDS,
                         )
                     continue
@@ -226,20 +232,6 @@ class TelegramChannelScanner(BaseProcess):
                     "count": len(duplicates),
                 },
             )
-
-    async def _wait_for_shutdown_no_log(self) -> None:
-        """Wait for the shutdown event without emitting a log line.
-
-        ``BaseProcess.wait_for_shutdown`` logs a ``process.shutdown``
-        event unconditionally; using it from an error-recovery
-        branch would emit misleading noise while the worker is still
-        alive. This wrapper delegates to the underlying event
-        without the side effect.
-        """
-        await asyncio.wait(
-            {asyncio.create_task(self._shutdown_event.wait())},
-            return_when=asyncio.FIRST_COMPLETED,
-        )
 
 
 __all__ = ["TelegramChannelScanner"]
