@@ -11,16 +11,19 @@ returns.
 Output format
 -------------
 
-The summary is a single string with three pipe-free, comma-free
-sections joined by ``;`` so it can be embedded in a single TEXT column
-without confusing the simple ``split()`` consumer in the API:
+The summary is a single string with three sections joined by ``;`` so
+it can be embedded in a single TEXT column and read back by a simple
+``split()`` consumer in the API:
 
 * ``first-sentence: <text>`` — the first sentence of the letter
-  (split on ``.``, ``!``, ``?``).
+  (split on ``.``, ``!``, ``?``). Sentence-ending punctuation is
+  stripped from the value.
 * ``words=<N>`` — the total whitespace-separated token count.
-* ``trigrams=<a-b-c, ...>`` — the top-3 trigrams of the lower-cased
-  text, joined with ``-``. Empty when the letter has fewer than three
-  words.
+* ``trigrams=<a-b-c, d-e-f, g-h-i>`` — the top-3 trigrams of the
+  lower-cased text, each trigram itself joined with ``-`` and the
+  selected trigrams joined with ``, `` (comma + space). The trigrams
+  section is empty (i.e. ``trigrams=``) when the letter has fewer
+  than three words.
 
 Blank or whitespace-only input returns an empty string so the caller
 can short-circuit and refuse to write an entry.

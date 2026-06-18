@@ -4,7 +4,8 @@ The MVP summariser is intentionally simple — no LLM, no external service:
 
 * the first sentence (split on ``.``, ``!``, ``?``);
 * the total word count;
-* the top-3 trigrams of the lower-cased text (joined with ``-``).
+* the top-3 trigrams of the lower-cased text (each trigram is
+  ``word-word-word`` and the selected trigrams are joined with ``, ``).
 
 Keeping the heuristic deterministic and unit-tested means we can ship the
 storage / ingestion pipeline in M8 (issue #66) without waiting on an LLM
@@ -61,3 +62,47 @@ def test_summarise_is_deterministic() -> None:
     """The same input must produce the same output on repeated calls."""
     text = "Hello, I am writing to apply for the role. I bring ten years of Python."
     assert summarise_letter(text) == summarise_letter(text)
+
+
+def test_summarise_format_is_stable_snapshot() -> None:
+    """Regression: the output format must match the documented structure.
+
+    Issue #142: the module docstring previously claimed the trigrams were
+    joined with ``-`` and the sections were pipe-free / comma-free. The
+    actual implementation joins the selected trigrams with ``, `` (comma
+    + space). This test pins the exact, full output so the format cannot
+    drift without a conscious update to the docstring and this snapshot.
+    """
+    text = "Hello there! I bring ten years of Python experience."
+    expected = (
+        "first-sentence: Hello there; words=9; trigrams=hello-there-i, there-i-bring, i-bring-ten"
+    )
+    assert summarise_letter(text) == expected
+
+
+def test_summarise_format_empty_trigrams_section_is_stable() -> None:
+    """Regression: short letters must yield an empty ``trigrams=`` section.
+
+    The summary structure (three ``;``-separated sections, with the
+    trigrams section rendered as ``trigrams=``) must remain stable even
+    when there are not enough words to build a trigram.
+    """
+    text = "Short note."
+    assert summarise_letter(text) == "first-sentence: Short note; words=2; trigrams="
+
+
+def test_summarise_format_sections_are_semicolon_joined() -> None:
+    """The summary must have exactly three ``;``-separated sections.
+
+    Guards against accidental introduction of extra ``;`` inside the
+    first-sentence value (e.g. someone adding it to the split consumer).
+    """
+    summary = summarise_letter("Hello there! I bring ten years of Python experience.")
+    # Splitting on ';' must yield three parts: two intermediate ones
+    # containing the key/value pairs and a final empty trigrams tail.
+    parts = summary.split(";")
+    assert len(parts) == 3
+    assert parts[0].startswith("first-sentence:")
+    assert parts[1].startswith(" words=")
+    # Trigrams part is a plain comma-joined list with no leading semicolon.
+    assert parts[2].startswith(" trigrams=")
