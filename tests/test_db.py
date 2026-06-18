@@ -20,6 +20,7 @@ from apply_pilot.db import (
     SessionLocal,
     engine,
     get_db,
+    get_db_with_factory,
     get_engine,
     init_db,
 )
@@ -86,7 +87,7 @@ def test_get_db_yields_and_closes() -> None:
 
     factory: Callable[[], FakeSession] = FakeSession
 
-    gen = get_db(session_factory=factory)
+    gen = get_db_with_factory(session_factory=factory)
     session = next(gen)
     assert isinstance(session, FakeSession)
     with pytest.raises(StopIteration):
@@ -103,7 +104,7 @@ def test_get_db_closes_session_on_consumer_exception() -> None:
             closed.append(True)
 
     factory: Callable[[], FakeSession] = FakeSession
-    gen = get_db(session_factory=factory)
+    gen = get_db_with_factory(session_factory=factory)
     next(gen)
     with pytest.raises(RuntimeError, match="boom"):
         gen.throw(RuntimeError("boom"))

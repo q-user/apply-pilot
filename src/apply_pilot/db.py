@@ -71,14 +71,28 @@ SessionLocal: sessionmaker[Session] = sessionmaker(
 )
 
 
-def get_db(
-    session_factory: Callable[[], Session] | None = None,
-) -> Iterator[Session]:
+def get_db() -> Iterator[Session]:
     """FastAPI dependency: yield a session and close it on exit.
 
-    The optional `session_factory` lets tests inject a fake factory that
-    returns objects with a `close()` method, while production callers can
-    rely on the default `SessionLocal`.
+    Production callers use this directly. Tests that need to inject a
+    fake session factory should call :func:`get_db_with_factory` and
+    pass it to ``app.dependency_overrides[get_db]`` so the
+    ``Callable[[], Session]`` parameter never lands in the FastAPI
+    signature inspected by Pydantic's OpenAPI generator.
+    """
+    yield from get_db_with_factory()
+
+
+def get_db_with_factory(
+    session_factory: Callable[[], Session] | None = None,
+) -> Iterator[Session]:
+    """Like :func:`get_db` but with an overridable session factory.
+
+    The callable is intentionally not a FastAPI dependency: Pydantic v2
+    cannot emit a JSON Schema for ``Callable`` annotations, so exposing
+    it through ``Depends`` breaks the entire OpenAPI document. Tests
+    register this helper via ``app.dependency_overrides[get_db]`` to
+    inject a fake factory without touching the production signature.
     """
     factory: Callable[[], Session] = (
         session_factory if session_factory is not None else SessionLocal
