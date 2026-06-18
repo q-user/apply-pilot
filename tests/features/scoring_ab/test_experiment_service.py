@@ -18,10 +18,12 @@ The slice's "live" wiring is exercised in
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import UTC, datetime
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from apply_pilot.features.scoring_ab.experiments import (
     InMemoryScoringExperimentRepository,
@@ -251,3 +253,76 @@ def test_record_outcome_is_noop_for_unknown_experiment(
         score=80,
         accepted=True,
     )
+
+
+class _RaisingRepo:
+    """Minimal :class:`ScoringExperimentRepository` that raises on every call.
+
+    Used by the issue #150 regression tests: the service is duck-typed on
+    the protocol, so we only need to implement the method under test.
+    """
+
+    __slots__ = ("_exc",)
+
+    def __init__(self, exc: BaseException) -> None:
+        self._exc = exc
+
+    def record_outcome(
+        self,
+        *,
+        experiment_id: uuid.UUID,
+        variant_name: str,
+        user_id: uuid.UUID,
+        vacancy_id: uuid.UUID,
+        score: float,
+        accepted: bool,
+    ) -> None:
+        raise self._exc
+
+
+def test_record_outcome_propagates_non_db_exception() -> None:
+    """Issue #150: a non-DB exception from the repo must propagate.
+
+    The service previously caught every :class:`Exception`, which
+    silently masked genuine programming errors (TypeError, ValueError,
+    RuntimeError, ...). Narrowing the catch to
+    :class:`sqlalchemy.exc.SQLAlchemyError` lets real bugs surface.
+    """
+    repo = _RaisingRepo(RuntimeError("boom"))
+    service = ScoringExperimentService(repo)  # type: ignore[arg-type]
+
+    with pytest.raises(RuntimeError, match="boom"):
+        service.record_outcome(
+            experiment_id=uuid.uuid4(),
+            variant_name="control",
+            user_id=uuid.uuid4(),
+            vacancy_id=uuid.uuid4(),
+            score=80,
+            accepted=True,
+        )
+
+
+def test_record_outcome_swallows_and_logs_sqlalchemy_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Issue #150: a ``SQLAlchemyError`` from the repo is swallowed and logged.
+
+    The scoring hot path must not fail when the experiment store is
+    misbehaving (FK violations, deadlocks, connection drops, ...);
+    those are still logged so an operator can see the failure.
+    """
+    repo = _RaisingRepo(IntegrityError("insert", "params", Exception("fk violation")))
+    service = ScoringExperimentService(repo)  # type: ignore[arg-type]
+
+    with caplog.at_level(logging.ERROR, logger="apply_pilot.features.scoring_ab.service"):
+        # Must not raise.
+        service.record_outcome(
+            experiment_id=uuid.uuid4(),
+            variant_name="control",
+            user_id=uuid.uuid4(),
+            vacancy_id=uuid.uuid4(),
+            score=80,
+            accepted=True,
+        )
+
+    assert any("scoring_ab.record_outcome.failed" in record.message for record in caplog.records)

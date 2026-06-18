@@ -130,6 +130,26 @@ def test_in_memory_add_rejects_empty_variants(
         in_memory.add(experiment)
 
 
+def test_in_memory_add_rejects_duplicate_variant_names(
+    in_memory: InMemoryScoringExperimentRepository,
+) -> None:
+    """Issue #146: two variants sharing a ``name`` would merge in ``aggregate_outcomes``.
+
+    The repository groups outcomes by ``variant_name``; a duplicate name
+    would silently collapse two distinct variants into a single bucket
+    and skew the experiment's measured effect.
+    """
+    experiment = _experiment(
+        variants=[
+            _variant("control", "1.0.0", 0.5),
+            _variant("control", "1.1.0", 0.5),  # duplicate name
+        ]
+    )
+
+    with pytest.raises(ValueError, match="duplicate variant names"):
+        in_memory.add(experiment)
+
+
 def test_in_memory_get_active_returns_active(
     in_memory: InMemoryScoringExperimentRepository,
 ) -> None:
