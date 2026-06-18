@@ -13,7 +13,9 @@ spec keeps the existing admin tag, and so the public spec does
 not advertise per-source observability data to non-admin clients.
 The repository is wired through FastAPI ``dependency_overrides``;
 the default factory binds a fresh :class:`SqlSourceMetricRepository`
-per request.
+per request. The endpoint requires a valid bearer token (issue
+#145); the gate honours the ``APP_ADMIN_REQUIRE_AUTH`` env flag (see
+:mod:`apply_pilot.features.admin._auth`).
 """
 
 from __future__ import annotations
@@ -25,6 +27,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from apply_pilot.db import get_db
+from apply_pilot.features.admin._auth import require_admin_user
 from apply_pilot.features.source_metrics.repository import (
     SourceMetricRepository,
     SqlSourceMetricRepository,
@@ -54,6 +57,7 @@ def get_source_metric_repository(
     response_model=list[SourceMetricRead],
     responses={
         200: {"description": "Recorded metric events for the requested source."},
+        401: {"description": "Missing or invalid bearer token."},
         422: {"description": "Missing or invalid query parameters."},
     },
     summary="List source ingest metric events",
@@ -73,6 +77,7 @@ def list_source_metrics(
         description="ISO 8601 datetime; only events with ``timestamp <= until`` are returned.",
     ),
     repo: SourceMetricRepository = Depends(get_source_metric_repository),  # noqa: B008
+    _admin_user: str = Depends(require_admin_user),  # noqa: B008
 ) -> list[SourceMetricRead]:
     """Return recorded metric events for *source*, newest first.
 

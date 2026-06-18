@@ -159,6 +159,26 @@ def get_auth_settings() -> AuthSettings:
     )
 
 
+# --- Admin settings (M6, issue #145) ----------------------------------------
+
+
+def get_admin_auth_required() -> bool:
+    """Read ``APP_ADMIN_REQUIRE_AUTH`` from the environment.
+
+    Returns ``True`` (auth required) when the variable is unset or set to
+    a truthy value (``1``/``true``/``yes``/``on``). Returns ``False``
+    only when the operator explicitly opts out (``0``/``false``/``no``/``off``).
+    Unparseable values raise :class:`ValueError` at startup so a typo
+    surfaces immediately.
+
+    The default is ``True`` so production deployments that forget to
+    set the flag do not silently expose unauthenticated admin endpoints
+    (issue #145).
+    """
+    raw = os.getenv("APP_ADMIN_REQUIRE_AUTH", "true")
+    return _parse_bool(raw, env_var="APP_ADMIN_REQUIRE_AUTH")
+
+
 # --- Resume settings (M1, issues #15 and #16) -------------------------------
 _RESUMES_DEFAULT_MAX_FILE_SIZE_MB = 10
 

@@ -39,6 +39,7 @@ Public surface
 
 from __future__ import annotations
 
+from apply_pilot.features.admin._auth import require_admin_user
 from apply_pilot.features.admin.api import router
 from apply_pilot.features.admin.health import (
     DatabaseHealthCheck,
@@ -78,5 +79,6 @@ __all__ = [
     "MigrationsHealthCheck",
     "RedisHealthCheck",
     "get_health_checks",
+    "require_admin_user",
     "router",
 ]

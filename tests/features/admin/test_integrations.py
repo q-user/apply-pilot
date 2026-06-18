@@ -34,6 +34,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import StaticPool, create_engine
 
+from apply_pilot.config import get_admin_auth_required
 from apply_pilot.features.admin.integrations import (
     DatabaseChecker,
     HhOAuthChecker,
@@ -422,6 +423,11 @@ def app(
     application.include_router(router)
     application.dependency_overrides[get_integration_status_store] = lambda: store
     application.dependency_overrides[get_integration_status_worker] = lambda: worker
+    # The admin auth gate is disabled in this fixture so the
+    # pre-issue-#145 tests do not need a token; the dedicated
+    # :mod:`tests.features.admin.test_admin_api` suite covers the
+    # auth-required code path.
+    application.dependency_overrides[get_admin_auth_required] = lambda: False
     try:
         yield application
     finally:

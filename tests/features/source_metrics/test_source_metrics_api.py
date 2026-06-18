@@ -17,6 +17,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from apply_pilot.app import create_app
+from apply_pilot.config import get_admin_auth_required
 from apply_pilot.features.source_metrics.api import get_source_metric_repository
 from apply_pilot.features.source_metrics.models import (
     SourceMetricEvent,
@@ -40,9 +41,13 @@ def app(repo: InMemorySourceMetricRepository) -> Iterator[FastAPI]:
     The real :func:`create_app` factory is used so the slice is wired
     exactly as in production; only the
     :func:`get_source_metric_repository` dependency is overridden.
+    The admin auth gate is disabled for this slice's pre-issue-#145
+    tests; the auth-required code path is covered by the dedicated
+    :mod:`tests.features.admin.test_admin_api` suite.
     """
     application = create_app()
     application.dependency_overrides[get_source_metric_repository] = lambda: repo
+    application.dependency_overrides[get_admin_auth_required] = lambda: False
     try:
         yield application
     finally:

@@ -22,6 +22,7 @@ from sqlalchemy import StaticPool, create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from apply_pilot.config import get_admin_auth_required
 from apply_pilot.db import Base, get_db
 from apply_pilot.features.audit import models as _audit_models  # noqa: F401
 from apply_pilot.features.matches import models as _matches_models  # noqa: F401
@@ -67,6 +68,11 @@ def app(session_factory) -> Iterator[FastAPI]:
     application = FastAPI()
     application.include_router(scoring_review_router)
     application.dependency_overrides[get_db] = _override_get_db
+    # The admin auth gate is disabled in this fixture so the
+    # pre-issue-#145 tests do not need a token; the dedicated
+    # :mod:`tests.features.admin.test_admin_api` suite covers the
+    # auth-required code path.
+    application.dependency_overrides[get_admin_auth_required] = lambda: False
     try:
         yield application
     finally:

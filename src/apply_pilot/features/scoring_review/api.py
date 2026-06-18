@@ -9,9 +9,9 @@ contract) and exposes two endpoints:
   note against a match by appending a ``MATCH_REVIEWED`` row to
   ``audit_logs`` (no status change, no schema migration).
 
-Like the rest of the M6/M8 admin endpoints, the router is intentionally
-unauthenticated for now; the authorization story is tracked separately
-and applies to every admin route uniformly.
+Both endpoints require a valid bearer token (issue #145); the gate
+honours the ``APP_ADMIN_REQUIRE_AUTH`` env flag (see
+:mod:`apply_pilot.features.admin._auth`).
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from apply_pilot.db import get_db
+from apply_pilot.features.admin._auth import require_admin_user
 from apply_pilot.features.audit.repository import SqlAuditLogRepository
 from apply_pilot.features.audit.service import AuditService
 from apply_pilot.features.scoring_review.repository import SqlScoringReviewQueue
@@ -83,6 +84,7 @@ def get_scoring_review_service(
     "/queue",
     response_model=list[LowConfidenceMatchRead],
     responses={
+        401: {"description": "Missing or invalid bearer token."},
         422: {"description": "Invalid threshold or limit."},
     },
     summary="List matches with low LLM confidence",
@@ -101,6 +103,7 @@ def list_queue(
         description="Maximum number of rows to return.",
     ),
     service: ScoringReviewService = Depends(get_scoring_review_service),  # noqa: B008
+    _admin_user: str = Depends(require_admin_user),  # noqa: B008
 ) -> list[LowConfidenceMatchRead]:
     """Return every match with ``confidence < threshold``.
 
@@ -117,6 +120,7 @@ def list_queue(
     "/{match_id}/note",
     response_model=ScoringReviewNoteResponse,
     responses={
+        401: {"description": "Missing or invalid bearer token."},
         404: {"description": "The match does not exist."},
         422: {"description": "Note failed validation (empty or too long)."},
     },
@@ -126,6 +130,7 @@ def add_note(
     match_id: str,
     payload: ScoringReviewNoteCreate,
     service: ScoringReviewService = Depends(get_scoring_review_service),  # noqa: B008
+    _admin_user: str = Depends(require_admin_user),  # noqa: B008
 ) -> ScoringReviewNoteResponse:
     """Append a ``MATCH_REVIEWED`` audit event for *match_id*.
 

@@ -13,9 +13,10 @@ two read-only endpoints:
 Both endpoints accept an injectable
 :class:`ScoringExperimentRepository` through FastAPI's
 dependency-injection machinery; production wires the SQLAlchemy-backed
-implementation, tests inject the in-memory fake. The endpoints are
-intentionally unauthenticated for now — same posture as the rest of
-the M6 admin slice.
+implementation, tests inject the in-memory fake. Both endpoints
+require a valid bearer token (issue #145); the gate honours the
+``APP_ADMIN_REQUIRE_AUTH`` env flag (see
+:mod:`apply_pilot.features.admin._auth`).
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from apply_pilot.db import get_db
+from apply_pilot.features.admin._auth import require_admin_user
 from apply_pilot.features.scoring_ab.experiments import (
     ScoringExperimentRepository,
     SqlScoringExperimentRepository,
@@ -107,11 +109,13 @@ router: APIRouter = APIRouter(prefix="/admin/scoring", tags=["scoring-ab"])
     response_model=list[dict[str, Any]],
     responses={
         200: {"description": "Every experiment with its variants."},
+        401: {"description": "Missing or invalid bearer token."},
     },
     summary="List all A/B scoring experiments",
 )
 def list_experiments(
     repo: ScoringExperimentRepository = Depends(get_experiment_repo),  # noqa: B008
+    _admin_user: str = Depends(require_admin_user),  # noqa: B008
 ) -> list[dict[str, Any]]:
     """Return every experiment + its variants as a JSON-serialisable list."""
     return [_scoring_experiment_read(experiment) for experiment in repo.list_all()]
@@ -122,6 +126,7 @@ def list_experiments(
     response_model=dict[str, Any],
     responses={
         200: {"description": "Aggregated outcomes per variant for the experiment."},
+        401: {"description": "Missing or invalid bearer token."},
         404: {"description": "No experiment with the given name."},
     },
     summary="List aggregated outcomes for an experiment",
@@ -129,6 +134,7 @@ def list_experiments(
 def list_experiment_outcomes(
     name: str,
     repo: ScoringExperimentRepository = Depends(get_experiment_repo),  # noqa: B008
+    _admin_user: str = Depends(require_admin_user),  # noqa: B008
 ) -> dict[str, Any]:
     """Return ``{experiment, outcomes}`` for the experiment with ``name``.
 
