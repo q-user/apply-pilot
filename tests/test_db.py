@@ -19,7 +19,7 @@ from apply_pilot.db import (
     Base,
     SessionLocal,
     engine,
-    get_db,
+    get_db_with_factory,
     get_engine,
     init_db,
 )
@@ -86,7 +86,7 @@ def test_get_db_yields_and_closes() -> None:
 
     factory: Callable[[], FakeSession] = FakeSession
 
-    gen = get_db(session_factory=factory)
+    gen = get_db_with_factory(session_factory=factory)
     session = next(gen)
     assert isinstance(session, FakeSession)
     with pytest.raises(StopIteration):
@@ -103,11 +103,54 @@ def test_get_db_closes_session_on_consumer_exception() -> None:
             closed.append(True)
 
     factory: Callable[[], FakeSession] = FakeSession
-    gen = get_db(session_factory=factory)
+    gen = get_db_with_factory(session_factory=factory)
     next(gen)
     with pytest.raises(RuntimeError, match="boom"):
         gen.throw(RuntimeError("boom"))
     assert closed == [True]
+
+
+def test_get_db_no_args_yields_session_from_session_local() -> None:
+    """Production ``get_db()`` with no args must yield a real session from ``SessionLocal``.
+
+    After the #163 split, ``get_db()`` is the parameter-free FastAPI dependency
+    and ``get_db_with_factory(session_factory=...)`` is the test-only helper.
+    The other two tests in this module only exercise the helper; this one
+    covers the no-arg fallback path that production actually uses.
+    """
+    closed: list[bool] = []
+
+    class _TrackingSession(Session):
+        def close(self) -> None:  # type: ignore[override]
+            closed.append(True)
+            super().close()
+
+    real_session_local: sessionmaker[Session] = sessionmaker(
+        bind=engine, class_=_TrackingSession, autocommit=False, autoflush=False
+    )
+
+    # Isolate the test from the module-level ``SessionLocal`` so we observe
+    # the close() call. We rely on ``get_db()`` resolving ``SessionLocal`` at
+    # call time (not at import time), which is how ``db.py`` is written.
+    import apply_pilot.db as _db_module
+
+    original_session_local = _db_module.SessionLocal
+    _db_module.SessionLocal = real_session_local
+    try:
+        gen = _db_module.get_db()
+        session = next(gen)
+        try:
+            assert isinstance(session, Session)
+            # Same engine binding as SessionLocal — catches a regression where
+            # someone swaps in a different factory by accident.
+            assert session.get_bind() is engine
+        finally:
+            with pytest.raises(StopIteration):
+                next(gen)
+    finally:
+        _db_module.SessionLocal = original_session_local
+
+    assert closed == [True], "session was not closed on normal generator exit"
 
 
 # ---------------------------------------------------------------------------

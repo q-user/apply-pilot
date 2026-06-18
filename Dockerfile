@@ -53,4 +53,4 @@ EXPOSE 8000
 
 # Default to the FastAPI entrypoint. Override with `docker compose run api ...`
 # for one-off tasks such as Alembic migrations or smoke checks.
-CMD ["uvicorn", "apply_pilot.app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "apply_pilot.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]

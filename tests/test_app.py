@@ -41,3 +41,29 @@ def test_healthz_does_not_touch_db_or_redis() -> None:
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("application/json")
     assert response.json() == {"status": "ok"}
+
+
+def test_openapi_schema_is_generated_without_500() -> None:
+    """The OpenAPI schema must serialise successfully.
+
+    FastAPI builds the schema lazily on the first /openapi.json (and the
+    Swagger/ReDoc UIs depend on it). A route or dependency that exposes an
+    unserialisable type such as a bare ``Callable`` annotation will cause
+    Pydantic to raise ``PydanticInvalidForJsonSchema`` here and break the
+    docs for the whole app.
+    """
+    app = create_app()
+
+    with TestClient(app) as client:
+        response = client.get("/openapi.json")
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert "paths" in payload
+    assert "openapi" in payload
+    assert payload["info"]["title"] == app.title
+    # At least one feature route must be present; the ``/healthz`` and ``/``
+    # routes are explicitly excluded from the schema, so they should not show up.
+    assert payload["paths"], "OpenAPI schema must contain at least one path"
+    assert "/healthz" not in payload["paths"]
+    assert "/" not in payload["paths"]
