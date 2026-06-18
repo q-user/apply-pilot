@@ -77,7 +77,7 @@ def upgrade() -> None:
             "active",
             sa.Boolean(),
             nullable=False,
-            server_default=sa.text("0"),
+            server_default=sa.text("false"),
         ),
         sa.Column(
             "created_at",
@@ -165,7 +165,7 @@ def upgrade() -> None:
             "accepted",
             sa.Boolean(),
             nullable=False,
-            server_default=sa.text("0"),
+            server_default=sa.text("false"),
         ),
         sa.Column(
             "created_at",
