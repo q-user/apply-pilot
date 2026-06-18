@@ -102,7 +102,7 @@ The repository ships with a multi-stage `Dockerfile` and a `docker-compose.yml`
 that provisions the full local stack: the FastAPI **api** service plus
 **postgres** and **redis** as first-class dependencies (with healthchecks so
 `api` waits for them via `condition: service_healthy`). Bot, scheduler, and
-worker are stubbed in `docker-compose.yml` with a `TODO(M0)` block that will
+worker are stubbed in `docker-compose.yml` with a `TODO` block that will
 be uncommented once their vertical slices land.
 
 ### Prerequisites
