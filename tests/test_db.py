@@ -19,7 +19,6 @@ from apply_pilot.db import (
     Base,
     SessionLocal,
     engine,
-    get_db,
     get_db_with_factory,
     get_engine,
     init_db,

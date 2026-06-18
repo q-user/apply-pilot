@@ -62,3 +62,8 @@ def test_openapi_schema_is_generated_without_500() -> None:
     assert "paths" in payload
     assert "openapi" in payload
     assert payload["info"]["title"] == app.title
+    # At least one feature route must be present; the ``/healthz`` and ``/``
+    # routes are explicitly excluded from the schema, so they should not show up.
+    assert payload["paths"], "OpenAPI schema must contain at least one path"
+    assert "/healthz" not in payload["paths"]
+    assert "/" not in payload["paths"]

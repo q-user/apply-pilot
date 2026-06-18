@@ -8,7 +8,11 @@ This module exposes:
 * `engine`, `SessionLocal` — module-level singletons built from the default
   settings (handy for scripts; prefer DI in tests and FastAPI dependencies).
 * `get_db` — FastAPI dependency generator that yields a session and closes it
-  on exit. Accepts an optional `session_factory` callable for tests.
+  on exit. Tests that need to inject a fake session factory use the separate
+  :func:`get_db_with_factory` helper and register it via
+  ``app.dependency_overrides[get_db]``; the public ``get_db`` signature must
+  stay free of ``Callable`` annotations so Pydantic can emit a JSON Schema for
+  every Depends parameter.
 * `init_db` — convenience stub that creates all tables in `Base.metadata`;
   primarily for sqlite in-memory tests. Production uses Alembic migrations.
 """
