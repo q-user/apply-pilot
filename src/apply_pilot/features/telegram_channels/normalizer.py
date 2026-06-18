@@ -65,7 +65,7 @@ _COMPANY_LINE_RE = re.compile(
 )
 
 
-def _compute_content_hash(
+def compute_content_hash(
     title: str,
     description: str | None,
     employer_name: str | None,
@@ -227,7 +227,7 @@ class TelegramChannelNormalizer:
             url=url,
             employer_name=employer_name,
             raw_data=dict(raw),
-            content_hash=_compute_content_hash(title, description, employer_name),
+            content_hash=compute_content_hash(title, description, employer_name),
         )
 
 
