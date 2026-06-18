@@ -194,9 +194,17 @@ class CircuitBreaker:
         self._clock = clock
         self._state: CircuitState = CircuitState.CLOSED
         self._failure_count: int = 0
-        #: Monotonic time the breaker entered :attr:`CircuitState.OPEN`.
+        #: Monotonic time the breaker last entered :attr:`CircuitState.OPEN`.
         #: ``None`` when the breaker is not :attr:`CircuitState.OPEN`.
         self._opened_at: float | None = None
+        #: Monotonic time the breaker *originally* entered
+        #: :attr:`CircuitState.OPEN` for the current open window. Stays
+        #: fixed across ``_opened_at`` refreshes (issue #143) so the
+        #: half-open probe can never be pushed further out than one
+        #: :attr:`BreakerSettings.reset_timeout_seconds` after the
+        #: original trip. ``None`` when the breaker is not
+        #: :attr:`CircuitState.OPEN`.
+        self._opened_at_original: float | None = None
         #: Number of trial calls admitted in the current
         #: :attr:`CircuitState.HALF_OPEN` window. Compared against
         #: :attr:`BreakerSettings.half_open_max_calls`.
@@ -270,6 +278,7 @@ class CircuitBreaker:
             self._state = CircuitState.CLOSED
             self._failure_count = 0
             self._opened_at = None
+            self._opened_at_original = None
             self._half_open_in_flight = 0
             return
         # CLOSED — reset the counter so a fresh run of failures
@@ -286,16 +295,35 @@ class CircuitBreaker:
         In :attr:`CircuitState.HALF_OPEN` a failure immediately
         re-opens the breaker (and resets the ``reset_timeout``
         window so the next probe has to wait a full timeout again).
+
+        In :attr:`CircuitState.OPEN` a failure refreshes the reset
+        timer, but only up to ``reset_timeout_seconds`` past the
+        *original* trip — clamping prevents a sustained outage from
+        pushing the half-open probe arbitrarily far into the future
+        (issue #143).
         """
-        self._refresh_state()
+        # Note: we intentionally do *not* call ``_refresh_state`` here.
+        # A failure reported after the timeout has elapsed should be
+        # treated as an OPEN failure (clamping ``_opened_at`` back to
+        # the original reset boundary) rather than as a HALF_OPEN probe
+        # failure (which would re-open with ``_opened_at = clock()`` and
+        # restart the timer from scratch). The OPEN → HALF_OPEN
+        # transition is driven by :meth:`allow_request` and
+        # :meth:`state` instead, which is sufficient for callers that
+        # gate every request on the breaker.
+        if self._state is CircuitState.OPEN:
+            # Clamp ``_opened_at`` to ``original + reset_timeout``
+            # so a sustained outage cannot push the half-open probe
+            # further into the future with no upper bound
+            # (issue #143).
+            assert self._opened_at_original is not None
+            self._opened_at = min(
+                self._clock(),
+                self._opened_at_original + self._settings.reset_timeout_seconds,
+            )
+            return
         if self._state is CircuitState.HALF_OPEN:
             self._open(now=self._clock())
-            return
-        if self._state is CircuitState.OPEN:
-            # A failure arrived *after* the breaker tripped but
-            # *before* the timeout elapsed. Stay open and refresh
-            # the timer so the next probe is pushed further out.
-            self._opened_at = self._clock()
             return
         # CLOSED
         self._failure_count += 1
@@ -329,6 +357,7 @@ class CircuitBreaker:
         """Transition to :attr:`CircuitState.OPEN` and stamp the open time."""
         self._state = CircuitState.OPEN
         self._opened_at = now
+        self._opened_at_original = now
         self._failure_count = self._settings.failure_threshold
         self._half_open_in_flight = 0
 

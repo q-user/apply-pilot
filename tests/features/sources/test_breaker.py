@@ -201,6 +201,51 @@ class TestCircuitBreakerOpen:
         assert breaker.failure_count == 1
         assert breaker.state is CircuitState.OPEN
 
+    def test_record_failure_in_open_clamps_after_timeout_elapsed(self) -> None:
+        """``OPEN`` failures clamp ``_opened_at`` to ``_opened_at + timeout`` (#143).
+
+        Without the clamp, each failure refreshes ``_opened_at`` to
+        ``clock()``, so a sustained outage that keeps producing failures
+        pushes the half-open probe further into the future with no upper
+        bound. The fix caps ``_opened_at`` at
+        ``original + reset_timeout_seconds``, guaranteeing the half-open
+        probe can never be pushed more than one reset window past the
+        original trip — regardless of failure volume.
+        """
+        clock = _FakeClock()
+        breaker = CircuitBreaker(
+            clock=clock,
+            settings=_settings(failure_threshold=1, reset_timeout_seconds=1.0),
+        )
+        breaker.record_failure()  # CLOSED → OPEN at t=0
+        original_opened_at = breaker.opened_at
+        assert original_opened_at is not None
+        clamped_boundary = original_opened_at + 1.0
+
+        # Simulate a sustained outage: 100 failures arrive back-to-back
+        # after the original reset window has fully elapsed. Without the
+        # clamp, every ``record_failure`` would push ``_opened_at``
+        # further out — the half-open probe would never arrive. With the
+        # clamp, ``_opened_at`` is pinned to the reset boundary
+        # (``original + timeout``).
+        clock.advance(2.0)  # well past the 1.0s reset window
+        for _ in range(100):
+            breaker.record_failure()
+
+        # The clamp pins ``_opened_at`` to the original reset boundary
+        # (``opened_at_original + reset_timeout_seconds``) regardless
+        # of how many failures arrive. Without the clamp the final
+        # ``_opened_at`` would be ``clock() == 2.0`` (or further), so
+        # this assertion is the regression check.
+        assert breaker.opened_at == pytest.approx(clamped_boundary)
+        assert breaker.opened_at < clock()
+        assert breaker.opened_at < original_opened_at + 2.0  # no drift past 2x timeout
+
+        # The clamp is not a permanent hold: once the clamped boundary
+        # has elapsed, the breaker transitions to HALF_OPEN on the next
+        # state read.
+        assert breaker.state is CircuitState.HALF_OPEN
+
 
 class TestCircuitBreakerHalfOpen:
     def test_reset_timeout_transitions_to_half_open(self) -> None:
