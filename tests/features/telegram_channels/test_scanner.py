@@ -29,6 +29,7 @@ from apply_pilot.features.telegram_channels import (
     TelegramChannelScanner,
     TelegramChannelSourceAdapter,
 )
+from apply_pilot.features.telegram_channels import scanner as _scanner_module
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -213,6 +214,73 @@ class TestScannerRun:
 
         asyncio_run(drive())
         assert repo.list_by_source("telegram_channel") == []
+
+    def test_repeated_tick_failures_do_not_leak_tasks(self) -> None:
+        """Regression for #147.
+
+        Each transient ``_tick`` failure used to schedule
+        ``asyncio.create_task(self._shutdown_event.wait())`` inside
+        the error-recovery branch but never cancel that task when the
+        ``asyncio.wait_for`` backoff timed out. The orphaned tasks
+        accumulated on the running loop for the lifetime of the
+        scanner. After the fix, repeated failures must not grow the
+        task count.
+
+        The leak only shows up while the scanner is still running —
+        tearing the loop down (via ``scanner.stop()``) flushes the
+        leaked tasks. So the test samples ``asyncio.all_tasks()``
+        during the run, not after.
+        """
+        scanner, _client, _service, _repo = _make_scanner(poll_interval_seconds=0.01)
+
+        # Shrink the inter-error backoff so the test runs fast. The
+        # module-level constant is the value ``run`` reads at call
+        # time, so a quick monkey-patch is enough.
+        original_backoff = _scanner_module._ERROR_BACKOFF_SECONDS
+        _scanner_module._ERROR_BACKOFF_SECONDS = 0.02
+        try:
+            # Replace ``_tick`` with a coroutine that always raises.
+            # The error-recovery branch swallows the exception and
+            # only logs; the scanner keeps spinning.
+            tick_calls = 0
+
+            async def always_fail() -> None:
+                nonlocal tick_calls
+                tick_calls += 1
+                raise RuntimeError("boom")
+
+            scanner._tick = always_fail  # type: ignore[method-assign]
+
+            async def drive() -> None:
+                task = asyncio.create_task(scanner.run())
+                try:
+                    # Wait until we've had several error-recovery
+                    # cycles and then sample the live task list.
+                    while tick_calls < 5:
+                        await asyncio.sleep(0.05)
+                    # Let the current cycle's backoff window settle
+                    # so the leak (if any) is fully visible.
+                    await asyncio.sleep(0.1)
+                    live = len(asyncio.all_tasks())
+                finally:
+                    scanner.stop()
+                    await asyncio.wait_for(task, timeout=5.0)
+
+                # While the scanner is alive, the loop should contain
+                # only a small, bounded set of tasks: the test
+                # coroutine itself, the ``scanner.run()`` task, and
+                # at most one ``asyncio.wait_for`` wrapper. On the
+                # buggy code each error cycle leaks an extra
+                # ``Event.wait()`` task, so the count grows linearly
+                # with the number of cycles (>= 5 by now).
+                assert live <= 3, (
+                    f"asyncio.all_tasks() reported {live} live tasks after "
+                    f"{tick_calls} error cycles — scanner is leaking tasks (#147)"
+                )
+
+            asyncio_run(drive())
+        finally:
+            _scanner_module._ERROR_BACKOFF_SECONDS = original_backoff
 
 
 # ---------------------------------------------------------------------------
