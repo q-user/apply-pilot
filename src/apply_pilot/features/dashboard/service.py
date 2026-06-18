@@ -266,13 +266,12 @@ class DashboardService:
         the dashboard can render the digest card without a second
         request.
 
-        The method is synchronous: the async :class:`StatsService`
-        call is bridged with :func:`asyncio.run` so the service has a
-        sync contract for callers (HTTP handlers, unit tests) that do
-        not want to deal with the event loop themselves.
+        The method is synchronous. :class:`StatsService.get_user_stats`
+        does no ``await`` internally, so the digest is produced by a
+        plain method call and the dashboard does not need an
+        ``asyncio.run`` bridge. Callers that happen to be on a running
+        event loop therefore do not see a ``RuntimeError`` either.
         """
-        import asyncio
-
         matches = list(self._match_repo.list_by_user(user_id))
         applications = list(self._apply_job_repo.list_by_user(user_id))
         drafts = list(self._cover_letter_repo.list_by_user(user_id))
@@ -290,7 +289,7 @@ class DashboardService:
             statuses=application_statuses,
         )
 
-        digest = asyncio.run(self._compute_digest(user_id))
+        digest = self._compute_digest(user_id)
 
         return DashboardSummary(
             matches_total=len(matches),
@@ -578,12 +577,17 @@ class DashboardService:
         """
         return list(self._vacancy_repo.list_recent(limit=1_000_000))
 
-    async def _compute_digest(self, user_id: uuid.UUID) -> UserStats:
+    def _compute_digest(self, user_id: uuid.UUID) -> UserStats:
         """Return the embedded :class:`UserStats`.
 
         The :class:`StatsService` is built lazily so the constructor
         stays cheap and the dependency is only paid for when the
-        dashboard is actually queried.
+        dashboard is actually queried. The method is sync:
+        :class:`StatsService.get_user_stats` does no ``await``
+        internally, so wrapping it in a coroutine only added an
+        ``asyncio.run`` bridge in :meth:`get_summary` that would
+        explode whenever the caller was already on a loop
+        (issue #138).
         """
         if self._stats_service is None:
             self._stats_service = StatsService(
@@ -592,7 +596,7 @@ class DashboardService:
                 user_repo=self._user_repo,
                 profile_repo=self._profile_repo,
             )
-        return await self._stats_service.get_user_stats(user_id)
+        return self._stats_service.get_user_stats(user_id)
 
 
 __all__ = ["DashboardService"]

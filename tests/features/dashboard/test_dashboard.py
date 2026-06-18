@@ -9,6 +9,7 @@ go through the /auth/* endpoints to obtain a bearer token.
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from collections.abc import Iterator
 
@@ -36,6 +37,7 @@ from apply_pilot.features.search_profiles.repository import InMemorySearchProfil
 from apply_pilot.features.sources import models as _sources_models  # noqa: F401
 from apply_pilot.features.sources.repository import InMemoryVacancyRepository
 from apply_pilot.features.telegram import models as _telegram_models  # noqa: F401
+from apply_pilot.features.telegram.digest.models import UserStats
 from apply_pilot.features.telegram.repository import InMemoryTelegramAccountRepository
 from apply_pilot.features.users import models as _users_models  # noqa: F401
 from apply_pilot.features.users.api import router as auth_router
@@ -313,6 +315,49 @@ def test_dashboard_isolates_users(
     assert theirs_summary.applications_total == 1
     assert theirs_summary.cover_letter_drafts_total == 2
     assert theirs_summary.search_profiles_active == 1
+
+
+# ---------------------------------------------------------------------------
+# Regression: issue #138
+# ---------------------------------------------------------------------------
+
+
+async def test_get_summary_does_not_explode_inside_running_event_loop(
+    service: DashboardService,
+    profile_repo: InMemorySearchProfileRepository,
+    match_repo: InMemoryVacancyMatchRepository,
+    user_id: uuid.UUID,
+) -> None:
+    """``get_summary`` must not call ``asyncio.run`` from a running loop.
+
+    Before the fix, :meth:`DashboardService.get_summary` bridged the
+    digest coroutine via :func:`asyncio.run`, which raises
+    ``RuntimeError: asyncio.run() cannot be called from a running
+    event loop`` whenever the caller is already on a loop — the
+    async ``GET /dashboard`` handler, a worker / startup hook, or a
+    ``pytest-asyncio`` test. The test is itself async so a loop is
+    active when :meth:`get_summary` is invoked; the assert proves the
+    bridge is gone (issue #138).
+    """
+    profile = _profile(user_id)
+    profile_repo.create(profile)
+    match_repo.create(_match(profile.id))
+
+    # The exact scenario the issue warns about: an active loop +
+    # ``asyncio.run`` previously blew up with ``RuntimeError``.
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError as exc:  # pragma: no cover - sanity guard
+        pytest.fail(f"test must run on a running event loop: {exc}")
+
+    summary = service.get_summary(user_id)
+
+    # The digest is fully populated (a real :class:`UserStats`, not
+    # a task / coroutine) so the existing read schema in
+    # :mod:`apply_pilot.features.dashboard.schemas` keeps working.
+    assert summary.matches_total == 1
+    assert isinstance(summary.digest, UserStats)
+    assert summary.digest.matches_total == 1
 
 
 # ---------------------------------------------------------------------------

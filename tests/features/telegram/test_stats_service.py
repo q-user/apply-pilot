@@ -125,7 +125,7 @@ def _make_service(
 async def test_get_user_stats_zero_when_no_matches() -> None:
     """A user with no matches gets all-zero counts and the requested date."""
     service = _make_service()
-    stats = await service.get_user_stats(uuid.uuid4(), on_date=date(2026, 6, 15))
+    stats = service.get_user_stats(uuid.uuid4(), on_date=date(2026, 6, 15))
 
     assert stats == UserStats(
         matches_total=0,
@@ -187,7 +187,7 @@ async def test_get_user_stats_groups_matches_by_status() -> None:
         matches=matches_repo,
         now=datetime(2026, 6, 15, 9, 0, tzinfo=UTC),
     )
-    stats = await service.get_user_stats(user_id, on_date=date(2026, 6, 15))
+    stats = service.get_user_stats(user_id, on_date=date(2026, 6, 15))
 
     assert stats.matches_total == 11
     assert stats.matches_new == 5  # 2 new + 3 scored
@@ -257,7 +257,7 @@ async def test_get_user_stats_applied_today_counts_only_today_in_utc() -> None:
         matches=matches_repo,
         now=datetime(2026, 6, 15, 9, 0, tzinfo=UTC),
     )
-    stats = await service.get_user_stats(user_id, on_date=today)
+    stats = service.get_user_stats(user_id, on_date=today)
 
     assert stats.matches_applied == 4
     assert stats.applied_today == 2
@@ -266,7 +266,7 @@ async def test_get_user_stats_applied_today_counts_only_today_in_utc() -> None:
 async def test_get_user_stats_uses_clock_when_on_date_omitted() -> None:
     """When ``on_date`` is omitted, the service uses the injected clock's date."""
     service = _make_service(now=datetime(2026, 1, 7, 12, 0, tzinfo=UTC))
-    stats = await service.get_user_stats(uuid.uuid4())
+    stats = service.get_user_stats(uuid.uuid4())
     assert stats.digest_date == date(2026, 1, 7)
 
 
@@ -293,7 +293,7 @@ async def test_get_user_stats_only_counts_users_own_profiles() -> None:
         matches=matches_repo,
         now=datetime(2026, 6, 15, 9, 0, tzinfo=UTC),
     )
-    stats = await service.get_user_stats(user_id, on_date=date(2026, 6, 15))
+    stats = service.get_user_stats(user_id, on_date=date(2026, 6, 15))
 
     assert stats.matches_total == 2
 
@@ -357,7 +357,7 @@ async def test_matches_new_aggregates_new_and_scored(status_value: str, *, is_ne
         matches=matches_repo,
         now=datetime(2026, 6, 15, 9, 0, tzinfo=UTC),
     )
-    stats = await service.get_user_stats(user_id, on_date=date(2026, 6, 15))
+    stats = service.get_user_stats(user_id, on_date=date(2026, 6, 15))
     assert (stats.matches_new == 1) is is_new
 
 
@@ -380,6 +380,6 @@ async def test_pending_applications_uses_accepted_as_proxy() -> None:
         matches=matches_repo,
         now=datetime(2026, 6, 15, 9, 0, tzinfo=UTC),
     )
-    stats = await service.get_user_stats(user_id, on_date=date(2026, 6, 15))
+    stats = service.get_user_stats(user_id, on_date=date(2026, 6, 15))
     assert stats.pending_applications == 4
     assert stats.matches_applied == 1

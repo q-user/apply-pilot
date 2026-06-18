@@ -778,7 +778,7 @@ async def test_digest_excludes_deferred_matches(world: _World) -> None:
     """
     await _link_account_async(world, telegram_user_id=900)
     # Baseline: the world has one SCORED match. The digest should count it.
-    pre_stats = await world.stats_service.get_user_stats(world.user.id, on_date=date(2026, 6, 15))
+    pre_stats = world.stats_service.get_user_stats(world.user.id, on_date=date(2026, 6, 15))
     assert pre_stats.matches_total == 1
     assert pre_stats.matches_new == 1
 
@@ -789,7 +789,7 @@ async def test_digest_excludes_deferred_matches(world: _World) -> None:
     )
 
     # The match is on the row but no longer in any digest bucket.
-    post_stats = await world.stats_service.get_user_stats(world.user.id, on_date=date(2026, 6, 15))
+    post_stats = world.stats_service.get_user_stats(world.user.id, on_date=date(2026, 6, 15))
     assert post_stats.matches_total == 0
     assert post_stats.matches_new == 0
     assert post_stats.matches_review == 0
