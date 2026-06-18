@@ -25,6 +25,7 @@ from sqlalchemy import StaticPool, create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from apply_pilot.config import get_admin_auth_required
 from apply_pilot.db import Base
 from apply_pilot.features.scoring_ab.api import get_experiment_repo
 from apply_pilot.features.scoring_ab.api import router as scoring_ab_router
@@ -119,6 +120,11 @@ def client(repo: SqlScoringExperimentRepository) -> Iterator[TestClient]:
         return repo
 
     app.dependency_overrides[get_experiment_repo] = _override_repo
+    # The admin auth gate is disabled in this fixture so the
+    # pre-issue-#145 tests do not need a token; the dedicated
+    # :mod:`tests.features.admin.test_admin_api` suite covers the
+    # auth-required code path.
+    app.dependency_overrides[get_admin_auth_required] = lambda: False
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()

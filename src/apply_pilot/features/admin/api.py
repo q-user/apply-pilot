@@ -12,10 +12,14 @@ The router is mounted at ``/admin`` and exposes:
   four system health facts (database reachable, redis reachable,
   LLM provider configured, current Alembic head).
 
-All endpoints are intentionally unauthenticated for now — the M6
-contract is "admin worker + integration status view + admin health
-page", and the authorization story is tracked separately. The router
-is mounted under the ``admin`` tag so the OpenAPI spec stays browsable.
+All endpoints require a valid bearer token (issue #145). The auth
+gate honours the ``APP_ADMIN_REQUIRE_AUTH`` env flag — when the flag
+is ``true`` (the production default) the routes reject anonymous
+requests with ``401``; operators that need to keep the legacy
+open-access behaviour can flip the flag to ``false``. The
+implementation lives in :mod:`apply_pilot.features.admin._auth`.
+The router is mounted under the ``admin`` tag so the OpenAPI spec
+stays browsable.
 """
 
 from __future__ import annotations
@@ -23,10 +27,12 @@ from __future__ import annotations
 import asyncio
 import html
 import logging
+import re
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse
 
+from apply_pilot.features.admin._auth import require_admin_user
 from apply_pilot.features.admin.health import (
     HealthCheck,
     HealthCheckResult,
@@ -114,11 +120,13 @@ def get_integration_status_worker() -> IntegrationStatusWorker | None:
     response_model=list[IntegrationStatusRead],
     responses={
         200: {"description": "Current status of every known integration."},
+        401: {"description": "Missing or invalid bearer token."},
     },
     summary="List integration health snapshots",
 )
 def list_integrations(
     store: IntegrationStatusStore = Depends(get_integration_status_store),  # noqa: B008
+    _admin_user: str = Depends(require_admin_user),  # noqa: B008
 ) -> list[IntegrationStatusRead]:
     """Return the cached :class:`IntegrationStatus` for every integration.
 
@@ -136,12 +144,14 @@ def list_integrations(
     response_model=list[IntegrationStatusRead],
     responses={
         200: {"description": "Statuses after a one-shot refresh."},
+        401: {"description": "Missing or invalid bearer token."},
         503: {"description": "No worker is registered; the refresh cannot run."},
     },
     summary="Trigger a one-shot integration refresh",
 )
 async def refresh_integrations(
     worker: IntegrationStatusWorker | None = Depends(get_integration_status_worker),  # noqa: B008
+    _admin_user: str = Depends(require_admin_user),  # noqa: B008
 ) -> list[IntegrationStatusRead]:
     """Run every checker once and return the freshest statuses.
 
@@ -308,6 +318,42 @@ _PROBE_LABELS: dict[str, str] = {
 }
 
 
+# Patterns redacted from probe error messages before they reach the HTML
+# page (issue #145, point 1). A raw ``str(exc)`` from a SQLAlchemy / redis
+# / httpx exception can carry the DSN, bearer token, or env-var value
+# verbatim — none of which belong in a public HTML page. The set of
+# patterns is intentionally narrow: any well-known connection-string
+# scheme, the ``Bearer`` auth scheme, and the canonical ``key=`` / ``password=``
+# assignment shapes that drivers / SDKs use.
+_REDACT_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"(?i)(?P<scheme>postgresql|postgres|mysql|sqlite|redis|amqp)://[^\s\"'<>]+"),
+    re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._\-]+"),
+    re.compile(
+        r"(?i)\b(password|passwd|pwd|secret|api[_-]?key|access[_-]?token|token)\s*[=:]\s*[\S]+"
+    ),
+    re.compile(r"(?i)\b(\d{1,3}\.){3}\d{1,3}(?::\d+)?"),
+)
+
+_REDACTED = "[REDACTED]"
+
+
+def _sanitize_error_message(message: str, *, limit: int = 240) -> str:
+    """Strip secrets / connection strings from a probe error message.
+
+    The output is safe to embed in the admin health page; a long, leaky
+    original message is also truncated to ``limit`` characters so a
+    multi-kilobyte stack-frame excerpt does not blow up the page.
+    """
+    if not message:
+        return message
+    redacted = message
+    for pattern in _REDACT_PATTERNS:
+        redacted = pattern.sub(_REDACTED, redacted)
+    if len(redacted) > limit:
+        redacted = redacted[:limit] + "..."
+    return redacted
+
+
 def _format_row(result: HealthCheckResult) -> str:
     """Render a single :class:`HealthCheckResult` as a list item."""
     safe_name = html.escape(_PROBE_LABELS.get(result.name, result.name.title()))
@@ -336,10 +382,14 @@ def _render(results: list[HealthCheckResult]) -> str:
     "/health",
     response_class=HTMLResponse,
     include_in_schema=True,
+    responses={
+        401: {"description": "Missing or invalid bearer token."},
+    },
     summary="Render the admin health page",
 )
 async def admin_health_page(
     checks: list[HealthCheck] = Depends(get_health_checks),  # noqa: B008
+    _admin_user: str = Depends(require_admin_user),  # noqa: B008
 ) -> HTMLResponse:
     """Render the admin health page (M6, issue #56).
 
@@ -349,6 +399,13 @@ async def admin_health_page(
     a successful probe surfaces as ``healthy``. The page itself
     never returns an error status code — the worst case is every
     row is ``unhealthy``, which is the operator's signal to act.
+
+    When a probe raises, the rendered ``detail`` is sanitized: the
+    exception class name replaces the raw ``str(exc)`` payload, and any
+    connection strings / bearer tokens / ``password=`` / ``api_key=``
+    assignments in the original message are replaced with
+    ``[REDACTED]``. The unsanitized string is still emitted to the
+    application log for operators.
     """
     coros = [check.run() for check in checks]
     results = await asyncio.gather(*coros, return_exceptions=True)
@@ -368,7 +425,11 @@ async def admin_health_page(
                 HealthCheckResult(
                     name=check.name,
                     status=HealthStatus.UNHEALTHY,
-                    detail=f"probe raised: {outcome}",
+                    detail=(
+                        "probe raised: "
+                        f"{outcome.__class__.__name__}: "
+                        f"{_sanitize_error_message(str(outcome))}"
+                    ),
                 )
             )
         else:

@@ -24,6 +24,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from apply_pilot.app import create_app
+from apply_pilot.config import get_admin_auth_required
 from apply_pilot.features.admin.health import (
     HealthCheck,
     HealthCheckResult,
@@ -95,6 +96,10 @@ def app(fake_checks: _FakeHealthChecks) -> Iterator[FastAPI]:
     We use the real :func:`create_app` factory so the slice is wired
     exactly as in production, then override the
     :func:`get_health_checks` dependency to return the fake list.
+    The admin auth gate is disabled so the legacy unauthenticated
+    behaviour the pre-issue-#145 tests relied on is preserved; the
+    dedicated :mod:`tests.features.admin.test_admin_api` suite
+    covers the auth-required code path.
     """
     application = create_app()
 
@@ -107,6 +112,7 @@ def app(fake_checks: _FakeHealthChecks) -> Iterator[FastAPI]:
         ]
 
     application.dependency_overrides[get_health_checks] = _override_checks
+    application.dependency_overrides[get_admin_auth_required] = lambda: False
     try:
         yield application
     finally:
