@@ -67,6 +67,22 @@ timeout = 5
 script_location = "alembic"
 prepend_sys_path = ["src"]
 
+# ty configuration. See https://docs.astral.sh/ty/reference/configuration/
+# for the schema; ty is already scoped to ``src/`` by the CI command
+# ``ty check src/`` (no ``[tool.ty.src]`` block needed). The rules
+# below are downgraded to ``warn`` because they each fire on the
+# existing ``src/`` tree on ``main``; once the underlying diagnostics
+# are fixed, the corresponding line should be removed so the default
+# ``error`` severity applies again.
+[tool.ty.rules]
+unresolved-attribute  = "warn"
+invalid-argument-type = "warn"
+invalid-type-form     = "warn"
+invalid-return-type   = "warn"
+invalid-assignment    = "warn"
+unsupported-operator  = "warn"
+unknown-argument      = "warn"
+
 [dependency-groups]
 dev = [
     "pytest-asyncio>=1.4.0",

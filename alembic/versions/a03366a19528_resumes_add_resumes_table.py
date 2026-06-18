@@ -34,8 +34,8 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     op.create_table(
         "resumes",
-        sa.Column("id", sa.Uuid(), nullable=False),
-        sa.Column("user_id", sa.Uuid(), nullable=False),
+        sa.Column("id", sa.String(length=36), nullable=False),
+        sa.Column("user_id", sa.String(length=36), nullable=False),
         sa.Column("filename", sa.String(length=512), nullable=False),
         sa.Column("content_type", sa.String(length=127), nullable=False),
         sa.Column("size", sa.Integer(), nullable=False),

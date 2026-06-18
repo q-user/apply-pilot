@@ -46,7 +46,7 @@ def upgrade() -> None:
             "salary_gross",
             sa.Boolean(),
             nullable=False,
-            server_default=sa.text("0"),
+            server_default=sa.text("false"),
         ),
         sa.Column("employer_name", sa.String(length=1024), nullable=True),
         sa.Column("location", sa.String(length=512), nullable=True),

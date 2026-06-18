@@ -35,7 +35,7 @@ def upgrade() -> None:
         sa.Column("salary_max", sa.Integer(), nullable=True),
         sa.Column("location", sa.String(length=255), nullable=True),
         sa.Column("schedule", sa.String(length=255), nullable=True),
-        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("1")),
+        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
