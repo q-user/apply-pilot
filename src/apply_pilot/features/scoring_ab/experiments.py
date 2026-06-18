@@ -144,18 +144,26 @@ _WEIGHT_SUM_TOLERANCE: float = 1e-6
 def _validate_experiment(experiment: ScoringExperiment) -> None:
     """Raise :class:`ValueError` if ``experiment`` cannot be persisted.
 
-    Two invariants are checked:
+    Three invariants are checked:
 
     * the experiment has at least one variant (an experiment with no
       variants cannot bucket anyone);
     * the variants' weights sum to ~1.0 (probability mass must be
-      conserved).
+      conserved);
+    * variant names are unique within the experiment — a duplicate name
+      would cause ``aggregate_outcomes`` to merge buckets from two
+      distinct variants under a single key (issue #146).
     """
     if not experiment.variants:
         raise ValueError(f"experiment {experiment.name!r} must have at least one variant")
     total = sum(v.weight for v in experiment.variants)
     if abs(total - 1.0) > _WEIGHT_SUM_TOLERANCE:
         raise ValueError(f"experiment {experiment.name!r} weights must sum to 1.0, got {total}")
+    if len({v.name for v in experiment.variants}) != len(experiment.variants):
+        raise ValueError(
+            f"experiment {experiment.name!r} has duplicate variant names: "
+            f"{[v.name for v in experiment.variants]}"
+        )
 
 
 # ---------------------------------------------------------------------------

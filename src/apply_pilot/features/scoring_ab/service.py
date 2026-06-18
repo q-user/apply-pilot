@@ -39,6 +39,8 @@ import uuid
 from collections.abc import Callable
 from typing import Protocol, runtime_checkable
 
+from sqlalchemy.exc import SQLAlchemyError
+
 from apply_pilot.features.scoring_ab.experiments import (
     ScoringExperimentRepository,
     ScoringVariant,
@@ -174,12 +176,13 @@ class ScoringExperimentService:
     ) -> None:
         """Append a single outcome row.
 
-        Errors are caught and logged — the scoring hot path must not
-        fail because the experiment store is misbehaving. The
+        Database errors are caught and logged — the scoring hot path
+        must not fail because the experiment store is misbehaving. The
         in-memory implementation never raises on a missing
         ``experiment_id``; the SQL implementation enforces the FK
         constraint and the service treats an FK violation as a
-        fire-and-forget loss.
+        fire-and-forget loss. Non-DB exceptions propagate so genuine
+        bugs (TypeError, ValueError, etc.) are not masked (issue #150).
         """
         try:
             self._repo.record_outcome(
@@ -190,7 +193,7 @@ class ScoringExperimentService:
                 score=score,
                 accepted=accepted,
             )
-        except Exception:
+        except SQLAlchemyError:
             _LOGGER.exception(
                 "scoring_ab.record_outcome.failed",
                 extra={"event": "scoring_ab.record_outcome.failed"},
