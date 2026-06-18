@@ -30,7 +30,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from sqlalchemy import StaticPool, create_engine
@@ -583,6 +583,243 @@ def test_repository_sql_create_get_update(sql_repo: SqlCoverLetterDraftRepositor
     updated = sql_repo.update_status(created.id, CoverLetterDraftStatus.FINAL.value)
     assert updated.status == CoverLetterDraftStatus.FINAL.value
     assert sql_repo.get_by_id(created.id).status == CoverLetterDraftStatus.FINAL.value  # type: ignore[union-attr]
+
+
+def test_repository_sql_update_content(sql_repo: SqlCoverLetterDraftRepository) -> None:
+    """``update_content`` mutates the row in place (issue #144).
+
+    The SQL repo's ``get_by_match`` returns a detached instance, so the
+    pre-fix service code's direct attribute writes on that instance
+    were silently lost when its session closed. ``update_content``
+    must therefore re-fetch the row in its own session, mutate, and
+    commit. This test exercises the repo in isolation against a real
+    sqlite in-memory engine.
+    """
+    user_id = uuid.uuid4()
+    match_id = uuid.uuid4()
+    created = sql_repo.create(
+        CoverLetterDraft(
+            match_id=match_id,
+            user_id=user_id,
+            content="first body",
+            prompt_version="cover_letter@1.0.0",
+            model_used="m0",
+        )
+    )
+
+    updated = sql_repo.update_content(
+        match_id=match_id,
+        content="second body",
+        prompt_version="cover_letter@1.0.1",
+        model_used="m1",
+    )
+
+    assert updated is not None
+    assert updated.id == created.id
+    assert updated.content == "second body"
+    assert updated.prompt_version == "cover_letter@1.0.1"
+    assert updated.model_used == "m1"
+    assert updated.updated_at is not None
+
+    # The change is durable — a fresh ``get_by_match`` reads the new
+    # content, not the original.
+    fetched = sql_repo.get_by_match(match_id)
+    assert fetched is not None
+    assert fetched.id == created.id
+    assert fetched.content == "second body"
+    assert fetched.prompt_version == "cover_letter@1.0.1"
+    assert fetched.model_used == "m1"
+    # No second row was inserted.
+    listed = sql_repo.list_by_user(user_id)
+    assert [d.id for d in listed] == [fetched.id]
+
+    # Missing match → ``None``, not an error.
+    assert sql_repo.update_content(uuid.uuid4(), "x", "cover_letter@1.0.0", None) is None
+
+
+def test_repository_in_memory_update_content() -> None:
+    """The in-memory ``update_content`` mirrors the SQL contract."""
+    repo: CoverLetterDraftRepository = InMemoryCoverLetterDraftRepository()
+    user_id = uuid.uuid4()
+    match_id = uuid.uuid4()
+    created = repo.create(
+        CoverLetterDraft(
+            match_id=match_id,
+            user_id=user_id,
+            content="first body",
+            prompt_version="cover_letter@1.0.0",
+        )
+    )
+
+    updated = repo.update_content(
+        match_id=match_id,
+        content="second body",
+        prompt_version="cover_letter@1.0.1",
+        model_used="m1",
+    )
+
+    assert updated is not None
+    assert updated.id == created.id
+    assert updated.content == "second body"
+    assert repo.get_by_match(match_id).content == "second body"  # type: ignore[union-attr]
+    assert repo.update_content(uuid.uuid4(), "x", "cover_letter@1.0.0", None) is None
+
+
+# ---------------------------------------------------------------------------
+# Service regression — issue #144
+# ---------------------------------------------------------------------------
+
+
+def _make_sql_world(
+    *,
+    llm_response: str = "Dear hiring manager,\n\nSincerely,\nThe candidate",
+) -> _World:
+    """Build a ``_World`` whose ``draft_repo`` is a real SQL repository.
+
+    Mirrors ``_make_world`` but uses the sqlite-backed
+    :class:`SqlCoverLetterDraftRepository` so the test exercises the
+    detached-session code path that issue #144 was hiding.
+    """
+    user = User(
+        id=uuid.uuid4(),
+        email="sql@example.com",
+        hashed_password="x",
+        is_active=True,
+    )
+    profile = SearchProfile(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        title="Senior Python",
+        keywords="python, fastapi",
+        is_active=True,
+    )
+    vacancy = Vacancy(
+        id=uuid.uuid4(),
+        source="hh",
+        source_id="1001",
+        title="Senior Python Developer",
+        description="Looking for a senior Python developer to join our team.",
+        employer_name="Acme",
+        location="Moscow",
+        schedule="remote",
+        experience="5+ years",
+        skills=["python"],
+        raw_data={},
+    )
+    match = VacancyMatch(
+        id=uuid.uuid4(),
+        search_profile_id=profile.id,
+        vacancy_id=vacancy.id,
+        status="accepted",
+    )
+    resume = Resume(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        filename="resume.pdf",
+        content_type="application/pdf",
+        size=1024,
+        raw_text="I am a senior engineer.",
+        plain_text="I am a senior engineer.",
+    )
+    style = CoverLetterStyle(
+        user_id=user.id,
+        tone="friendly",
+        length="medium",
+        focus_areas=["python"],
+        avoid_phrases=[],
+    )
+
+    user_repo = _FakeUserRepo()
+    user_repo.add(user)
+    vacancy_repo = _FakeVacancyRepo()
+    vacancy_repo.add(vacancy)
+    profile_repo = _FakeSearchProfileRepo()
+    profile_repo.add(profile)
+    resume_repo = _FakeResumeRepo()
+    resume_repo.add(resume)
+    style_repo = _FakeStyleRepo()
+    style_repo.add(style)
+
+    match_repo = InMemoryVacancyMatchRepository()
+    match_repo.create(match)
+    llm = InMemoryLLMClient(responses={"*": llm_response})
+
+    eng = create_engine(
+        "sqlite:///:memory:",
+        future=True,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(bind=eng)
+    factory = sessionmaker(bind=eng, class_=Session, autocommit=False, autoflush=False)
+    draft_repo = SqlCoverLetterDraftRepository(session_factory=factory)
+
+    service = CoverLetterService(
+        llm=llm,
+        match_repo=match_repo,
+        user_repo=user_repo,  # type: ignore[arg-type]
+        vacancy_repo=vacancy_repo,  # type: ignore[arg-type]
+        profile_repo=profile_repo,  # type: ignore[arg-type]
+        resume_repo=resume_repo,  # type: ignore[arg-type]
+        style_repo=style_repo,  # type: ignore[arg-type]
+        draft_repo=draft_repo,
+    )
+
+    return _World(
+        user=user,
+        profile=profile,
+        vacancy=vacancy,
+        match=match,
+        resume=resume,
+        style=style,
+        user_repo=user_repo,
+        vacancy_repo=vacancy_repo,
+        profile_repo=profile_repo,
+        resume_repo=resume_repo,
+        style_repo=style_repo,
+        match_repo=match_repo,
+        draft_repo=draft_repo,  # type: ignore[arg-type]
+        llm=llm,
+        service=service,
+    )
+
+
+async def test_generate_for_match_persists_content_update_via_sql_repo() -> None:
+    """Issue #144 regression.
+
+    ``generate_for_match`` must persist a refreshed body for a match
+    that already has a draft, and must not insert a second row. The
+    bug was that the service mutated the detached instance returned by
+    :meth:`SqlCoverLetterDraftRepository.get_by_match`, so the change
+    was silently lost.
+    """
+    world = _make_sql_world()
+
+    first = await world.service.generate_for_match(world.match.id)
+    assert first.id is not None
+    assert first.content == "Dear hiring manager,\n\nSincerely,\nThe candidate"
+
+    # Swap the LLM response so the second call would produce a
+    # different body.
+    world.llm._responses = {"*": "second body"}  # type: ignore[attr-defined]
+    second = await world.service.generate_for_match(world.match.id)
+
+    # Same row, refreshed body.
+    assert second.id == first.id
+    assert second.content == "second body"
+
+    # A fresh read through the SQL repo must see the updated content
+    # — this is the assertion that fails against the pre-fix code.
+    sql_draft_repo = cast(SqlCoverLetterDraftRepository, world.draft_repo)
+    fresh = sql_draft_repo.get_by_match(world.match.id)
+    assert fresh is not None
+    assert fresh.id == first.id
+    assert fresh.content == "second body"
+
+    # And there is still exactly one draft for the user — the
+    # service must upsert, not insert.
+    listed = sql_draft_repo.list_by_user(world.user.id)
+    assert [d.id for d in listed] == [fresh.id]
 
 
 # ---------------------------------------------------------------------------

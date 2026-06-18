@@ -54,6 +54,13 @@ class CoverLetterDraftRepository(Protocol):
         status: str | None = None,
         limit: int = 20,
     ) -> Sequence[CoverLetterDraft]: ...
+    def update_content(
+        self,
+        match_id: uuid.UUID,
+        content: str,
+        prompt_version: str,
+        model_used: str | None,
+    ) -> CoverLetterDraft | None: ...
     def update_status(self, draft_id: uuid.UUID, status: str) -> CoverLetterDraft: ...
 
 
@@ -111,6 +118,30 @@ class InMemoryCoverLetterDraftRepository:
         existing.status = status
         existing.updated_at = datetime.now(UTC)
         return existing
+
+    def update_content(
+        self,
+        match_id: uuid.UUID,
+        content: str,
+        prompt_version: str,
+        model_used: str | None,
+    ) -> CoverLetterDraft | None:
+        """Update ``content`` / ``prompt_version`` / ``model_used`` for the
+        draft bound to ``match_id``.
+
+        Returns the updated draft, or ``None`` when no draft exists for
+        that match. Issue #144 — the previous service-side mutation
+        path was a no-op against the SQL repo because ``get_by_match``
+        returns a detached instance.
+        """
+        draft = self.get_by_match(match_id)
+        if draft is None:
+            return None
+        draft.content = content
+        draft.prompt_version = prompt_version
+        draft.model_used = model_used
+        draft.updated_at = datetime.now(UTC)
+        return draft
 
     # -- readers --------------------------------------------------------
 
@@ -197,6 +228,45 @@ class SqlCoverLetterDraftRepository:
             if existing is None:
                 raise KeyError(f"cover letter draft {draft_id} not found")
             existing.status = status
+            session.commit()
+            session.refresh(existing)
+            return existing
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            self._close_if_ephemeral(session)
+
+    def update_content(
+        self,
+        match_id: uuid.UUID,
+        content: str,
+        prompt_version: str,
+        model_used: str | None,
+    ) -> CoverLetterDraft | None:
+        """Replace ``content`` / ``prompt_version`` / ``model_used`` on
+        the draft bound to ``match_id`` and commit.
+
+        Issue #144 — the service used to mutate the ORM instance
+        returned by :meth:`get_by_match`, but the SQL repo closes its
+        session inside the call, leaving a detached instance whose
+        attribute writes are silently lost. This method re-fetches the
+        row in a fresh session, mutates it, and commits, so the change
+        is durable.
+
+        Returns the refreshed draft, or ``None`` when no draft exists
+        for ``match_id``.
+        """
+        session = self._scope()
+        try:
+            statement = select(CoverLetterDraft).where(CoverLetterDraft.match_id == match_id)
+            existing = session.scalars(statement).first()
+            if existing is None:
+                return None
+            existing.content = content
+            existing.prompt_version = prompt_version
+            existing.model_used = model_used
+            existing.updated_at = datetime.now(UTC)
             session.commit()
             session.refresh(existing)
             return existing
