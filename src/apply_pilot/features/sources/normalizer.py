@@ -51,7 +51,7 @@ _HOURS_PER_MONTH: Final[int] = 168
 # ---------------------------------------------------------------------------
 
 
-def _compute_content_hash(
+def compute_content_hash(
     title: str,
     description: str | None,
     employer_name: str | None,
@@ -177,7 +177,7 @@ class VacancyNormalizer:
             skills=skills or None,
             published_at=_parse_hh_datetime(raw.get("published_at")),
             raw_data=dict(raw),
-            content_hash=_compute_content_hash(title, description, employer_name),
+            content_hash=compute_content_hash(title, description, employer_name),
         )
 
     # ------------------------------------------------------------------

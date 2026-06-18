@@ -15,8 +15,8 @@ import pytest
 
 from apply_pilot.features.sources.normalizer import (
     VacancyNormalizer,
-    _compute_content_hash,
     _parse_hh_datetime,
+    compute_content_hash,
 )
 
 # ---------------------------------------------------------------------------
@@ -395,24 +395,24 @@ class TestDispatcher:
 
 class TestContentHashHelper:
     def test_returns_64_hex_chars(self) -> None:
-        h = _compute_content_hash("Title", "Desc", "Acme")
+        h = compute_content_hash("Title", "Desc", "Acme")
         assert len(h) == 64
         int(h, 16)  # parses as hex
 
     def test_changes_when_any_field_changes(self) -> None:
-        base = _compute_content_hash("Title", "Desc", "Acme")
-        assert _compute_content_hash("Other", "Desc", "Acme") != base
-        assert _compute_content_hash("Title", "Other", "Acme") != base
-        assert _compute_content_hash("Title", "Desc", "Other") != base
+        base = compute_content_hash("Title", "Desc", "Acme")
+        assert compute_content_hash("Other", "Desc", "Acme") != base
+        assert compute_content_hash("Title", "Other", "Acme") != base
+        assert compute_content_hash("Title", "Desc", "Other") != base
 
     def test_pipe_separator_prevents_collision(self) -> None:
         # Without the separator, ("ab", "c") and ("a", "bc") would hash the
         # same way. The pipe makes the boundary explicit.
-        assert _compute_content_hash("ab", "c", "") != _compute_content_hash("a", "bc", "")
+        assert compute_content_hash("ab", "c", "") != compute_content_hash("a", "bc", "")
 
     def test_none_fields_become_empty_strings(self) -> None:
-        h_none = _compute_content_hash("T", None, None)
-        h_empty = _compute_content_hash("T", "", "")
+        h_none = compute_content_hash("T", None, None)
+        h_empty = compute_content_hash("T", "", "")
         assert h_none == h_empty
 
 

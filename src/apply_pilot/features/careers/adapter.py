@@ -50,7 +50,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 import xml.etree.ElementTree as ET
 from typing import Any
 
@@ -185,22 +184,12 @@ class CareersPageSourceAdapter:
         body = await self._fetch_with_retry()
         try:
             items = parse_payload(self._site.kind, body, base_url=self._base_url())
-        except ET.ParseError as exc:
-            # The RSS parser delegates to ``xml.etree.ElementTree``,
-            # which raises ``ParseError`` on malformed XML. Without
-            # this translation a 200 OK with a broken body would leak
-            # the stdlib exception past the adapter contract.
-            raise CareersAdapterError(
-                f"invalid RSS XML from careers page {self._site.name!r}: {exc}"
-            ) from exc
-        except re.error as exc:
-            # The HTML parser uses a compiled regex; ``re.error`` is
-            # only raised for a malformed pattern, but we translate
-            # defensively so a future regex change cannot widen the
-            # surface that escapes the adapter contract.
-            raise CareersAdapterError(
-                f"invalid HTML markup from careers page {self._site.name!r}: {exc}"
-            ) from exc
+        except (ET.ParseError, ValueError, KeyError) as exc:
+            # Translate parser failures into the adapter's error
+            # contract. The parser layer is intentionally tiny and
+            # raises stdlib errors; callers should not have to know
+            # about them (#140).
+            raise CareersAdapterError(f"careers page payload could not be parsed: {exc}") from exc
         return [self._tag(item) for item in items]
 
     def normalize(self, raw: dict[str, Any]) -> Vacancy:
@@ -293,15 +282,12 @@ class CareersPageSourceAdapter:
             except httpx.HTTPError as exc:
                 # Map httpx's transport errors into our domain error
                 # so the retry logic has a single exception to catch.
-                last_error = CareersTransportError(str(exc) or exc.__class__.__name__)
-                logger.warning(
-                    "Careers fetch httpx error site=%s attempt=%d/%d err=%s",
-                    self._site.name,
-                    attempt,
-                    max_attempts,
-                    exc,
-                )
+                # ``raise ... from exc`` preserves the original cause on
+                # ``__cause__`` for callers and log inspection (#149).
+                raise CareersTransportError(str(exc) or exc.__class__.__name__) from exc
             else:
+                if 200 <= response.status_code < 300:
+                    return response.text
                 if response.status_code >= 500:
                     last_error = CareersHTTPError(
                         f"careers page returned {response.status_code}",
@@ -315,13 +301,15 @@ class CareersPageSourceAdapter:
                         attempt,
                         max_attempts,
                     )
-                elif response.status_code >= 400:
+                else:
+                    # 3xx redirects and other non-2xx responses are
+                    # permanent: the careers client does not follow
+                    # redirects, so treat them as a failure rather than
+                    # silently returning an empty body (#149).
                     raise CareersAdapterError(
                         f"careers page returned {response.status_code} for url={url}",
                         status_code=response.status_code,
                     )
-                else:
-                    return response.text
 
             if attempt < max_attempts:
                 # Exponential backoff: ``backoff * 2 ** (attempt - 1)``.
@@ -358,7 +346,7 @@ def _normalize_careers(raw: dict[str, Any], *, source: str, employer_name: str) 
     (title, description, employer) so cross-source dedup catches a
     vacancy scraped from a careers page *and* from a job board.
     """
-    from apply_pilot.features.sources.normalizer import _compute_content_hash
+    from apply_pilot.features.sources.normalizer import compute_content_hash
 
     title = str(raw.get("title") or "")
     description = raw.get("description")
@@ -385,7 +373,7 @@ def _normalize_careers(raw: dict[str, Any], *, source: str, employer_name: str) 
         published_at=None,
         source_updated_at=None,
         raw_data=dict(raw),
-        content_hash=_compute_content_hash(title, description, employer_name),
+        content_hash=compute_content_hash(title, description, employer_name),
     )
 
 

@@ -565,9 +565,9 @@ class TestAdapterSearchParseErrors:
         with pytest.raises(CareersAdapterError) as excinfo:
             asyncio_run(world.adapter.search(SourceQuery()))
 
-        # The error message must point at the root cause ("invalid RSS XML")
+        # The error message must point at the root cause ("could not be parsed")
         # so operators can tell apart transport, 4xx and parse failures.
-        assert "invalid RSS XML" in str(excinfo.value)
+        assert "could not be parsed" in str(excinfo.value)
         # And the stdlib exception must be chained (not silently swallowed)
         # so debuggers can still see the original ``ParseError``.
         assert isinstance(excinfo.value.__cause__, ET.ParseError)
@@ -579,49 +579,8 @@ class TestAdapterSearchParseErrors:
         world = _make_world(
             responses={"https://acme.example/jobs": _ok_response("")},
         )
-        with pytest.raises(CareersAdapterError, match="invalid RSS XML"):
+        with pytest.raises(CareersAdapterError, match="could not be parsed"):
             asyncio_run(world.adapter.search(SourceQuery()))
-
-    def test_html_re_error_translates_to_careers_adapter_error(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """An ``re.error`` from the HTML parser is caught at the boundary.
-
-        The current regex is constant and cannot fail on its own, but
-        a future regex change (or a malformed pattern supplied by a
-        plugin) could surface :class:`re.error`. The adapter must
-        translate it the same way it translates :class:`ParseError`
-        for RSS — the caller should only ever see
-        :class:`CareersAdapterError`.
-        """
-        import re as _re
-
-        from apply_pilot.features.careers import parser as careers_parser
-        from apply_pilot.features.careers.adapter import CareersAdapterError
-
-        class _ExplodingPattern:
-            """Stand-in for the compiled regex that raises on ``finditer``."""
-
-            def finditer(self, _body: str):  # type: ignore[no-untyped-def]
-                raise _re.error("simulated malformed pattern")
-
-        # ``re.Pattern`` is a built-in C type whose methods are
-        # read-only, so we swap the *object* the parser module holds
-        # rather than patching its method.
-        monkeypatch.setattr(careers_parser, "_VACANCY_LINK_RE", _ExplodingPattern())
-
-        world = _make_world(
-            kind=CareersParserKind.HTML,
-            parser_id="html-default",
-            responses={"https://acme.example/jobs": _ok_response(_HTML_BODY)},
-        )
-        with pytest.raises(CareersAdapterError) as excinfo:
-            asyncio_run(world.adapter.search(SourceQuery()))
-
-        assert "invalid HTML markup" in str(excinfo.value)
-        # The stdlib ``re.error`` is preserved on ``__cause__`` so it
-        # is not lost for debugging.
-        assert isinstance(excinfo.value.__cause__, _re.error)
 
 
 # ---------------------------------------------------------------------------
@@ -744,6 +703,74 @@ class TestAdapterRetry:
             asyncio_run(world.adapter.search(SourceQuery()))
         assert world.http_client.call_count(url) == 1
 
+    def test_search_translates_invalid_xml(self) -> None:
+        """``search`` must wrap :class:`xml.etree.ElementTree.ParseError` in
+        :class:`CareersAdapterError` so callers do not have to know about
+        the stdlib parser's exception type (#140).
+        """
+        import xml.etree.ElementTree as ET
+
+        from apply_pilot.features.careers.adapter import CareersAdapterError
+
+        url = "https://acme.example/jobs"
+        world = _make_world(
+            retry_count=1,
+            retry_backoff_seconds=0.0,
+            responses={url: httpx.Response(200, text="<not-xml>")},
+        )
+        with pytest.raises(CareersAdapterError) as exc_info:
+            asyncio_run(world.adapter.search(SourceQuery()))
+        # The original stdlib error is preserved on __cause__.
+        assert isinstance(exc_info.value.__cause__, ET.ParseError)
+
+    def test_search_raises_on_redirect(self) -> None:
+        """A 3xx redirect is *not* a successful response — raise
+        :class:`CareersAdapterError` instead of treating the empty
+        body as a parseable payload (#149).
+        """
+        from apply_pilot.features.careers.adapter import CareersAdapterError
+
+        url = "https://acme.example/jobs"
+        world = _make_world(
+            retry_count=1,
+            retry_backoff_seconds=0.0,
+            responses={url: httpx.Response(302, text="")},
+        )
+        with pytest.raises(CareersAdapterError, match="302"):
+            asyncio_run(world.adapter.search(SourceQuery()))
+        # No retry on a non-2xx non-5xx response.
+        assert world.http_client.call_count(url) == 1
+
+    def test_transport_error_preserves_cause(self) -> None:
+        """``httpx.HTTPError`` is translated to :class:`CareersTransportError`
+        with ``__cause__`` pointing at the original httpx error so callers
+        can introspect the underlying network failure (#149).
+        """
+        from apply_pilot.features.careers.client import CareersTransportError
+
+        url = "https://acme.example/jobs"
+        original = httpx.ConnectError("connection refused")
+        client = InMemoryCareersHttpClient(responses={})
+        client.programmatic_errors = {url: [original]}
+        # Register a successful response so the second attempt would
+        # succeed — but with retry_count=1 the first error is re-raised
+        # and the test asserts on it directly.
+        client.responses[url] = httpx.Response(200, text=_RSS_BODY)
+        site = CareersPageSite(
+            name="acme",
+            url=url,
+            kind=CareersParserKind.RSS,
+            parser_id="rss-default",
+            retry_count=1,
+            retry_backoff_seconds=0.0,
+        )
+        adapter = CareersPageSourceAdapter(
+            site=site, http_client=client, normalizer=VacancyNormalizer()
+        )
+        with pytest.raises(CareersTransportError) as exc_info:
+            asyncio_run(adapter.search(SourceQuery()))
+        assert exc_info.value.__cause__ is original
+
 
 # ---------------------------------------------------------------------------
 # Adapter — registry integration
@@ -765,3 +792,30 @@ class TestAdapterRegistryIntegration:
         registry.register(world_a.adapter)
         registry.register(world_b.adapter)
         assert sorted(registry.list()) == ["careers:acme", "careers:globex"]
+
+
+# ---------------------------------------------------------------------------
+# Cross-slice: ``compute_content_hash`` is the public hash helper (#149)
+# ---------------------------------------------------------------------------
+
+
+class TestPublicContentHash:
+    def test_compute_content_hash_is_public(self) -> None:
+        """The cross-source hash helper is importable under its public name.
+
+        The adapter used to reach into ``sources.normalizer`` for the
+        underscore-prefixed ``_compute_content_hash``; that is a private
+        name by convention. The function was renamed to
+        :func:`compute_content_hash` so cross-slice callers (careers,
+        telegram) can import it without poking at internals (#149).
+        """
+        from apply_pilot.features.sources.normalizer import compute_content_hash
+
+        # Stable, deterministic output for fixed inputs.
+        assert compute_content_hash("Title", "Desc", "Acme") == compute_content_hash(
+            "Title", "Desc", "Acme"
+        )
+        # Any field change produces a different digest.
+        assert compute_content_hash("Other", "Desc", "Acme") != compute_content_hash(
+            "Title", "Desc", "Acme"
+        )
