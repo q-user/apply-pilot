@@ -405,10 +405,12 @@ def app(session_factory) -> Iterator[FastAPI]:
     # Import the router lazily so a failure to import the slice (during
     # the TDD red phase) does not mask itself behind a fixture error.
     from apply_pilot.features.dashboard.api import router as dashboard_router
+    from apply_pilot.features.dashboard.web import router as dashboard_web_router
 
     application = FastAPI()
     application.include_router(auth_router)
     application.include_router(dashboard_router)
+    application.include_router(dashboard_web_router)
     application.dependency_overrides[get_db] = _override_get_db
 
     try:

@@ -33,11 +33,9 @@ from apply_pilot.features.apply_worker.repository import SqlApplyJobRepository
 from apply_pilot.features.cover_letter.repository import SqlCoverLetterDraftRepository
 from apply_pilot.features.dashboard.schemas import (
     ConversionRead,
-    DashboardSummaryRead,
     FunnelRead,
     TimeToApplyRead,
     conversion_to_read,
-    dashboard_summary_to_read,
     funnel_to_read,
     time_to_apply_to_read,
 )
@@ -116,26 +114,11 @@ def get_dashboard_service(
 # ---------------------------------------------------------------------------
 
 
-@router.get(
-    "",
-    response_model=DashboardSummaryRead,
-    responses={
-        401: {"description": "Missing or invalid bearer token"},
-    },
-)
-def get_dashboard(
-    user_id_str: str = Depends(_resolve_user_id),  # noqa: B008
-    service: DashboardService = Depends(get_dashboard_service),  # noqa: B008
-) -> DashboardSummaryRead:
-    """Return a :class:`DashboardSummary` for the authenticated user.
-
-    The endpoint never returns user-A data to user-B: every count is
-    derived from a repository call scoped to the caller's user id.
-    A user without any rows gets an all-zero response with an
-    embedded (all-zero) digest.
-    """
-    summary = service.get_summary(uuid.UUID(user_id_str))
-    return dashboard_summary_to_read(summary)
+# NOTE: ``GET /dashboard`` has moved to ``web.py`` (M6, issue #172).
+# The web router owns the ``/dashboard`` route end-to-end so it can
+# do content negotiation (HTML vs JSON) in a single handler. The
+# remaining analytics endpoints below continue to live here because
+# they are JSON-only.
 
 
 # ---------------------------------------------------------------------------

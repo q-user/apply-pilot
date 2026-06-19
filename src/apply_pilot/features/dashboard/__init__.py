@@ -38,6 +38,7 @@ from apply_pilot.features.dashboard.analytics import (
 )
 from apply_pilot.features.dashboard.models import DashboardSummary
 from apply_pilot.features.dashboard.schemas import (
+    ApplyJobSummaryRead,
     ConversionRead,
     ConversionRowRead,
     DashboardSummaryRead,
@@ -52,13 +53,16 @@ from apply_pilot.features.dashboard.schemas import (
     time_to_apply_to_read,
 )
 from apply_pilot.features.dashboard.service import DashboardService
+from apply_pilot.features.dashboard.web import router as dashboard_web_router
 
 __all__ = [
+    "ApplyJobSummaryRead",
     "ConversionRead",
     "ConversionRow",
     "ConversionRowRead",
     "DashboardService",
     "DashboardSummary",
+    "dashboard_web_router",
     "DashboardSummaryRead",
     "FunnelFiltersRead",
     "FunnelRead",

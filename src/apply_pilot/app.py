@@ -229,6 +229,7 @@ def create_app(settings: FastAPISettings | None = None) -> FastAPI:
         router as cover_letter_style_router,
     )
     from apply_pilot.features.dashboard.api import router as dashboard_router
+    from apply_pilot.features.dashboard.web import router as dashboard_web_router
     from apply_pilot.features.hh.api import router as hh_router
     from apply_pilot.features.learning.api import router as learning_router
     from apply_pilot.features.matches.api import router as matches_router
@@ -250,6 +251,7 @@ def create_app(settings: FastAPISettings | None = None) -> FastAPI:
     app.include_router(apply_history_router)
     app.include_router(cover_letter_style_router)
     app.include_router(dashboard_router)
+    app.include_router(dashboard_web_router)
     app.include_router(hh_router)
     app.include_router(learning_router)
     app.include_router(matches_router)

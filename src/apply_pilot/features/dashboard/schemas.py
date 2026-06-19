@@ -10,6 +10,7 @@ hand.
 
 from __future__ import annotations
 
+import uuid
 from datetime import date, datetime
 from typing import Any
 
@@ -64,6 +65,27 @@ class DashboardSummaryRead(BaseModel):
         default=None,
         description="Embedded digest stats for the user; null when the digest is disabled.",
     )
+
+
+class ApplyJobSummaryRead(BaseModel):
+    """Wire format for one :class:`ApplyJob` row in the dashboard table.
+
+    Used by the dashboard web page's "Recent apply jobs" section
+    (M6, issue #172). The :attr:`vacancy_id` is the **source**
+    identifier (``Vacancy.source_id`` when the underlying vacancy
+    row exists, otherwise the bare UUID string of
+    :attr:`ApplyJob.vacancy_id`). Resolved by the web layer at render
+    time so the schema stays decoupled from the :class:`Vacancy`
+    model.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=False, from_attributes=True)
+
+    id: uuid.UUID
+    status: str
+    vacancy_id: str
+    created_at: datetime
+    last_error: str | None = None
 
 
 def dashboard_summary_to_read(summary: Any) -> DashboardSummaryRead:
@@ -203,6 +225,7 @@ def time_to_apply_to_read(stats: Any | None) -> TimeToApplyRead | None:
 
 
 __all__ = [
+    "ApplyJobSummaryRead",
     "ConversionRead",
     "ConversionRowRead",
     "DashboardSummaryRead",
