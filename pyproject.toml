@@ -28,6 +28,7 @@ dependencies = [
 apply-pilot-api = "apply_pilot.app:run"
 apply-pilot-bot = "apply_pilot.features.telegram.process:main"
 apply-pilot = "apply_pilot.cli:main"
+apply-pilot-max-bot = "apply_pilot.features.max.process:main"
 
 [project.optional-dependencies]
 dev = [
