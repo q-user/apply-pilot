@@ -19,18 +19,18 @@ from apply_pilot.features.cover_letter.repository import InMemoryCoverLetterDraf
 from apply_pilot.features.cover_letter.service import CoverLetterService
 from apply_pilot.features.matches.models import MatchStatus, VacancyMatch
 from apply_pilot.features.matches.repository import InMemoryVacancyMatchRepository
+from apply_pilot.features.messaging.actions.regenerate import (
+    RegenerateActionHandler,
+    _escape_markdownv2,
+    parse_regenerate_command,
+)
+from apply_pilot.features.messaging.dto import SendMessageRequest
 from apply_pilot.features.resumes.models import Resume
 from apply_pilot.features.scoring.llm import InMemoryLLMClient
 from apply_pilot.features.search_profiles.models import SearchProfile
 from apply_pilot.features.search_profiles.repository import InMemorySearchProfileRepository
 from apply_pilot.features.sources.models import Vacancy
-from apply_pilot.features.telegram.actions.regenerate import (
-    RegenerateActionHandler,
-    _escape_markdownv2,
-    parse_regenerate_command,
-)
 from apply_pilot.features.telegram.bot import TelegramBot, TelegramSettings
-from apply_pilot.features.telegram.dto import SendMessageRequest
 from apply_pilot.features.telegram.repository import InMemoryTelegramAccountRepository
 from apply_pilot.features.users.models import User
 
@@ -107,7 +107,7 @@ class _World:
     draft_repo: InMemoryCoverLetterDraftRepository
     llm: InMemoryLLMClient
     service: CoverLetterService
-    telegram_account_repo: InMemoryTelegramAccountRepository
+    account_repo: InMemoryTelegramAccountRepository
     audit_repo: InMemoryAuditLogRepository
     audit_service: AuditService
 
@@ -217,7 +217,7 @@ def _make_world(
         draft_repo=draft_repo,
     )
 
-    telegram_account_repo = InMemoryTelegramAccountRepository()
+    account_repo = InMemoryTelegramAccountRepository()
     audit_repo = InMemoryAuditLogRepository()
     audit_service = AuditService(audit_repo=audit_repo)
 
@@ -237,7 +237,7 @@ def _make_world(
         draft_repo=draft_repo,
         llm=llm,
         service=service,
-        telegram_account_repo=telegram_account_repo,
+        account_repo=account_repo,
         audit_repo=audit_repo,
         audit_service=audit_service,
     )
@@ -271,7 +271,7 @@ def world() -> _World:
 def handler(world: _World) -> RegenerateActionHandler:
     return RegenerateActionHandler(
         cover_letter_service=world.service,
-        telegram_account_repo=world.telegram_account_repo,
+        account_repo=world.account_repo,
         audit_service=world.audit_service,
         profile_repo=world.profile_repo,
     )
@@ -305,9 +305,7 @@ async def test_handle_regenerates_cover_letter_for_owner(
     world: _World,
     telegram_user_id: int,
 ) -> None:
-    _link_telegram(
-        world.telegram_account_repo, user_id=world.user.id, telegram_user_id=telegram_user_id
-    )
+    _link_telegram(world.account_repo, user_id=world.user.id, telegram_user_id=telegram_user_id)
     pre = world.draft_repo.get_by_match(world.match.id)
     assert pre is not None
     pre_version = pre.version
@@ -315,7 +313,7 @@ async def test_handle_regenerates_cover_letter_for_owner(
 
     response = await handler.handle(
         chat_id=200,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_regenerate_command(f"/regenerate {world.match.id}"),
     )
 
@@ -335,17 +333,15 @@ async def test_handle_bumps_version_on_each_regenerate(
     world: _World,
     telegram_user_id: int,
 ) -> None:
-    _link_telegram(
-        world.telegram_account_repo, user_id=world.user.id, telegram_user_id=telegram_user_id
-    )
+    _link_telegram(world.account_repo, user_id=world.user.id, telegram_user_id=telegram_user_id)
     await handler.handle(
         chat_id=200,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_regenerate_command(f"/regenerate {world.match.id}"),
     )
     await handler.handle(
         chat_id=200,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_regenerate_command(f"/regenerate {world.match.id}"),
     )
     draft = world.draft_repo.get_by_match(world.match.id)
@@ -358,13 +354,11 @@ async def test_handle_rejects_unknown_match(
     world: _World,
     telegram_user_id: int,
 ) -> None:
-    _link_telegram(
-        world.telegram_account_repo, user_id=world.user.id, telegram_user_id=telegram_user_id
-    )
+    _link_telegram(world.account_repo, user_id=world.user.id, telegram_user_id=telegram_user_id)
     missing_id = uuid.uuid4()
     response = await handler.handle(
         chat_id=200,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_regenerate_command(f"/regenerate {missing_id}"),
     )
     assert isinstance(response, SendMessageRequest)
@@ -379,12 +373,12 @@ async def test_handle_rejects_match_for_non_owner(
     telegram_user_id: int,
     other_user_id: uuid.UUID,
 ) -> None:
-    world.telegram_account_repo.create(
+    world.account_repo.create(
         user_id=other_user_id, telegram_user_id=telegram_user_id, username="mallory"
     )
     response = await handler.handle(
         chat_id=200,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_regenerate_command(f"/regenerate {world.match.id}"),
     )
     assert isinstance(response, SendMessageRequest)
@@ -401,12 +395,10 @@ async def test_handle_creates_audit_event(
     world: _World,
     telegram_user_id: int,
 ) -> None:
-    _link_telegram(
-        world.telegram_account_repo, user_id=world.user.id, telegram_user_id=telegram_user_id
-    )
+    _link_telegram(world.account_repo, user_id=world.user.id, telegram_user_id=telegram_user_id)
     await handler.handle(
         chat_id=200,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_regenerate_command(f"/regenerate {world.match.id}"),
     )
     logs = world.audit_repo.list_by_event_type(AuditEventType.COVER_LETTER_REGENERATED.value)
@@ -424,7 +416,7 @@ async def test_handle_rejects_unlinked_telegram_account(
 ) -> None:
     response = await handler.handle(
         chat_id=200,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_regenerate_command(f"/regenerate {world.match.id}"),
     )
     assert isinstance(response, SendMessageRequest)
@@ -440,22 +432,20 @@ async def test_handle_refuses_when_no_draft_exists(
     world: _World,
     telegram_user_id: int,
 ) -> None:
-    _link_telegram(
-        world.telegram_account_repo, user_id=world.user.id, telegram_user_id=telegram_user_id
-    )
+    _link_telegram(world.account_repo, user_id=world.user.id, telegram_user_id=telegram_user_id)
     world.draft_repo._by_id.pop(world.draft.id, None)
     world.draft_repo._by_match.pop(world.match.id, None)
 
     handler = RegenerateActionHandler(
         cover_letter_service=world.service,
-        telegram_account_repo=world.telegram_account_repo,
+        account_repo=world.account_repo,
         audit_service=world.audit_service,
         profile_repo=world.profile_repo,
     )
 
     response = await handler.handle(
         chat_id=200,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_regenerate_command(f"/regenerate {world.match.id}"),
     )
     assert isinstance(response, SendMessageRequest)
@@ -469,12 +459,10 @@ async def test_handle_returns_markdownv2_preview(
     world: _World,
     telegram_user_id: int,
 ) -> None:
-    _link_telegram(
-        world.telegram_account_repo, user_id=world.user.id, telegram_user_id=telegram_user_id
-    )
+    _link_telegram(world.account_repo, user_id=world.user.id, telegram_user_id=telegram_user_id)
     response = await handler.handle(
         chat_id=200,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_regenerate_command(f"/regenerate {world.match.id}"),
     )
     assert isinstance(response, SendMessageRequest)
@@ -510,12 +498,10 @@ def _regenerate_update(
 
 async def test_dispatcher_routes_regenerate_command(world: _World) -> None:
     telegram_user_id = 700
-    _link_telegram(
-        world.telegram_account_repo, user_id=world.user.id, telegram_user_id=telegram_user_id
-    )
+    _link_telegram(world.account_repo, user_id=world.user.id, telegram_user_id=telegram_user_id)
     handler = RegenerateActionHandler(
         cover_letter_service=world.service,
-        telegram_account_repo=world.telegram_account_repo,
+        account_repo=world.account_repo,
         audit_service=world.audit_service,
         profile_repo=world.profile_repo,
     )
@@ -536,7 +522,7 @@ async def test_dispatcher_routes_regenerate_command(world: _World) -> None:
 async def test_dispatcher_regenerate_command_without_args_returns_help(world: _World) -> None:
     handler = RegenerateActionHandler(
         cover_letter_service=world.service,
-        telegram_account_repo=world.telegram_account_repo,
+        account_repo=world.account_repo,
         audit_service=world.audit_service,
         profile_repo=world.profile_repo,
     )

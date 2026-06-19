@@ -157,6 +157,10 @@ def main() -> int:
 
     configure_logging()
     settings = get_telegram_settings()
+    # The account repo is optional: when None, the action handlers return
+    # "not available" messages. Production wiring (app.py) injects the
+    # SQLAlchemy-backed repo; the console script runs with None for local
+    # hacking.
     bot = TelegramBot(settings=settings)
     process = TelegramBotProcess(bot=bot)
     return asyncio.run(process.run())

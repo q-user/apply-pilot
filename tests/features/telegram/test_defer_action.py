@@ -33,15 +33,15 @@ from apply_pilot.features.audit.service import AuditService
 from apply_pilot.features.matches.models import MatchStatus, VacancyMatch
 from apply_pilot.features.matches.repository import InMemoryVacancyMatchRepository
 from apply_pilot.features.matches.service import MatchService
-from apply_pilot.features.search_profiles.models import SearchProfile
-from apply_pilot.features.search_profiles.repository import InMemorySearchProfileRepository
-from apply_pilot.features.sources.models import Vacancy
-from apply_pilot.features.telegram.actions.defer import (
+from apply_pilot.features.messaging.actions.defer import (
     DeferActionHandler,
     parse_defer_command,
 )
+from apply_pilot.features.messaging.dto import SendMessageRequest
+from apply_pilot.features.search_profiles.models import SearchProfile
+from apply_pilot.features.search_profiles.repository import InMemorySearchProfileRepository
+from apply_pilot.features.sources.models import Vacancy
 from apply_pilot.features.telegram.bot import TelegramBot, TelegramSettings
-from apply_pilot.features.telegram.dto import SendMessageRequest
 from apply_pilot.features.telegram.repository import InMemoryTelegramAccountRepository
 
 # ---------------------------------------------------------------------------
@@ -104,7 +104,7 @@ def match_service(
 
 
 @pytest.fixture
-def telegram_account_repo() -> InMemoryTelegramAccountRepository:
+def account_repo() -> InMemoryTelegramAccountRepository:
     return InMemoryTelegramAccountRepository()
 
 
@@ -121,12 +121,12 @@ def audit_service(audit_repo: InMemoryAuditLogRepository) -> AuditService:
 @pytest.fixture
 def handler(
     match_service: MatchService,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     audit_service: AuditService,
 ) -> DeferActionHandler:
     return DeferActionHandler(
         match_service=match_service,
-        telegram_account_repo=telegram_account_repo,
+        account_repo=account_repo,
         audit_service=audit_service,
     )
 
@@ -197,17 +197,17 @@ def test_handle_defers_match_for_owner(
     handler: DeferActionHandler,
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     user_id: uuid.UUID,
     telegram_user_id: int,
 ) -> None:
     """The owner can defer their own match and receive a confirmation message."""
     match = _seed_match(match_repo, profile_repo, user_id=user_id)
-    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+    _link_telegram(account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
 
     response = handler.handle(
         chat_id=100,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_defer_command(f"/defer {match.id}"),
     )
 
@@ -222,17 +222,17 @@ def test_handle_defers_match_for_owner(
 
 def test_handle_rejects_unknown_match(
     handler: DeferActionHandler,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     user_id: uuid.UUID,
     telegram_user_id: int,
 ) -> None:
     """Deferring a match that does not exist must return a clear error."""
-    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+    _link_telegram(account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
     missing_id = uuid.uuid4()
 
     response = handler.handle(
         chat_id=100,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_defer_command(f"/defer {missing_id}"),
     )
 
@@ -246,7 +246,7 @@ def test_handle_rejects_match_for_non_owner(
     handler: DeferActionHandler,
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     audit_repo: InMemoryAuditLogRepository,
     user_id: uuid.UUID,
     other_user_id: uuid.UUID,
@@ -254,11 +254,11 @@ def test_handle_rejects_match_for_non_owner(
 ) -> None:
     """A user trying to defer another user's match must get an error and no state change."""
     match = _seed_match(match_repo, profile_repo, user_id=other_user_id)
-    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+    _link_telegram(account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
 
     response = handler.handle(
         chat_id=100,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_defer_command(f"/defer {match.id}"),
     )
 
@@ -275,18 +275,18 @@ def test_handle_creates_audit_event(
     handler: DeferActionHandler,
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     audit_repo: InMemoryAuditLogRepository,
     user_id: uuid.UUID,
     telegram_user_id: int,
 ) -> None:
     """A successful defer must record a MATCH_DEFERRED audit event with the match_id."""
     match = _seed_match(match_repo, profile_repo, user_id=user_id)
-    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+    _link_telegram(account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
 
     response = handler.handle(
         chat_id=100,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_defer_command(f"/defer {match.id}"),
     )
 
@@ -303,7 +303,7 @@ def test_handle_refuses_defer_from_rejected_status(
     handler: DeferActionHandler,
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     user_id: uuid.UUID,
     telegram_user_id: int,
 ) -> None:
@@ -311,11 +311,11 @@ def test_handle_refuses_defer_from_rejected_status(
     match = _seed_match(
         match_repo, profile_repo, user_id=user_id, status=MatchStatus.REJECTED.value
     )
-    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+    _link_telegram(account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
 
     response = handler.handle(
         chat_id=100,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_defer_command(f"/defer {match.id}"),
     )
 
@@ -330,7 +330,7 @@ def test_handle_refuses_defer_from_accepted_status(
     handler: DeferActionHandler,
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     user_id: uuid.UUID,
     telegram_user_id: int,
 ) -> None:
@@ -338,11 +338,11 @@ def test_handle_refuses_defer_from_accepted_status(
     match = _seed_match(
         match_repo, profile_repo, user_id=user_id, status=MatchStatus.ACCEPTED.value
     )
-    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+    _link_telegram(account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
 
     response = handler.handle(
         chat_id=100,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_defer_command(f"/defer {match.id}"),
     )
 
@@ -365,7 +365,7 @@ def test_handle_rejects_unlinked_telegram_account(
 
     response = handler.handle(
         chat_id=100,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_defer_command(f"/defer {match.id}"),
     )
 
@@ -381,18 +381,18 @@ def test_handle_defers_from_each_allowed_status(
     handler: DeferActionHandler,
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     user_id: uuid.UUID,
     telegram_user_id: int,
     source_status: MatchStatus,
 ) -> None:
     """Defer is allowed from ``new``, ``scored`` and ``review``."""
     match = _seed_match(match_repo, profile_repo, user_id=user_id, status=source_status.value)
-    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+    _link_telegram(account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
 
     response = handler.handle(
         chat_id=100,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_defer_command(f"/defer {match.id}"),
     )
 
@@ -406,7 +406,7 @@ def test_handle_defers_already_deferred_match(
     handler: DeferActionHandler,
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     audit_repo: InMemoryAuditLogRepository,
     user_id: uuid.UUID,
     telegram_user_id: int,
@@ -415,11 +415,11 @@ def test_handle_defers_already_deferred_match(
     match = _seed_match(
         match_repo, profile_repo, user_id=user_id, status=MatchStatus.DEFERRED.value
     )
-    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+    _link_telegram(account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
 
     response = handler.handle(
         chat_id=100,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_defer_command(f"/defer {match.id}"),
     )
 
@@ -465,18 +465,18 @@ async def test_dispatcher_routes_defer_command(
     match_service: MatchService,
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     audit_service: AuditService,
     user_id: uuid.UUID,
 ) -> None:
     """The bot must delegate ``/defer <id>`` to the DeferActionHandler."""
     match = _seed_match(match_repo, profile_repo, user_id=user_id)
     telegram_user_id = 600
-    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+    _link_telegram(account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
 
     handler = DeferActionHandler(
         match_service=match_service,
-        telegram_account_repo=telegram_account_repo,
+        account_repo=account_repo,
         audit_service=audit_service,
     )
     bot = TelegramBot(
@@ -501,7 +501,7 @@ async def test_dispatcher_defer_command_without_args_returns_help() -> None:
                 match_repo=InMemoryVacancyMatchRepository(),
                 profile_repo=InMemorySearchProfileRepository(),
             ),
-            telegram_account_repo=InMemoryTelegramAccountRepository(),
+            account_repo=InMemoryTelegramAccountRepository(),
             audit_service=AuditService(audit_repo=InMemoryAuditLogRepository()),
         ),
     )

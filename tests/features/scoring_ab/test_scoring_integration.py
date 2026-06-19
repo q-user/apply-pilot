@@ -26,7 +26,7 @@ import pytest
 # The ``matches`` package's ``__init__`` triggers an import of
 # ``matches.service`` which in turn pulls in ``Vacancy`` from
 # ``sources.models``; that chain ends up loading
-# ``telegram.actions.accept`` which then re-enters ``matches.service``
+# ``messaging.actions.accept`` which then re-enters ``matches.service``
 # while it is still partially initialised (the ``MatchNotFoundError``
 # class has not yet been bound). Pre-loading ``sources.models`` up
 # front means the cycle resolves the second time around — once

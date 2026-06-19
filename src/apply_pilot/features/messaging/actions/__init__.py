@@ -1,41 +1,41 @@
-"""Telegram command action handlers.
+"""Channel-agnostic command action handlers.
 
 Each action is a small, self-contained class that knows how to handle one
-Telegram command (``/accept``, ``/reject``). The :class:`TelegramBot`
-dispatcher holds a reference to each action and routes incoming updates
-to the appropriate handler based on the command name. Actions are
-injected through the constructor so tests can swap in fakes and the
-action's collaborators stay explicit.
+messaging command (``/accept``, ``/reject``). The channel-specific bot
+dispatcher holds a reference to each action and routes incoming
+updates to the appropriate handler based on the command name. Actions
+are injected through the constructor so tests can swap in fakes and
+the action's collaborators stay explicit.
 
 This package follows the Vertical Slices Architecture: every command
 lives next to the tests and supporting code that change together.
 """
 
-from apply_pilot.features.telegram.actions.accept import (
+from apply_pilot.features.messaging.actions.accept import (
     ACCEPT_HELP_TEXT,
     AcceptActionHandler,
     AcceptCommand,
     parse_accept_command,
 )
-from apply_pilot.features.telegram.actions.defer import (
+from apply_pilot.features.messaging.actions.defer import (
     DEFER_HELP_TEXT,
     DeferActionHandler,
     DeferCommand,
     parse_defer_command,
 )
-from apply_pilot.features.telegram.actions.regenerate import (
+from apply_pilot.features.messaging.actions.regenerate import (
     REGENERATE_HELP_TEXT,
     RegenerateActionHandler,
     RegenerateCommand,
     parse_regenerate_command,
 )
-from apply_pilot.features.telegram.actions.reject import (
+from apply_pilot.features.messaging.actions.reject import (
     REJECT_HELP_TEXT,
     RejectActionHandler,
     RejectCommand,
     parse_reject_command,
 )
-from apply_pilot.features.telegram.actions.review import (
+from apply_pilot.features.messaging.actions.review import (
     REVIEW_HELP_TEXT,
     ReviewActionHandler,
     ReviewCommand,

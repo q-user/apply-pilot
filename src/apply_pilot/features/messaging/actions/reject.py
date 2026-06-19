@@ -1,7 +1,7 @@
-"""``/reject <match_id> [reason]`` Telegram action handler (M4, issue #38).
+"""``/reject <match_id> [reason]`` messaging action handler (M4, issue #38).
 
 This module owns the use-case for marking a :class:`VacancyMatch` as
-rejected by the user from a Telegram chat. The handler is
+rejected by the user from a messaging chat. The handler is
 intentionally thin: it resolves the local user from the Telegram
 account link, asks the :class:`MatchService` to perform the state
 change (which enforces ownership and status validation), records a
@@ -28,10 +28,10 @@ from apply_pilot.features.matches.service import (
     MatchOwnershipError,
     MatchService,
 )
-from apply_pilot.features.telegram.dto import SendMessageRequest
-from apply_pilot.features.telegram.repository import TelegramAccountRepository
+from apply_pilot.features.messaging.dto import SendMessageRequest
+from apply_pilot.features.messaging.protocols import MessagingAccountRepository
 
-_LOGGER = logging.getLogger("apply_pilot.features.telegram.actions.reject")
+_LOGGER = logging.getLogger("apply_pilot.features.messaging.actions.reject")
 
 
 # ---------------------------------------------------------------------------
@@ -122,29 +122,29 @@ class RejectActionHandler:
     Collaborators are injected through the constructor. ``handle`` is
     a regular method (not ``async``) because the current
     implementation is fully in-process: ``MatchService``,
-    ``AuditService`` and ``TelegramAccountRepository`` are all
+    ``AuditService`` and ``MessagingAccountRepository`` are all
     synchronous. When a future slice needs to do I/O (call the
-    Telegram API, push to Redis), the method can be promoted to
+    messaging API, push to Redis), the method can be promoted to
     ``async`` and the dispatcher updated accordingly — the action
     interface is small and the change stays local.
 
-    The dispatcher (``TelegramBot``) is responsible for extracting
-    ``chat_id`` and ``telegram_user_id`` from the incoming update and
-    passing them in. The handler does not look at the raw update
-    payload, which keeps the action slice-independent from the
-    Telegram transport.
+    The messaging dispatcher (``TelegramBot`` or the future MAX bot)
+    is responsible for extracting ``chat_id`` and
+    ``messaging_user_id`` from the incoming update and passing them
+    in. The handler does not look at the raw update payload, which
+    keeps the action slice-independent from the transport.
     """
 
     def __init__(
         self,
         *,
         match_service: MatchService,
-        telegram_account_repo: TelegramAccountRepository,
+        account_repo: MessagingAccountRepository,
         audit_service: AuditService,
         learning_signals: LearningSignalsService | None = None,
     ) -> None:
         self._match_service = match_service
-        self._telegram_account_repo = telegram_account_repo
+        self._account_repo = account_repo
         self._audit_service = audit_service
         # Optional so the slice can be exercised in isolation (the
         # public tests build the handler without a learning service).
@@ -156,16 +156,16 @@ class RejectActionHandler:
         self,
         *,
         chat_id: int,
-        telegram_user_id: int,
+        messaging_user_id: int,
         command: RejectCommand,
     ) -> SendMessageRequest:
         """Execute the use-case and return the single chat reply."""
-        account = self._telegram_account_repo.find_by_telegram_user_id(telegram_user_id)
+        account = self._account_repo.find_by_external_user_id(messaging_user_id)
         if account is None:
             return SendMessageRequest(
                 chat_id=chat_id,
                 text=(
-                    "❌ This Telegram account is not linked to apply-pilot. "
+                    "❌ This messaging account is not linked to apply-pilot. "
                     "Use /link to connect it first."
                 ),
             )
@@ -245,9 +245,9 @@ class RejectActionHandler:
 
         suffix = f" Reason: {command.reason}" if command.reason else ""
         _LOGGER.info(
-            "telegram.reject.success",
+            "messaging.reject.success",
             extra={
-                "event": "telegram.reject.success",
+                "event": "messaging.reject.success",
                 "match_id": str(command.match_id),
                 "user_id": str(user_id),
             },

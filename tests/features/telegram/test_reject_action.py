@@ -31,15 +31,15 @@ from apply_pilot.features.learning.service import LearningSignalsService
 from apply_pilot.features.matches.models import MatchStatus, VacancyMatch
 from apply_pilot.features.matches.repository import InMemoryVacancyMatchRepository
 from apply_pilot.features.matches.service import MatchService
-from apply_pilot.features.search_profiles.models import SearchProfile
-from apply_pilot.features.search_profiles.repository import InMemorySearchProfileRepository
-from apply_pilot.features.sources.models import Vacancy
-from apply_pilot.features.telegram.actions.reject import (
+from apply_pilot.features.messaging.actions.reject import (
     RejectActionHandler,
     parse_reject_command,
 )
+from apply_pilot.features.messaging.dto import SendMessageRequest
+from apply_pilot.features.search_profiles.models import SearchProfile
+from apply_pilot.features.search_profiles.repository import InMemorySearchProfileRepository
+from apply_pilot.features.sources.models import Vacancy
 from apply_pilot.features.telegram.bot import TelegramBot, TelegramSettings
-from apply_pilot.features.telegram.dto import SendMessageRequest
 from apply_pilot.features.telegram.repository import InMemoryTelegramAccountRepository
 
 # ---------------------------------------------------------------------------
@@ -100,7 +100,7 @@ def match_service(
 
 
 @pytest.fixture
-def telegram_account_repo() -> InMemoryTelegramAccountRepository:
+def account_repo() -> InMemoryTelegramAccountRepository:
     return InMemoryTelegramAccountRepository()
 
 
@@ -129,13 +129,13 @@ def learning_service(
 @pytest.fixture
 def handler(
     match_service: MatchService,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     audit_service: AuditService,
     learning_service: LearningSignalsService,
 ) -> RejectActionHandler:
     return RejectActionHandler(
         match_service=match_service,
-        telegram_account_repo=telegram_account_repo,
+        account_repo=account_repo,
         audit_service=audit_service,
         learning_signals=learning_service,
     )
@@ -215,17 +215,17 @@ def test_handle_rejects_match_for_owner(
     handler: RejectActionHandler,
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     user_id: uuid.UUID,
     telegram_user_id: int,
 ) -> None:
     """The owner can reject their own match and receive a confirmation message."""
     match = _seed_match(match_repo, profile_repo, user_id=user_id)
-    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+    _link_telegram(account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
 
     response = handler.handle(
         chat_id=100,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_reject_command(f"/reject {match.id}"),
     )
 
@@ -241,18 +241,18 @@ def test_handle_rejects_with_reason(
     handler: RejectActionHandler,
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     audit_repo: InMemoryAuditLogRepository,
     user_id: uuid.UUID,
     telegram_user_id: int,
 ) -> None:
     """The reason provided with the command must be stored in the audit details."""
     match = _seed_match(match_repo, profile_repo, user_id=user_id)
-    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+    _link_telegram(account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
 
     handler.handle(
         chat_id=100,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_reject_command(f"/reject {match.id} salary too low"),
     )
 
@@ -268,18 +268,18 @@ def test_handle_rejects_match_for_non_owner(
     handler: RejectActionHandler,
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     user_id: uuid.UUID,
     other_user_id: uuid.UUID,
     telegram_user_id: int,
 ) -> None:
     """A user trying to reject another user's match must get an error and no state change."""
     match = _seed_match(match_repo, profile_repo, user_id=other_user_id)
-    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+    _link_telegram(account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
 
     response = handler.handle(
         chat_id=100,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_reject_command(f"/reject {match.id}"),
     )
 
@@ -294,18 +294,18 @@ def test_handle_rejects_unknown_match(
     handler: RejectActionHandler,
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     user_id: uuid.UUID,
     telegram_user_id: int,
 ) -> None:
     """A non-existent match id must return an error and not crash."""
     _seed_match(match_repo, profile_repo, user_id=user_id)  # ensure repo is not empty
-    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+    _link_telegram(account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
     unknown_id = uuid.uuid4()
 
     response = handler.handle(
         chat_id=100,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_reject_command(f"/reject {unknown_id}"),
     )
 
@@ -318,18 +318,18 @@ def test_handle_creates_audit_event_with_reason(
     handler: RejectActionHandler,
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     audit_repo: InMemoryAuditLogRepository,
     user_id: uuid.UUID,
     telegram_user_id: int,
 ) -> None:
     """A successful reject must always emit a VACANCY_MATCH_REJECTED audit event."""
     match = _seed_match(match_repo, profile_repo, user_id=user_id)
-    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+    _link_telegram(account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
 
     handler.handle(
         chat_id=100,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_reject_command(f"/reject {match.id} not a fit"),
     )
 
@@ -346,13 +346,13 @@ def test_handle_rejects_from_each_allowed_status(
     handler: RejectActionHandler,
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     user_id: uuid.UUID,
     telegram_user_id: int,
 ) -> None:
     """Reject must work from new, scored, review, and accepted."""
     _link_telegram(
-        telegram_account_repo,
+        account_repo,
         user_id=user_id,
         telegram_user_id=telegram_user_id,
     )
@@ -366,7 +366,7 @@ def test_handle_rejects_from_each_allowed_status(
 
         response = handler.handle(
             chat_id=100,
-            telegram_user_id=telegram_user_id,
+            messaging_user_id=telegram_user_id,
             command=parse_reject_command(f"/reject {match.id}"),
         )
 
@@ -378,7 +378,7 @@ def test_handle_refuses_reject_from_rejected_status(
     handler: RejectActionHandler,
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     user_id: uuid.UUID,
     telegram_user_id: int,
 ) -> None:
@@ -386,11 +386,11 @@ def test_handle_refuses_reject_from_rejected_status(
     match = _seed_match(
         match_repo, profile_repo, user_id=user_id, status=MatchStatus.REJECTED.value
     )
-    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+    _link_telegram(account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
 
     response = handler.handle(
         chat_id=100,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_reject_command(f"/reject {match.id}"),
     )
 
@@ -403,17 +403,17 @@ def test_handle_refuses_reject_from_applied_status(
     handler: RejectActionHandler,
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     user_id: uuid.UUID,
     telegram_user_id: int,
 ) -> None:
     """Rejecting a match that has been applied to must return an error."""
     match = _seed_match(match_repo, profile_repo, user_id=user_id, status=MatchStatus.APPLIED.value)
-    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+    _link_telegram(account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
 
     response = handler.handle(
         chat_id=100,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_reject_command(f"/reject {match.id}"),
     )
 
@@ -434,7 +434,7 @@ def test_handle_rejects_unlinked_telegram_account(
 
     response = handler.handle(
         chat_id=100,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_reject_command(f"/reject {match.id}"),
     )
 
@@ -454,18 +454,18 @@ def test_handle_records_learning_signal_with_reason(
     handler: RejectActionHandler,
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     learning_repo: InMemoryLearningSignalRepository,
     user_id: uuid.UUID,
     telegram_user_id: int,
 ) -> None:
     """A successful reject must also record a structured learning signal."""
     match = _seed_match(match_repo, profile_repo, user_id=user_id)
-    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+    _link_telegram(account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
 
     handler.handle(
         chat_id=100,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_reject_command(f"/reject {match.id} salary too low"),
     )
 
@@ -487,18 +487,18 @@ def test_handle_records_learning_signal_without_reason(
     handler: RejectActionHandler,
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     learning_repo: InMemoryLearningSignalRepository,
     user_id: uuid.UUID,
     telegram_user_id: int,
 ) -> None:
     """A reject without an explicit reason must still record a signal."""
     match = _seed_match(match_repo, profile_repo, user_id=user_id)
-    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+    _link_telegram(account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
 
     handler.handle(
         chat_id=100,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_reject_command(f"/reject {match.id}"),
     )
 
@@ -511,7 +511,7 @@ def test_handle_records_score_and_prompt_version_when_present(
     handler: RejectActionHandler,
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     learning_repo: InMemoryLearningSignalRepository,
     user_id: uuid.UUID,
     telegram_user_id: int,
@@ -529,11 +529,11 @@ def test_handle_records_score_and_prompt_version_when_present(
         confidence=0.9,
         scored_at=datetime(2026, 6, 17, 12, 0, 0, tzinfo=UTC),
     )
-    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+    _link_telegram(account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
 
     handler.handle(
         chat_id=100,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_reject_command(f"/reject {match.id} bad fit"),
     )
 
@@ -546,7 +546,7 @@ def test_handle_records_score_and_prompt_version_when_present(
 def test_handle_does_not_record_learning_signal_for_unlinked_account(
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     learning_repo: InMemoryLearningSignalRepository,
     match_service: MatchService,
     audit_service: AuditService,
@@ -558,14 +558,14 @@ def test_handle_does_not_record_learning_signal_for_unlinked_account(
     match = _seed_match(match_repo, profile_repo, user_id=user_id)
     handler = RejectActionHandler(
         match_service=match_service,
-        telegram_account_repo=telegram_account_repo,
+        account_repo=account_repo,
         audit_service=audit_service,
         learning_signals=learning_service,
     )
 
     handler.handle(
         chat_id=100,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_reject_command(f"/reject {match.id}"),
     )
 
@@ -575,7 +575,7 @@ def test_handle_does_not_record_learning_signal_for_unlinked_account(
 def test_handle_does_not_record_learning_signal_for_non_owner(
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     learning_repo: InMemoryLearningSignalRepository,
     match_service: MatchService,
     audit_service: AuditService,
@@ -586,17 +586,17 @@ def test_handle_does_not_record_learning_signal_for_non_owner(
 ) -> None:
     """A user who doesn't own the match must not record a learning signal."""
     match = _seed_match(match_repo, profile_repo, user_id=other_user_id)
-    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+    _link_telegram(account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
     handler = RejectActionHandler(
         match_service=match_service,
-        telegram_account_repo=telegram_account_repo,
+        account_repo=account_repo,
         audit_service=audit_service,
         learning_signals=learning_service,
     )
 
     handler.handle(
         chat_id=100,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_reject_command(f"/reject {match.id}"),
     )
 
@@ -635,18 +635,18 @@ async def test_dispatcher_routes_reject_command(
     match_service: MatchService,
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     audit_service: AuditService,
     user_id: uuid.UUID,
 ) -> None:
     """The bot must delegate ``/reject <id>`` to the RejectActionHandler."""
     match = _seed_match(match_repo, profile_repo, user_id=user_id)
     telegram_user_id = 700
-    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+    _link_telegram(account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
 
     handler = RejectActionHandler(
         match_service=match_service,
-        telegram_account_repo=telegram_account_repo,
+        account_repo=account_repo,
         audit_service=audit_service,
     )
     bot = TelegramBot(
@@ -673,7 +673,7 @@ async def test_dispatcher_reject_command_without_args_returns_help() -> None:
                 match_repo=InMemoryVacancyMatchRepository(),
                 profile_repo=InMemorySearchProfileRepository(),
             ),
-            telegram_account_repo=InMemoryTelegramAccountRepository(),
+            account_repo=InMemoryTelegramAccountRepository(),
             audit_service=AuditService(audit_repo=InMemoryAuditLogRepository()),
         ),
     )

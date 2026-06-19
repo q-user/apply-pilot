@@ -13,43 +13,36 @@ can be injected at construction time for tests or alternative transports.
 from __future__ import annotations
 
 import uuid
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import httpx
 
 from apply_pilot.config import TelegramSettings
-from apply_pilot.features.telegram.actions.accept import (
-    ACCEPT_HELP_TEXT,
-    AcceptActionHandler,
-    parse_accept_command,
-)
-from apply_pilot.features.telegram.actions.defer import (
-    DEFER_HELP_TEXT,
-    DeferActionHandler,
-    parse_defer_command,
-)
-from apply_pilot.features.telegram.actions.regenerate import (
-    REGENERATE_HELP_TEXT,
-    RegenerateActionHandler,
-    parse_regenerate_command,
-)
-from apply_pilot.features.telegram.actions.reject import (
-    REJECT_HELP_TEXT,
-    RejectActionHandler,
-    parse_reject_command,
-)
-from apply_pilot.features.telegram.actions.review import (
-    REVIEW_HELP_TEXT,
-    ReviewActionHandler,
-    parse_review_command,
-)
-from apply_pilot.features.telegram.dto import SendMessageRequest
+from apply_pilot.features.messaging.dto import SendMessageRequest
+from apply_pilot.features.messaging.protocols import MessagingAccountRepository
 from apply_pilot.features.telegram.linking import (
     InvalidLinkingTokenError,
     TelegramAccountAlreadyLinkedError,
     TelegramLinkingService,
 )
 from apply_pilot.features.telegram.repository import TelegramAccountRepository
+
+# Action handler imports are deferred to the _handle_*_command methods to
+# break a circular import: ``messaging.actions.accept`` → ``matches.service``
+# → ``apply_worker.notifications`` → ``telegram.repository`` → ``telegram``
+# → ``telegram.bot`` → ``messaging.actions.accept``. The annotations on the
+# constructor parameters stay as strings (``from __future__ import annotations``
+# + the TYPE_CHECKING block below) so the import order does not matter.
+
+
+if TYPE_CHECKING:
+    from apply_pilot.features.messaging.actions.accept import AcceptActionHandler
+    from apply_pilot.features.messaging.actions.defer import DeferActionHandler
+    from apply_pilot.features.messaging.actions.regenerate import (
+        RegenerateActionHandler,
+    )
+    from apply_pilot.features.messaging.actions.reject import RejectActionHandler
+    from apply_pilot.features.messaging.actions.review import ReviewActionHandler
 
 # Telegram Bot API base URL. Token is appended per request, not baked into the
 # client, so the same client can be reused if the bot token is rotated
@@ -72,6 +65,7 @@ class TelegramBot:
         http_client: httpx.AsyncClient | None = None,
         linking_service: TelegramLinkingService | None = None,
         telegram_account_repository: TelegramAccountRepository | None = None,
+        account_repo: MessagingAccountRepository | None = None,
         accept_handler: AcceptActionHandler | None = None,
         defer_handler: DeferActionHandler | None = None,
         regenerate_handler: RegenerateActionHandler | None = None,
@@ -88,7 +82,15 @@ class TelegramBot:
         # active; when None, /link returns a "not available" message.
         self._linking_service = linking_service
         # Optional repository for persisting linked TelegramAccount rows.
+        # Telegram-specific (the linking command creates a TelegramAccount
+        # row with ``telegram_user_id``); the channel-agnostic account
+        # repo for the action handlers is the separate ``account_repo``.
         self._telegram_account_repository = telegram_account_repository
+        # Channel-agnostic account repo for the action handlers. Stored
+        # here for symmetry with the other handler injection points;
+        # the action handlers receive it through their own constructor
+        # kwargs (set by the caller, typically ``process.py``).
+        self._account_repo = account_repo
         # Optional accept action handler. When None, the ``/accept``
         # command returns a "not available" message; the link between
         # the dispatcher and the action is dependency-injected so the
@@ -409,6 +411,13 @@ class TelegramBot:
         dependencies for local hacking) the command returns a
         "not available" message instead of crashing.
         """
+        # Deferred import to break the circular dependency described at
+        # the top of the module.
+        from apply_pilot.features.messaging.actions.accept import (
+            ACCEPT_HELP_TEXT,
+            parse_accept_command,
+        )
+
         if self._accept_handler is None:
             return SendMessageRequest(
                 chat_id=chat_id,
@@ -421,7 +430,7 @@ class TelegramBot:
 
         return self._accept_handler.handle(
             chat_id=chat_id,
-            telegram_user_id=telegram_user_id,
+            messaging_user_id=telegram_user_id,
             command=command,
         )
 
@@ -439,6 +448,13 @@ class TelegramBot:
         dependencies for local hacking) the command returns a
         "not available" message instead of crashing.
         """
+        # Deferred import to break the circular dependency described at
+        # the top of the module.
+        from apply_pilot.features.messaging.actions.defer import (
+            DEFER_HELP_TEXT,
+            parse_defer_command,
+        )
+
         if self._defer_handler is None:
             return SendMessageRequest(
                 chat_id=chat_id,
@@ -451,7 +467,7 @@ class TelegramBot:
 
         return self._defer_handler.handle(
             chat_id=chat_id,
-            telegram_user_id=telegram_user_id,
+            messaging_user_id=telegram_user_id,
             command=command,
         )
 
@@ -471,6 +487,13 @@ class TelegramBot:
         ``async`` because :class:`RegenerateActionHandler.handle`
         awaits the LLM call.
         """
+        # Deferred import to break the circular dependency described at
+        # the top of the module.
+        from apply_pilot.features.messaging.actions.regenerate import (
+            REGENERATE_HELP_TEXT,
+            parse_regenerate_command,
+        )
+
         if self._regenerate_handler is None:
             return SendMessageRequest(
                 chat_id=chat_id,
@@ -483,7 +506,7 @@ class TelegramBot:
 
         return await self._regenerate_handler.handle(
             chat_id=chat_id,
-            telegram_user_id=telegram_user_id,
+            messaging_user_id=telegram_user_id,
             command=command,
         )
 
@@ -501,6 +524,13 @@ class TelegramBot:
         dependencies for local hacking) the command returns a
         "not available" message instead of crashing.
         """
+        # Deferred import to break the circular dependency described at
+        # the top of the module.
+        from apply_pilot.features.messaging.actions.reject import (
+            REJECT_HELP_TEXT,
+            parse_reject_command,
+        )
+
         if self._reject_handler is None:
             return SendMessageRequest(
                 chat_id=chat_id,
@@ -513,7 +543,7 @@ class TelegramBot:
 
         return self._reject_handler.handle(
             chat_id=chat_id,
-            telegram_user_id=telegram_user_id,
+            messaging_user_id=telegram_user_id,
             command=command,
         )
 
@@ -531,6 +561,13 @@ class TelegramBot:
         dependencies for local hacking) the command returns a
         "not available" message instead of crashing.
         """
+        # Deferred import to break the circular dependency described at
+        # the top of the module.
+        from apply_pilot.features.messaging.actions.review import (
+            REVIEW_HELP_TEXT,
+            parse_review_command,
+        )
+
         if self._review_handler is None:
             return SendMessageRequest(
                 chat_id=chat_id,
@@ -543,7 +580,7 @@ class TelegramBot:
 
         return self._review_handler.handle(
             chat_id=chat_id,
-            telegram_user_id=telegram_user_id,
+            messaging_user_id=telegram_user_id,
             match_id=command.match_id,
         )
 

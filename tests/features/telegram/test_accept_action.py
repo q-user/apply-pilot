@@ -36,15 +36,15 @@ from apply_pilot.features.audit.service import AuditService
 from apply_pilot.features.matches.models import MatchStatus, VacancyMatch
 from apply_pilot.features.matches.repository import InMemoryVacancyMatchRepository
 from apply_pilot.features.matches.service import MatchService
-from apply_pilot.features.search_profiles.models import SearchProfile
-from apply_pilot.features.search_profiles.repository import InMemorySearchProfileRepository
-from apply_pilot.features.sources.models import Vacancy
-from apply_pilot.features.telegram.actions.accept import (
+from apply_pilot.features.messaging.actions.accept import (
     AcceptActionHandler,
     parse_accept_command,
 )
+from apply_pilot.features.messaging.dto import SendMessageRequest
+from apply_pilot.features.search_profiles.models import SearchProfile
+from apply_pilot.features.search_profiles.repository import InMemorySearchProfileRepository
+from apply_pilot.features.sources.models import Vacancy
 from apply_pilot.features.telegram.bot import TelegramBot, TelegramSettings
-from apply_pilot.features.telegram.dto import SendMessageRequest
 from apply_pilot.features.telegram.repository import InMemoryTelegramAccountRepository
 
 # ---------------------------------------------------------------------------
@@ -107,7 +107,7 @@ def match_service(
 
 
 @pytest.fixture
-def telegram_account_repo() -> InMemoryTelegramAccountRepository:
+def account_repo() -> InMemoryTelegramAccountRepository:
     return InMemoryTelegramAccountRepository()
 
 
@@ -124,12 +124,12 @@ def audit_service(audit_repo: InMemoryAuditLogRepository) -> AuditService:
 @pytest.fixture
 def handler(
     match_service: MatchService,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     audit_service: AuditService,
 ) -> AcceptActionHandler:
     return AcceptActionHandler(
         match_service=match_service,
-        telegram_account_repo=telegram_account_repo,
+        account_repo=account_repo,
         audit_service=audit_service,
     )
 
@@ -221,18 +221,18 @@ def test_handle_accepts_match_for_owner(
     handler: AcceptActionHandler,
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     audit_repo: InMemoryAuditLogRepository,
     user_id: uuid.UUID,
     telegram_user_id: int,
 ) -> None:
     """The owner can accept their own match and receive a confirmation message."""
     match = _seed_match(match_repo, profile_repo, user_id=user_id)
-    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+    _link_telegram(account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
 
     response = handler.handle(
         chat_id=100,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_accept_command(f"/accept {match.id}"),
     )
 
@@ -255,18 +255,18 @@ def test_handle_refuses_non_owner(
     handler: AcceptActionHandler,
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     user_id: uuid.UUID,
     other_user_id: uuid.UUID,
     telegram_user_id: int,
 ) -> None:
     """A user trying to accept another user's match must get an error and no state change."""
     match = _seed_match(match_repo, profile_repo, user_id=other_user_id)
-    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+    _link_telegram(account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
 
     response = handler.handle(
         chat_id=100,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_accept_command(f"/accept {match.id}"),
     )
 
@@ -281,7 +281,7 @@ def test_handle_refuses_accept_from_rejected_status(
     handler: AcceptActionHandler,
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     user_id: uuid.UUID,
     telegram_user_id: int,
 ) -> None:
@@ -289,11 +289,11 @@ def test_handle_refuses_accept_from_rejected_status(
     match = _seed_match(
         match_repo, profile_repo, user_id=user_id, status=MatchStatus.REJECTED.value
     )
-    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+    _link_telegram(account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
 
     response = handler.handle(
         chat_id=100,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_accept_command(f"/accept {match.id}"),
     )
 
@@ -308,17 +308,17 @@ def test_handle_refuses_accept_from_applied_status(
     handler: AcceptActionHandler,
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     user_id: uuid.UUID,
     telegram_user_id: int,
 ) -> None:
     """Accepting a match that has been applied to must return an error."""
     match = _seed_match(match_repo, profile_repo, user_id=user_id, status=MatchStatus.APPLIED.value)
-    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+    _link_telegram(account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
 
     response = handler.handle(
         chat_id=100,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_accept_command(f"/accept {match.id}"),
     )
 
@@ -341,7 +341,7 @@ def test_handle_rejects_unlinked_telegram_account(
 
     response = handler.handle(
         chat_id=100,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_accept_command(f"/accept {match.id}"),
     )
 
@@ -384,18 +384,18 @@ async def test_dispatcher_routes_accept_command(
     match_service: MatchService,
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     audit_service: AuditService,
     user_id: uuid.UUID,
 ) -> None:
     """The bot must delegate ``/accept <id>`` to the AcceptActionHandler."""
     match = _seed_match(match_repo, profile_repo, user_id=user_id)
     telegram_user_id = 800
-    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+    _link_telegram(account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
 
     handler = AcceptActionHandler(
         match_service=match_service,
-        telegram_account_repo=telegram_account_repo,
+        account_repo=account_repo,
         audit_service=audit_service,
     )
     bot = TelegramBot(
@@ -420,7 +420,7 @@ def test_accept_enqueues_apply_job_when_handler_provided(
     match_service: MatchService,
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     audit_service: AuditService,
     audit_repo: InMemoryAuditLogRepository,
     user_id: uuid.UUID,
@@ -428,19 +428,19 @@ def test_accept_enqueues_apply_job_when_handler_provided(
 ) -> None:
     """Wiring an enqueuer must trigger ``enqueue_for_match(match_id)`` on accept."""
     match = _seed_match(match_repo, profile_repo, user_id=user_id)
-    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+    _link_telegram(account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
 
     enqueuer = _RecordingApplyJobEnqueuer()
     handler = AcceptActionHandler(
         match_service=match_service,
-        telegram_account_repo=telegram_account_repo,
+        account_repo=account_repo,
         audit_service=audit_service,
         apply_job_enqueuer=enqueuer,
     )
 
     response = handler.handle(
         chat_id=100,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_accept_command(f"/accept {match.id}"),
     )
 
@@ -462,7 +462,7 @@ def test_accept_succeeds_even_if_enqueue_fails(
     match_service: MatchService,
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     audit_service: AuditService,
     audit_repo: InMemoryAuditLogRepository,
     user_id: uuid.UUID,
@@ -470,20 +470,20 @@ def test_accept_succeeds_even_if_enqueue_fails(
 ) -> None:
     """A failing enqueue must be logged but must not fail the accept command."""
     match = _seed_match(match_repo, profile_repo, user_id=user_id)
-    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+    _link_telegram(account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
 
     enqueuer = _RecordingApplyJobEnqueuer()
     enqueuer.fail_with = RuntimeError("queue is down")
     handler = AcceptActionHandler(
         match_service=match_service,
-        telegram_account_repo=telegram_account_repo,
+        account_repo=account_repo,
         audit_service=audit_service,
         apply_job_enqueuer=enqueuer,
     )
 
     response = handler.handle(
         chat_id=100,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_accept_command(f"/accept {match.id}"),
     )
 
@@ -508,7 +508,7 @@ def test_accept_skips_enqueue_when_handler_is_none(
     match_service: MatchService,
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     audit_service: AuditService,
     audit_repo: InMemoryAuditLogRepository,
     user_id: uuid.UUID,
@@ -516,18 +516,18 @@ def test_accept_skips_enqueue_when_handler_is_none(
 ) -> None:
     """Without an enqueuer wired, the accept still works and no enqueue flag is recorded."""
     match = _seed_match(match_repo, profile_repo, user_id=user_id)
-    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+    _link_telegram(account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
 
     # ``apply_job_enqueuer`` is left at its default (None).
     handler = AcceptActionHandler(
         match_service=match_service,
-        telegram_account_repo=telegram_account_repo,
+        account_repo=account_repo,
         audit_service=audit_service,
     )
 
     response = handler.handle(
         chat_id=100,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_accept_command(f"/accept {match.id}"),
     )
 

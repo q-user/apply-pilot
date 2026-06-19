@@ -1,20 +1,19 @@
-"""Pre-warm the import chain for the ``writing_style_memory`` slice.
+"""Pre-warm the import chain for the ``telegram`` test slice.
 
 The full import chain ``messaging.actions.accept`` → ``matches.service``
-→ ``apply_worker.runtime`` → ``messaging.actions.accept`` has a
-pre-existing circular import (introduced before this slice landed,
-visible in :class:`AcceptActionHandler` loading on top of an
-unfinished :mod:`matches.service` module). The cycle resolves when the
-project is imported in the same order the full test suite walks it,
-but it bites when this directory is collected in isolation
-(``pytest tests/features/writing_style_memory/``).
+→ ``apply_worker.runtime`` → ``telegram.repository`` → ``telegram.bot``
+→ ``messaging.actions.accept`` has a pre-existing circular import
+(introduced before this slice landed, visible in
+:class:`AcceptActionHandler` loading on top of an unfinished
+:mod:`matches.service` module). The cycle resolves when the project
+is imported in the same order the full test suite walks it, but it
+bites when this directory is collected in isolation
+(``pytest tests/features/telegram/``).
 
 This conftest pre-loads the modules in a benign order so the cycle
-resolves before pytest tries to import
-:mod:`tests.features.writing_style_memory.test_style_memory_accept_integration`
-— which depends on :mod:`messaging.actions.accept`. The pre-warm is a
-no-op when the modules are already loaded, so the full suite pays no
-extra cost.
+resolves before pytest tries to import the action-handler test
+modules. The pre-warm is a no-op when the modules are already loaded,
+so the full suite pays no extra cost.
 
 A future fix that breaks the cycle at its source (for example, by
 lazy-loading :class:`MatchService` inside
