@@ -564,6 +564,26 @@ class DashboardService:
 
     # -- helpers ----------------------------------------------------------
 
+    def get_recent_jobs(
+        self,
+        *,
+        user_id: uuid.UUID,
+        limit: int = 10,
+    ) -> list[ApplyJob]:
+        """Return the most recent :class:`ApplyJob` rows for *user_id*.
+
+        Used by the dashboard web page to render the "Recent apply jobs"
+        table (M6, issue #172). Delegates to the apply-job repo's
+        :meth:`list_by_user` which already orders by ``created_at desc``
+        (see :class:`SqlApplyJobRepository`).
+
+        The slice is read-only: the returned rows are never mutated by
+        the dashboard. The default ``limit=10`` matches the dashboard's
+        per-page count.
+        """
+        rows = self._apply_job_repo.list_by_user(user_id, limit=limit)
+        return list(rows)
+
     def _all_vacancies(self) -> Sequence[Vacancy]:
         """Return every :class:`Vacancy` in the repo.
 
