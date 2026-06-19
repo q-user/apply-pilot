@@ -125,6 +125,62 @@ def get_telegram_settings() -> TelegramSettings:
     return TelegramSettings(bot_token=token, polling_timeout=timeout)
 
 
+@dataclass(frozen=True)
+class MaxSettings:
+    """MAX bot configuration (M9, issue #176).
+
+    Attributes:
+        bot_token: The bot token issued by the MAX web UI. There is no
+            default — the entry point refuses to start without it because
+            an empty token would silently produce auth failures against
+            ``botapi.max.ru``.
+        polling_timeout: Long-poll timeout (seconds) for ``getUpdates``.
+            Defaults to 30 seconds. MUST be in the range 0-90 per the MAX
+            API contract.
+        api_base: Base URL for the MAX Bot API. Override only for testing
+            against a mock server.
+
+    Environment variables:
+
+    * ``MAX_BOT_TOKEN`` (required)
+    * ``MAX_POLLING_TIMEOUT`` (optional, default ``30``)
+    * ``MAX_API_BASE`` (optional, default ``https://botapi.max.ru``)
+    """
+
+    bot_token: str
+    polling_timeout: int = 30
+    api_base: str = "https://botapi.max.ru"
+
+    def __post_init__(self) -> None:
+        if not self.bot_token:
+            raise ValueError(
+                "MaxSettings.bot_token must be a non-empty string; "
+                "set the MAX_BOT_TOKEN environment variable."
+            )
+        if self.polling_timeout <= 0:
+            raise ValueError("MaxSettings.polling_timeout must be a positive integer")
+
+
+def get_max_settings() -> MaxSettings:
+    """Build MaxSettings from the environment.
+
+    Raises:
+        ValueError: If ``MAX_BOT_TOKEN`` is unset or empty. The check is
+            intentionally eager so misconfiguration surfaces at process
+            start, not at the first failed HTTP call.
+    """
+    token = os.getenv("MAX_BOT_TOKEN", "").strip()
+    if not token:
+        raise ValueError("MAX_BOT_TOKEN environment variable must be set to a non-empty value.")
+    raw_timeout = os.getenv("MAX_POLLING_TIMEOUT", "30")
+    try:
+        timeout = int(raw_timeout)
+    except ValueError as exc:
+        raise ValueError(f"MAX_POLLING_TIMEOUT must be an integer (got {raw_timeout!r}).") from exc
+    api_base = os.getenv("MAX_API_BASE", "https://botapi.max.ru").strip() or "https://botapi.max.ru"
+    return MaxSettings(bot_token=token, polling_timeout=timeout, api_base=api_base)
+
+
 # ---------------------------------------------------------------------------
 # Auth settings (M1, issue #11)
 # ---------------------------------------------------------------------------
