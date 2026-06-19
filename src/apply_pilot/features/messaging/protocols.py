@@ -54,9 +54,7 @@ class MessagingAccountRepository(Protocol):
     same method as an alias to ``find_by_max_user_id``.
     """
 
-    def find_by_external_user_id(
-        self, external_user_id: int
-    ) -> _MessagingAccount | None:
+    def find_by_external_user_id(self, external_user_id: int) -> _MessagingAccount | None:
         """Return the linked account for ``external_user_id`` or ``None``."""
         ...
 

@@ -35,7 +35,6 @@ from apply_pilot.features.telegram.repository import TelegramAccountRepository
 # + the TYPE_CHECKING block below) so the import order does not matter.
 
 
-
 if TYPE_CHECKING:
     from apply_pilot.features.messaging.actions.accept import AcceptActionHandler
     from apply_pilot.features.messaging.actions.defer import DeferActionHandler

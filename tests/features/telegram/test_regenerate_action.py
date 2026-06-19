@@ -305,9 +305,7 @@ async def test_handle_regenerates_cover_letter_for_owner(
     world: _World,
     telegram_user_id: int,
 ) -> None:
-    _link_telegram(
-        world.account_repo, user_id=world.user.id, telegram_user_id=telegram_user_id
-    )
+    _link_telegram(world.account_repo, user_id=world.user.id, telegram_user_id=telegram_user_id)
     pre = world.draft_repo.get_by_match(world.match.id)
     assert pre is not None
     pre_version = pre.version
@@ -335,9 +333,7 @@ async def test_handle_bumps_version_on_each_regenerate(
     world: _World,
     telegram_user_id: int,
 ) -> None:
-    _link_telegram(
-        world.account_repo, user_id=world.user.id, telegram_user_id=telegram_user_id
-    )
+    _link_telegram(world.account_repo, user_id=world.user.id, telegram_user_id=telegram_user_id)
     await handler.handle(
         chat_id=200,
         messaging_user_id=telegram_user_id,
@@ -358,9 +354,7 @@ async def test_handle_rejects_unknown_match(
     world: _World,
     telegram_user_id: int,
 ) -> None:
-    _link_telegram(
-        world.account_repo, user_id=world.user.id, telegram_user_id=telegram_user_id
-    )
+    _link_telegram(world.account_repo, user_id=world.user.id, telegram_user_id=telegram_user_id)
     missing_id = uuid.uuid4()
     response = await handler.handle(
         chat_id=200,
@@ -401,9 +395,7 @@ async def test_handle_creates_audit_event(
     world: _World,
     telegram_user_id: int,
 ) -> None:
-    _link_telegram(
-        world.account_repo, user_id=world.user.id, telegram_user_id=telegram_user_id
-    )
+    _link_telegram(world.account_repo, user_id=world.user.id, telegram_user_id=telegram_user_id)
     await handler.handle(
         chat_id=200,
         messaging_user_id=telegram_user_id,
@@ -440,9 +432,7 @@ async def test_handle_refuses_when_no_draft_exists(
     world: _World,
     telegram_user_id: int,
 ) -> None:
-    _link_telegram(
-        world.account_repo, user_id=world.user.id, telegram_user_id=telegram_user_id
-    )
+    _link_telegram(world.account_repo, user_id=world.user.id, telegram_user_id=telegram_user_id)
     world.draft_repo._by_id.pop(world.draft.id, None)
     world.draft_repo._by_match.pop(world.match.id, None)
 
@@ -469,9 +459,7 @@ async def test_handle_returns_markdownv2_preview(
     world: _World,
     telegram_user_id: int,
 ) -> None:
-    _link_telegram(
-        world.account_repo, user_id=world.user.id, telegram_user_id=telegram_user_id
-    )
+    _link_telegram(world.account_repo, user_id=world.user.id, telegram_user_id=telegram_user_id)
     response = await handler.handle(
         chat_id=200,
         messaging_user_id=telegram_user_id,
@@ -510,9 +498,7 @@ def _regenerate_update(
 
 async def test_dispatcher_routes_regenerate_command(world: _World) -> None:
     telegram_user_id = 700
-    _link_telegram(
-        world.account_repo, user_id=world.user.id, telegram_user_id=telegram_user_id
-    )
+    _link_telegram(world.account_repo, user_id=world.user.id, telegram_user_id=telegram_user_id)
     handler = RegenerateActionHandler(
         cover_letter_service=world.service,
         account_repo=world.account_repo,
