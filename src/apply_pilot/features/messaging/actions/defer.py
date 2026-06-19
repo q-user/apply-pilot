@@ -1,7 +1,7 @@
-"""``/defer <match_id>`` Telegram action handler (M4, issue #39).
+"""``/defer <match_id>`` messaging action handler (M4, issue #39).
 
 This module owns the use-case for marking a :class:`VacancyMatch` as
-deferred by the user from a Telegram chat. Deferred is a soft
+deferred by the user from a messaging chat. Deferred is a soft
 "not now, maybe later" state: the match is shelved so it stops
 appearing in the daily digest, but the row is left in place so the
 user can resume it later (issue #39).
@@ -31,10 +31,10 @@ from apply_pilot.features.matches.service import (
     MatchOwnershipError,
     MatchService,
 )
-from apply_pilot.features.telegram.dto import SendMessageRequest
-from apply_pilot.features.telegram.repository import TelegramAccountRepository
+from apply_pilot.features.messaging.dto import SendMessageRequest
+from apply_pilot.features.messaging.protocols import MessagingAccountRepository
 
-_LOGGER = logging.getLogger("apply_pilot.features.telegram.actions.defer")
+_LOGGER = logging.getLogger("apply_pilot.features.messaging.actions.defer")
 
 
 # ---------------------------------------------------------------------------
@@ -123,44 +123,44 @@ class DeferActionHandler:
     Collaborators are injected through the constructor. ``handle`` is
     a regular method (not ``async``) because the current implementation
     is fully in-process: ``MatchService``, ``AuditService`` and
-    ``TelegramAccountRepository`` are all synchronous. When a future
-    slice needs to do I/O (call the Telegram API, push to Redis), the
+    ``MessagingAccountRepository`` are all synchronous. When a future
+    slice needs to do I/O (call the messaging API, push to Redis), the
     method can be promoted to ``async`` and the dispatcher updated
     accordingly — the action interface is small and the change stays
     local.
 
-    The dispatcher (``TelegramBot``) is responsible for extracting
-    ``chat_id`` and ``telegram_user_id`` from the incoming update and
-    passing them in. The handler does not look at the raw update
-    payload, which keeps the action slice-independent from the
-    Telegram transport.
+    The messaging dispatcher (``TelegramBot`` or the future MAX bot)
+    is responsible for extracting ``chat_id`` and
+    ``messaging_user_id`` from the incoming update and passing them
+    in. The handler does not look at the raw update payload, which
+    keeps the action slice-independent from the transport.
     """
 
     def __init__(
         self,
         *,
         match_service: MatchService,
-        telegram_account_repo: TelegramAccountRepository,
+        account_repo: MessagingAccountRepository,
         audit_service: AuditService,
     ) -> None:
         self._match_service = match_service
-        self._telegram_account_repo = telegram_account_repo
+        self._account_repo = account_repo
         self._audit_service = audit_service
 
     def handle(
         self,
         *,
         chat_id: int,
-        telegram_user_id: int,
+        messaging_user_id: int,
         command: DeferCommand,
     ) -> SendMessageRequest:
         """Execute the use-case and return the single chat reply."""
-        account = self._telegram_account_repo.find_by_telegram_user_id(telegram_user_id)
+        account = self._account_repo.find_by_external_user_id(messaging_user_id)
         if account is None:
             return SendMessageRequest(
                 chat_id=chat_id,
                 text=(
-                    "❌ This Telegram account is not linked to apply-pilot. "
+                    "❌ This messaging account is not linked to apply-pilot. "
                     "Use /link to connect it first."
                 ),
             )
@@ -218,9 +218,9 @@ class DeferActionHandler:
         )
 
         _LOGGER.info(
-            "telegram.defer.success",
+            "messaging.defer.success",
             extra={
-                "event": "telegram.defer.success",
+                "event": "messaging.defer.success",
                 "match_id": str(command.match_id),
                 "user_id": str(user_id),
             },

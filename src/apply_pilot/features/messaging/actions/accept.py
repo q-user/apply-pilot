@@ -1,7 +1,7 @@
-"""``/accept <match_id>`` Telegram action handler (M4, issue #37 + issue #41).
+"""``/accept <match_id>`` messaging action handler (M4, issue #37 + issue #41).
 
 This module owns the use-case for marking a :class:`VacancyMatch` as
-accepted by the user from a Telegram chat. The handler is intentionally
+accepted by the user from a messaging chat. The handler is intentionally
 thin: it resolves the local user from the Telegram account link, asks
 the :class:`MatchService` to perform the state change (which enforces
 ownership and status validation), records a ``MATCH_ACCEPTED`` audit
@@ -29,11 +29,11 @@ from apply_pilot.features.matches.service import (
     MatchOwnershipError,
     MatchService,
 )
-from apply_pilot.features.telegram.dto import SendMessageRequest
-from apply_pilot.features.telegram.repository import TelegramAccountRepository
+from apply_pilot.features.messaging.dto import SendMessageRequest
+from apply_pilot.features.messaging.protocols import MessagingAccountRepository
 from apply_pilot.features.writing_style_memory.service import StyleMemoryService
 
-_LOGGER = logging.getLogger("apply_pilot.features.telegram.actions.accept")
+_LOGGER = logging.getLogger("apply_pilot.features.messaging.actions.accept")
 
 
 # ---------------------------------------------------------------------------
@@ -178,28 +178,28 @@ class AcceptActionHandler:
     still works but no :class:`ApplyJob` is scheduled. This lets the
     slice ship before issue #43 (the apply queue model) lands — once
     :class:`apply_worker.ApplyJobService` is available, the wiring code
-    in :mod:`apply_pilot.features.telegram.process` will inject it
+    in :mod:`apply_pilot.features.messaging.process` will inject it
     structurally (it satisfies :class:`ApplyJobEnqueuer`).
 
-    The dispatcher (``TelegramBot``) is responsible for extracting
-    ``chat_id`` and ``telegram_user_id`` from the incoming update and
-    passing them in. The handler does not look at the raw update
-    payload, which keeps the action slice-independent from the
-    Telegram transport.
+    The messaging dispatcher (``TelegramBot`` or the future MAX bot)
+    is responsible for extracting ``chat_id`` and
+    ``messaging_user_id`` from the incoming update and passing them
+    in. The handler does not look at the raw update payload, which
+    keeps the action slice-independent from the transport.
     """
 
     def __init__(
         self,
         *,
         match_service: MatchService,
-        telegram_account_repo: TelegramAccountRepository,
+        account_repo: MessagingAccountRepository,
         audit_service: AuditService,
         apply_job_enqueuer: ApplyJobEnqueuer | None = None,
         style_memory_service: StyleMemoryService | None = None,
         draft_repository: CoverLetterDraftSource | None = None,
     ) -> None:
         self._match_service = match_service
-        self._telegram_account_repo = telegram_account_repo
+        self._account_repo = account_repo
         self._audit_service = audit_service
         self._apply_job_enqueuer = apply_job_enqueuer
         # The style memory layer (M8, issue #66) is optional: when
@@ -216,16 +216,16 @@ class AcceptActionHandler:
         self,
         *,
         chat_id: int,
-        telegram_user_id: int,
+        messaging_user_id: int,
         command: AcceptCommand,
     ) -> SendMessageRequest:
         """Execute the use-case and return the single chat reply."""
-        account = self._telegram_account_repo.find_by_telegram_user_id(telegram_user_id)
+        account = self._account_repo.find_by_external_user_id(messaging_user_id)
         if account is None:
             return SendMessageRequest(
                 chat_id=chat_id,
                 text=(
-                    "❌ This Telegram account is not linked to apply-pilot. "
+                    "❌ This messaging account is not linked to apply-pilot. "
                     "Use /link to connect it first."
                 ),
             )
@@ -288,9 +288,9 @@ class AcceptActionHandler:
                 self._apply_job_enqueuer.enqueue_for_match(command.match_id)
             except Exception as exc:
                 _LOGGER.exception(
-                    "telegram.accept.enqueue_failed",
+                    "messaging.accept.enqueue_failed",
                     extra={
-                        "event": "telegram.accept.enqueue_failed",
+                        "event": "messaging.accept.enqueue_failed",
                         "match_id": str(command.match_id),
                         "user_id": str(user_id),
                     },
@@ -317,9 +317,9 @@ class AcceptActionHandler:
             self._record_style_memory(user_id=user_id, match_id=command.match_id)
 
         _LOGGER.info(
-            "telegram.accept.success",
+            "messaging.accept.success",
             extra={
-                "event": "telegram.accept.success",
+                "event": "messaging.accept.success",
                 "match_id": str(command.match_id),
                 "user_id": str(user_id),
             },
@@ -353,9 +353,9 @@ class AcceptActionHandler:
             draft = self._draft_repository.get_by_match(match_id)
         except Exception:
             _LOGGER.exception(
-                "telegram.accept.style_memory_draft_lookup_failed",
+                "messaging.accept.style_memory_draft_lookup_failed",
                 extra={
-                    "event": "telegram.accept.style_memory_draft_lookup_failed",
+                    "event": "messaging.accept.style_memory_draft_lookup_failed",
                     "match_id": str(match_id),
                     "user_id": str(user_id),
                 },
@@ -386,9 +386,9 @@ class AcceptActionHandler:
             )
         except Exception:
             _LOGGER.exception(
-                "telegram.accept.style_memory_failed",
+                "messaging.accept.style_memory_failed",
                 extra={
-                    "event": "telegram.accept.style_memory_failed",
+                    "event": "messaging.accept.style_memory_failed",
                     "match_id": str(match_id),
                     "user_id": str(user_id),
                 },

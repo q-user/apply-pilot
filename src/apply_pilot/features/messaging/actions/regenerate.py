@@ -1,7 +1,7 @@
-"""/regenerate <match_id> Telegram action handler (M4, issue #40).
+"""/regenerate <match_id> messaging action handler (M4, issue #40).
 
 This module owns the use-case for refreshing a CoverLetterDraft by
-the user from a Telegram chat. Regenerate re-asks the LLM to write a
+the user from a messaging chat. Regenerate re-asks the LLM to write a
 new cover letter for the same VacancyMatch and updates the existing
 row in place (the match_id UNIQUE constraint makes "one draft per
 match" the slice's contract). The version column is bumped so the
@@ -33,10 +33,10 @@ from apply_pilot.features.cover_letter.service import (
     CoverLetterDependencyMissingError,
     CoverLetterService,
 )
-from apply_pilot.features.telegram.dto import SendMessageRequest
-from apply_pilot.features.telegram.repository import TelegramAccountRepository
+from apply_pilot.features.messaging.dto import SendMessageRequest
+from apply_pilot.features.messaging.protocols import MessagingAccountRepository
 
-_LOGGER = logging.getLogger("apply_pilot.features.telegram.actions.regenerate")
+_LOGGER = logging.getLogger("apply_pilot.features.messaging.actions.regenerate")
 
 # MarkdownV2 special characters that must be backslash-escaped in
 # user-supplied text. Mirrors the set used by the review action so
@@ -146,27 +146,27 @@ class RegenerateActionHandler:
     Collaborators are injected through the constructor. handle is a
     regular async method because
     CoverLetterService.regenerate_for_match is async — the slice
-    calls the LLM to produce the new body. The audit log and Telegram
-    account lookups are all in-process; the only reason the method is
-    async is to await the LLM.
+    calls the LLM to produce the new body. The audit log and
+    messaging account lookups are all in-process; the only reason
+    the method is async is to await the LLM.
 
-    The dispatcher (TelegramBot) is responsible for extracting
-    chat_id and telegram_user_id from the incoming update and
-    passing them in. The handler does not look at the raw update
-    payload, which keeps the action slice-independent from the
-    Telegram transport.
+    The messaging dispatcher (TelegramBot or the future MAX bot)
+    is responsible for extracting chat_id and messaging_user_id
+    from the incoming update and passing them in. The handler does
+    not look at the raw update payload, which keeps the action
+    slice-independent from the transport.
     """
 
     def __init__(
         self,
         *,
         cover_letter_service: CoverLetterService,
-        telegram_account_repo: TelegramAccountRepository,
+        account_repo: MessagingAccountRepository,
         audit_service: AuditService,
         profile_repo: Any,
     ) -> None:
         self._cover_letter_service = cover_letter_service
-        self._telegram_account_repo = telegram_account_repo
+        self._account_repo = account_repo
         self._audit_service = audit_service
         # ``profile_repo`` is typed as ``Any`` to keep this module
         # free of a hard import on the matches slice. The only
@@ -179,16 +179,16 @@ class RegenerateActionHandler:
         self,
         *,
         chat_id: int,
-        telegram_user_id: int,
+        messaging_user_id: int,
         command: RegenerateCommand,
     ) -> SendMessageRequest:
         """Execute the use-case and return the single chat reply."""
-        account = self._telegram_account_repo.find_by_telegram_user_id(telegram_user_id)
+        account = self._account_repo.find_by_external_user_id(messaging_user_id)
         if account is None:
             return SendMessageRequest(
                 chat_id=chat_id,
                 text=(
-                    "This Telegram account is not linked to apply-pilot. "
+                    "This messaging account is not linked to apply-pilot. "
                     "Use /link to connect it first."
                 ),
             )
@@ -251,9 +251,9 @@ class RegenerateActionHandler:
         )
 
         _LOGGER.info(
-            "telegram.regenerate.success",
+            "messaging.regenerate.success",
             extra={
-                "event": "telegram.regenerate.success",
+                "event": "messaging.regenerate.success",
                 "match_id": str(command.match_id),
                 "user_id": str(user_id),
                 "version": draft.version,

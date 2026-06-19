@@ -29,16 +29,16 @@ from apply_pilot.features.cover_letter.repository import InMemoryCoverLetterDraf
 from apply_pilot.features.matches.models import MatchStatus, VacancyMatch
 from apply_pilot.features.matches.repository import InMemoryVacancyMatchRepository
 from apply_pilot.features.matches.service import MatchService
+from apply_pilot.features.messaging.actions.review import (
+    ReviewActionHandler,
+    render_review_card,
+)
+from apply_pilot.features.messaging.dto import SendMessageRequest
 from apply_pilot.features.search_profiles.models import SearchProfile
 from apply_pilot.features.search_profiles.repository import InMemorySearchProfileRepository
 from apply_pilot.features.sources.models import Vacancy
 from apply_pilot.features.sources.repository import InMemoryVacancyRepository
-from apply_pilot.features.telegram.actions.review import (
-    ReviewActionHandler,
-    render_review_card,
-)
 from apply_pilot.features.telegram.bot import TelegramBot, TelegramSettings
-from apply_pilot.features.telegram.dto import SendMessageRequest
 from apply_pilot.features.telegram.repository import InMemoryTelegramAccountRepository
 
 # ---------------------------------------------------------------------------
@@ -129,7 +129,7 @@ def cover_letter_repo() -> InMemoryCoverLetterDraftRepository:
 
 
 @pytest.fixture
-def telegram_account_repo() -> InMemoryTelegramAccountRepository:
+def account_repo() -> InMemoryTelegramAccountRepository:
     return InMemoryTelegramAccountRepository()
 
 
@@ -138,13 +138,13 @@ def handler(
     match_service: MatchService,
     vacancy_repo: InMemoryVacancyRepository,
     cover_letter_repo: InMemoryCoverLetterDraftRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
 ) -> ReviewActionHandler:
     return ReviewActionHandler(
         match_service=match_service,
         vacancy_repo=vacancy_repo,
         cover_letter_repo=cover_letter_repo,
-        telegram_account_repo=telegram_account_repo,
+        account_repo=account_repo,
     )
 
 
@@ -197,7 +197,7 @@ def _link_telegram(
 def test_parse_review_command() -> None:
     """``/review <match_id>`` parses to a ReviewCommand with the match_id."""
     match_id = "11111111-1111-1111-1111-111111111111"
-    from apply_pilot.features.telegram.actions.review import parse_review_command
+    from apply_pilot.features.messaging.actions.review import parse_review_command
 
     command = parse_review_command(f"/review {match_id}")
 
@@ -207,7 +207,7 @@ def test_parse_review_command() -> None:
 
 def test_parse_review_command_without_args_returns_none() -> None:
     """``/review`` with no args must return None so the caller shows help text."""
-    from apply_pilot.features.telegram.actions.review import parse_review_command
+    from apply_pilot.features.messaging.actions.review import parse_review_command
 
     assert parse_review_command("/review") is None
     assert parse_review_command("/review   ") is None
@@ -215,7 +215,7 @@ def test_parse_review_command_without_args_returns_none() -> None:
 
 def test_parse_review_command_with_invalid_uuid_returns_none() -> None:
     """``/review <garbage>`` must return None so the caller shows usage text."""
-    from apply_pilot.features.telegram.actions.review import parse_review_command
+    from apply_pilot.features.messaging.actions.review import parse_review_command
 
     assert parse_review_command("/review not-a-uuid") is None
 
@@ -426,7 +426,7 @@ def test_handle_review_returns_card_for_owner(
     profile_repo: InMemorySearchProfileRepository,
     vacancy_repo: InMemoryVacancyRepository,
     cover_letter_repo: InMemoryCoverLetterDraftRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     user_id: uuid.UUID,
     telegram_user_id: int,
 ) -> None:
@@ -434,11 +434,11 @@ def test_handle_review_returns_card_for_owner(
     _, vacancy, match = _seed_match(
         match_repo, profile_repo, vacancy_repo, user_id=user_id, score=85
     )
-    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+    _link_telegram(account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
 
     response = handler.handle(
         chat_id=100,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         match_id=match.id,
     )
 
@@ -462,18 +462,18 @@ def test_handle_review_includes_cover_letter_status(
     profile_repo: InMemorySearchProfileRepository,
     vacancy_repo: InMemoryVacancyRepository,
     cover_letter_repo: InMemoryCoverLetterDraftRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     user_id: uuid.UUID,
     telegram_user_id: int,
 ) -> None:
     """The card reflects the presence of the latest cover letter draft."""
     _, _, match = _seed_match(match_repo, profile_repo, vacancy_repo, user_id=user_id)
-    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+    _link_telegram(account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
 
     # No draft yet.
     response = handler.handle(
         chat_id=100,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         match_id=match.id,
     )
     assert "not generated" in response.text.lower()
@@ -489,7 +489,7 @@ def test_handle_review_includes_cover_letter_status(
 
     response = handler.handle(
         chat_id=100,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         match_id=match.id,
     )
     # Status flipped to "ready" / "generated".
@@ -498,17 +498,17 @@ def test_handle_review_includes_cover_letter_status(
 
 def test_handle_review_rejects_unknown_match(
     handler: ReviewActionHandler,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     user_id: uuid.UUID,
     telegram_user_id: int,
 ) -> None:
     """A request for a non-existent match returns a friendly 'not found' message."""
-    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+    _link_telegram(account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
     unknown_id = uuid.uuid4()
 
     response = handler.handle(
         chat_id=100,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         match_id=unknown_id,
     )
 
@@ -522,7 +522,7 @@ def test_handle_review_rejects_non_owner(
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
     vacancy_repo: InMemoryVacancyRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     user_id: uuid.UUID,
     other_user_id: uuid.UUID,
     telegram_user_id: int,
@@ -531,11 +531,11 @@ def test_handle_review_rejects_non_owner(
     _, _, match = _seed_match(
         match_repo, profile_repo, vacancy_repo, user_id=other_user_id, score=80
     )
-    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+    _link_telegram(account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
 
     response = handler.handle(
         chat_id=100,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         match_id=match.id,
     )
 
@@ -559,7 +559,7 @@ def test_handle_review_rejects_unlinked_telegram_account(
 
     response = handler.handle(
         chat_id=100,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         match_id=match.id,
     )
 
@@ -600,7 +600,7 @@ async def test_dispatcher_routes_review_command(
     match_service: MatchService,
     vacancy_repo: InMemoryVacancyRepository,
     cover_letter_repo: InMemoryCoverLetterDraftRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
     user_id: uuid.UUID,
@@ -610,13 +610,13 @@ async def test_dispatcher_routes_review_command(
         match_repo, profile_repo, vacancy_repo, user_id=user_id, score=85
     )
     telegram_user_id = 600
-    _link_telegram(telegram_account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
+    _link_telegram(account_repo, user_id=user_id, telegram_user_id=telegram_user_id)
 
     handler = ReviewActionHandler(
         match_service=match_service,
         vacancy_repo=vacancy_repo,
         cover_letter_repo=cover_letter_repo,
-        telegram_account_repo=telegram_account_repo,
+        account_repo=account_repo,
     )
     bot = TelegramBot(
         settings=TelegramSettings(bot_token="test-token", polling_timeout=30),
@@ -635,14 +635,14 @@ async def test_dispatcher_review_command_without_args_returns_help(
     match_service: MatchService,
     vacancy_repo: InMemoryVacancyRepository,
     cover_letter_repo: InMemoryCoverLetterDraftRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
 ) -> None:
     """``/review`` with no match_id is a usage error — the bot returns the help text."""
     handler = ReviewActionHandler(
         match_service=match_service,
         vacancy_repo=vacancy_repo,
         cover_letter_repo=cover_letter_repo,
-        telegram_account_repo=telegram_account_repo,
+        account_repo=account_repo,
     )
     bot = TelegramBot(
         settings=TelegramSettings(bot_token="test-token", polling_timeout=30),

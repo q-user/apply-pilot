@@ -45,16 +45,16 @@ from apply_pilot.features.cover_letter_style.repository import (
 from apply_pilot.features.matches.models import MatchStatus, VacancyMatch
 from apply_pilot.features.matches.repository import InMemoryVacancyMatchRepository
 from apply_pilot.features.matches.service import MatchService
+from apply_pilot.features.messaging.actions.accept import AcceptActionHandler
+from apply_pilot.features.messaging.actions.defer import DeferActionHandler
+from apply_pilot.features.messaging.actions.regenerate import RegenerateActionHandler
+from apply_pilot.features.messaging.actions.reject import RejectActionHandler
+from apply_pilot.features.messaging.actions.review import ReviewActionHandler
 from apply_pilot.features.resumes.models import Resume
 from apply_pilot.features.scoring.llm import InMemoryLLMClient
 from apply_pilot.features.search_profiles.models import SearchProfile
 from apply_pilot.features.search_profiles.repository import InMemorySearchProfileRepository
 from apply_pilot.features.sources.models import Vacancy
-from apply_pilot.features.telegram.actions.accept import AcceptActionHandler
-from apply_pilot.features.telegram.actions.defer import DeferActionHandler
-from apply_pilot.features.telegram.actions.regenerate import RegenerateActionHandler
-from apply_pilot.features.telegram.actions.reject import RejectActionHandler
-from apply_pilot.features.telegram.actions.review import ReviewActionHandler
 from apply_pilot.features.telegram.bot import TelegramBot, TelegramSettings
 from apply_pilot.features.telegram.digest import StatsService
 from apply_pilot.features.telegram.digest.sender import DigestSender
@@ -135,7 +135,7 @@ class _World:
     llm: InMemoryLLMClient
     cover_letter_service: CoverLetterService
     match_service: MatchService
-    telegram_account_repo: InMemoryTelegramAccountRepository
+    account_repo: InMemoryTelegramAccountRepository
     audit_repo: InMemoryAuditLogRepository
     audit_service: AuditService
     bot: TelegramBot
@@ -264,7 +264,7 @@ def _make_world(
     )
     match_service = MatchService(match_repo=match_repo, profile_repo=profile_repo)
 
-    telegram_account_repo = InMemoryTelegramAccountRepository()
+    account_repo = InMemoryTelegramAccountRepository()
     audit_repo = InMemoryAuditLogRepository()
     audit_service = AuditService(audit_repo=audit_repo)
     users_repo = InMemoryUsersRepository()
@@ -274,28 +274,28 @@ def _make_world(
     # Action handlers (real, not mock)
     accept_handler = AcceptActionHandler(
         match_service=match_service,
-        telegram_account_repo=telegram_account_repo,
+        account_repo=account_repo,
         audit_service=audit_service,
     )
     defer_handler = DeferActionHandler(
         match_service=match_service,
-        telegram_account_repo=telegram_account_repo,
+        account_repo=account_repo,
         audit_service=audit_service,
     )
     reject_handler = RejectActionHandler(
         match_service=match_service,
-        telegram_account_repo=telegram_account_repo,
+        account_repo=account_repo,
         audit_service=audit_service,
     )
     review_handler = ReviewActionHandler(
         match_service=match_service,
         vacancy_repo=vacancy_repo,  # type: ignore[arg-type]
         cover_letter_repo=draft_repo,
-        telegram_account_repo=telegram_account_repo,
+        account_repo=account_repo,
     )
     regenerate_handler = RegenerateActionHandler(
         cover_letter_service=cover_letter_service,
-        telegram_account_repo=telegram_account_repo,
+        account_repo=account_repo,
         audit_service=audit_service,
         profile_repo=profile_repo,
     )
@@ -334,7 +334,7 @@ def _make_world(
         settings=TelegramSettings(bot_token="test-token", polling_timeout=30),
         http_client=http_client,
         linking_service=linking_service,
-        telegram_account_repository=telegram_account_repo,
+        telegram_account_repository=account_repo,
         accept_handler=accept_handler,
         defer_handler=defer_handler,
         regenerate_handler=regenerate_handler,
@@ -346,7 +346,7 @@ def _make_world(
     fixed_now = datetime(2026, 6, 15, 9, 0, tzinfo=UTC)
     stats_service = StatsService(
         match_repo=match_repo,
-        telegram_account_repo=telegram_account_repo,
+        telegram_account_repo=account_repo,
         user_repo=users_repo,  # type: ignore[arg-type]
         profile_repo=profile_repo,  # type: ignore[arg-type]
         now=cast("Callable[[], datetime]", lambda: fixed_now),
@@ -354,7 +354,7 @@ def _make_world(
     digest_sender = DigestSender(
         stats_service=stats_service,
         telegram_bot=bot,
-        telegram_account_repo=telegram_account_repo,
+        telegram_account_repo=account_repo,
         now=cast("Callable[[], datetime]", lambda: fixed_now),
     )
 
@@ -375,7 +375,7 @@ def _make_world(
         llm=llm,
         cover_letter_service=cover_letter_service,
         match_service=match_service,
-        telegram_account_repo=telegram_account_repo,
+        account_repo=account_repo,
         audit_repo=audit_repo,
         audit_service=audit_service,
         bot=bot,
@@ -483,7 +483,7 @@ async def test_full_accept_workflow(world: _World) -> None:
     assert "linked" in link_call["body"]["text"].lower()
 
     # Linking is observed through the real repository — no direct write.
-    account = world.telegram_account_repo.find_by_telegram_user_id(100)
+    account = world.account_repo.find_by_telegram_user_id(100)
     assert account is not None
     assert account.user_id == world.user.id
 

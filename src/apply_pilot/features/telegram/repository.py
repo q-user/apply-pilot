@@ -103,6 +103,15 @@ class InMemoryTelegramAccountRepository:
             return None
         return self._by_id.get(account_id)
 
+    def find_by_external_user_id(self, external_user_id: int) -> TelegramAccount | None:
+        """Channel-agnostic alias for :meth:`find_by_telegram_user_id`.
+
+        Satisfies :class:`apply_pilot.features.messaging.protocols.MessagingAccountRepository`
+        so the channel-agnostic action handlers can resolve a linked
+        account without depending on the Telegram-specific method name.
+        """
+        return self.find_by_telegram_user_id(external_user_id)
+
     def find_by_user_id(self, user_id: uuid.UUID) -> TelegramAccount | None:
         """Return the linked :class:`TelegramAccount` for the local ``user_id``.
 
@@ -220,6 +229,15 @@ class SqlAlchemyTelegramAccountRepository:
         finally:
             if self._session is None:
                 scoped.close()
+
+    def find_by_external_user_id(self, external_user_id: int) -> TelegramAccount | None:
+        """Channel-agnostic alias for :meth:`find_by_telegram_user_id`.
+
+        Satisfies :class:`apply_pilot.features.messaging.protocols.MessagingAccountRepository`
+        so the channel-agnostic action handlers can resolve a linked
+        account without depending on the Telegram-specific method name.
+        """
+        return self.find_by_telegram_user_id(external_user_id)
 
     def find_by_user_id(self, user_id: uuid.UUID) -> TelegramAccount | None:
         """Return the linked :class:`TelegramAccount` for the local ``user_id``.

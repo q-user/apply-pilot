@@ -29,14 +29,14 @@ from apply_pilot.features.cover_letter.repository import InMemoryCoverLetterDraf
 from apply_pilot.features.matches.models import MatchStatus, VacancyMatch
 from apply_pilot.features.matches.repository import InMemoryVacancyMatchRepository
 from apply_pilot.features.matches.service import MatchService
-from apply_pilot.features.search_profiles.models import SearchProfile
-from apply_pilot.features.search_profiles.repository import InMemorySearchProfileRepository
-from apply_pilot.features.sources.models import Vacancy
-from apply_pilot.features.telegram.actions.accept import (
+from apply_pilot.features.messaging.actions.accept import (
     AcceptActionHandler,
     parse_accept_command,
 )
-from apply_pilot.features.telegram.dto import SendMessageRequest
+from apply_pilot.features.messaging.dto import SendMessageRequest
+from apply_pilot.features.search_profiles.models import SearchProfile
+from apply_pilot.features.search_profiles.repository import InMemorySearchProfileRepository
+from apply_pilot.features.sources.models import Vacancy
 from apply_pilot.features.telegram.repository import InMemoryTelegramAccountRepository
 from apply_pilot.features.writing_style_memory.repository import InMemoryStyleMemoryRepository
 from apply_pilot.features.writing_style_memory.service import StyleMemoryService
@@ -132,7 +132,7 @@ def match_service(
 
 
 @pytest.fixture
-def telegram_account_repo() -> InMemoryTelegramAccountRepository:
+def account_repo() -> InMemoryTelegramAccountRepository:
     return InMemoryTelegramAccountRepository()
 
 
@@ -164,14 +164,14 @@ def style_memory_service(style_repo: InMemoryStyleMemoryRepository) -> StyleMemo
 @pytest.fixture
 def handler(
     match_service: MatchService,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     audit_service: AuditService,
     style_memory_service: StyleMemoryService,
     draft_repo: InMemoryCoverLetterDraftRepository,
 ) -> AcceptActionHandler:
     return AcceptActionHandler(
         match_service=match_service,
-        telegram_account_repo=telegram_account_repo,
+        account_repo=account_repo,
         audit_service=audit_service,
         style_memory_service=style_memory_service,
         draft_repository=draft_repo,
@@ -188,7 +188,7 @@ def test_accept_records_accepted_letter_into_style_memory(
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
     draft_repo: InMemoryCoverLetterDraftRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     style_repo: InMemoryStyleMemoryRepository,
     user_id: uuid.UUID,
     telegram_user_id: int,
@@ -201,11 +201,11 @@ def test_accept_records_accepted_letter_into_style_memory(
         match_id=match.id,
         content="Hello! I would love to bring my FastAPI expertise to your team.",
     )
-    _link(telegram_account_repo, user_id=user_id, tg=telegram_user_id)
+    _link(account_repo, user_id=user_id, tg=telegram_user_id)
 
     response = handler.handle(
         chat_id=1,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_accept_command(f"/accept {match.id}"),
     )
 
@@ -224,7 +224,7 @@ def test_accept_succeeds_when_no_draft_exists_for_match(
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
     draft_repo: InMemoryCoverLetterDraftRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     style_repo: InMemoryStyleMemoryRepository,
     user_id: uuid.UUID,
     telegram_user_id: int,
@@ -232,11 +232,11 @@ def test_accept_succeeds_when_no_draft_exists_for_match(
     """A match with no draft must still be accepted and produce no memory entry."""
     match = _seed_match(match_repo, profile_repo, user_id=user_id)
     assert draft_repo.get_by_match(match.id) is None
-    _link(telegram_account_repo, user_id=user_id, tg=telegram_user_id)
+    _link(account_repo, user_id=user_id, tg=telegram_user_id)
 
     response = handler.handle(
         chat_id=1,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_accept_command(f"/accept {match.id}"),
     )
 
@@ -250,7 +250,7 @@ def test_accept_succeeds_when_style_memory_service_is_none(
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
     draft_repo: InMemoryCoverLetterDraftRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     audit_service: AuditService,
     user_id: uuid.UUID,
     telegram_user_id: int,
@@ -263,18 +263,18 @@ def test_accept_succeeds_when_style_memory_service_is_none(
         match_id=match.id,
         content="A letter that would normally be recorded.",
     )
-    _link(telegram_account_repo, user_id=user_id, tg=telegram_user_id)
+    _link(account_repo, user_id=user_id, tg=telegram_user_id)
 
     handler = AcceptActionHandler(
         match_service=match_service,
-        telegram_account_repo=telegram_account_repo,
+        account_repo=account_repo,
         audit_service=audit_service,
         # No style_memory_service, no draft_repository.
     )
 
     response = handler.handle(
         chat_id=1,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_accept_command(f"/accept {match.id}"),
     )
 
@@ -306,7 +306,7 @@ def test_accept_succeeds_when_style_memory_recording_fails(
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
     draft_repo: InMemoryCoverLetterDraftRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     audit_service: AuditService,
     audit_repo: InMemoryAuditLogRepository,
     user_id: uuid.UUID,
@@ -320,11 +320,11 @@ def test_accept_succeeds_when_style_memory_recording_fails(
         match_id=match.id,
         content="The letter that will fail to record.",
     )
-    _link(telegram_account_repo, user_id=user_id, tg=telegram_user_id)
+    _link(account_repo, user_id=user_id, tg=telegram_user_id)
 
     handler = AcceptActionHandler(
         match_service=match_service,
-        telegram_account_repo=telegram_account_repo,
+        account_repo=account_repo,
         audit_service=audit_service,
         style_memory_service=_ExplodingStyleMemoryService(),  # type: ignore[arg-type]
         draft_repository=draft_repo,
@@ -332,7 +332,7 @@ def test_accept_succeeds_when_style_memory_recording_fails(
 
     response = handler.handle(
         chat_id=1,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_accept_command(f"/accept {match.id}"),
     )
 
@@ -350,17 +350,17 @@ def test_existing_accept_action_tests_still_pass(
     handler: AcceptActionHandler,
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     audit_repo: InMemoryAuditLogRepository,
     user_id: uuid.UUID,
     telegram_user_id: int,
 ) -> None:
     match = _seed_match(match_repo, profile_repo, user_id=user_id)
-    _link(telegram_account_repo, user_id=user_id, tg=telegram_user_id)
+    _link(account_repo, user_id=user_id, tg=telegram_user_id)
 
     response = handler.handle(
         chat_id=1,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_accept_command(f"/accept {match.id}"),
     )
 
@@ -417,7 +417,7 @@ def test_record_style_memory_skips_when_draft_id_is_zero_uuid(
     match_repo: InMemoryVacancyMatchRepository,
     profile_repo: InMemorySearchProfileRepository,
     draft_repo: InMemoryCoverLetterDraftRepository,
-    telegram_account_repo: InMemoryTelegramAccountRepository,
+    account_repo: InMemoryTelegramAccountRepository,
     audit_service: AuditService,
     user_id: uuid.UUID,
     telegram_user_id: int,
@@ -446,12 +446,12 @@ def test_record_style_memory_skips_when_draft_id_is_zero_uuid(
             status="draft",
         )
     )
-    _link(telegram_account_repo, user_id=user_id, tg=telegram_user_id)
+    _link(account_repo, user_id=user_id, tg=telegram_user_id)
 
     style_memory = _RecordingStyleMemoryService()
     handler = AcceptActionHandler(
         match_service=match_service,
-        telegram_account_repo=telegram_account_repo,
+        account_repo=account_repo,
         audit_service=audit_service,
         style_memory_service=style_memory,  # type: ignore[arg-type]
         draft_repository=draft_repo,
@@ -459,7 +459,7 @@ def test_record_style_memory_skips_when_draft_id_is_zero_uuid(
 
     response = handler.handle(
         chat_id=1,
-        telegram_user_id=telegram_user_id,
+        messaging_user_id=telegram_user_id,
         command=parse_accept_command(f"/accept {match.id}"),
     )
 

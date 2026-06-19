@@ -10,7 +10,8 @@ from __future__ import annotations
 
 from datetime import date
 
-from apply_pilot.features.telegram.digest import UserStats, render_digest_message
+from apply_pilot.features.messaging.digest import render_digest_message
+from apply_pilot.features.telegram.digest.models import UserStats
 
 
 def _stats(**overrides: object) -> UserStats:

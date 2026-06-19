@@ -1,7 +1,7 @@
-"""``/review <match_id>`` Telegram action handler (M4, issue #36).
+"""``/review <match_id>`` messaging action handler (M4, issue #36).
 
 This module owns the use-case for rendering a vacancy review card in a
-Telegram chat. The handler is intentionally thin: it resolves the
+messaging chat. The handler is intentionally thin: it resolves the
 local user from the Telegram account link, loads the target match
 (which ``MatchService`` uses to enforce ownership), loads the
 underlying :class:`Vacancy` and the latest :class:`CoverLetterDraft`
@@ -26,10 +26,10 @@ from apply_pilot.features.matches.service import (
     MatchOwnershipError,
     MatchService,
 )
+from apply_pilot.features.messaging.dto import SendMessageRequest
+from apply_pilot.features.messaging.protocols import MessagingAccountRepository
 from apply_pilot.features.sources.models import Vacancy
 from apply_pilot.features.sources.repository import VacancyRepository
-from apply_pilot.features.telegram.dto import SendMessageRequest
-from apply_pilot.features.telegram.repository import TelegramAccountRepository
 
 # ---------------------------------------------------------------------------
 # MarkdownV2 escaping
@@ -263,17 +263,17 @@ class ReviewActionHandler:
     a regular method (not ``async``) because the current
     implementation is fully in-process: ``MatchService``,
     :class:`VacancyRepository`, :class:`CoverLetterDraftRepository`
-    and :class:`TelegramAccountRepository` are all synchronous. When
-    a future slice needs to do I/O (call the Telegram API, push to
+    and :class:`MessagingAccountRepository` are all synchronous. When
+    a future slice needs to do I/O (call the messaging API, push to
     Redis), the method can be promoted to ``async`` and the
     dispatcher updated accordingly — the action interface is small
     and the change stays local.
 
-    The dispatcher (``TelegramBot``) is responsible for extracting
-    ``chat_id`` and ``telegram_user_id`` from the incoming update and
-    passing them in. The handler does not look at the raw update
-    payload, which keeps the action slice-independent from the
-    Telegram transport.
+    The messaging dispatcher (``TelegramBot`` or the future MAX bot)
+    is responsible for extracting ``chat_id`` and
+    ``messaging_user_id`` from the incoming update and passing them
+    in. The handler does not look at the raw update payload, which
+    keeps the action slice-independent from the transport.
     """
 
     def __init__(
@@ -282,18 +282,18 @@ class ReviewActionHandler:
         match_service: MatchService,
         vacancy_repo: VacancyRepository,
         cover_letter_repo: CoverLetterDraftRepository,
-        telegram_account_repo: TelegramAccountRepository,
+        account_repo: MessagingAccountRepository,
     ) -> None:
         self._match_service = match_service
         self._vacancy_repo = vacancy_repo
         self._cover_letter_repo = cover_letter_repo
-        self._telegram_account_repo = telegram_account_repo
+        self._account_repo = account_repo
 
     def handle(
         self,
         *,
         chat_id: int,
-        telegram_user_id: int,
+        messaging_user_id: int,
         match_id: uuid.UUID,
     ) -> SendMessageRequest:
         """Execute the use-case and return the single chat reply.
@@ -305,12 +305,12 @@ class ReviewActionHandler:
         do not record an audit event — the user can browse their
         queue as much as they want.
         """
-        account = self._telegram_account_repo.find_by_telegram_user_id(telegram_user_id)
+        account = self._account_repo.find_by_external_user_id(messaging_user_id)
         if account is None:
             return SendMessageRequest(
                 chat_id=chat_id,
                 text=(
-                    "❌ This Telegram account is not linked to apply-pilot. "
+                    "❌ This messaging account is not linked to apply-pilot. "
                     "Use /link to connect it first."
                 ),
             )
