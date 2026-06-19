@@ -12,7 +12,17 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import CHAR, Boolean, DateTime, String, TypeDecorator, func
+from sqlalchemy import (
+    CHAR,
+    Boolean,
+    DateTime,
+    String,
+    TypeDecorator,
+    func,
+)
+from sqlalchemy import (
+    text as sa_text,
+)
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.engine.interfaces import Dialect
 from sqlalchemy.orm import Mapped, mapped_column
@@ -65,6 +75,12 @@ class User(Base):
     * ``hashed_password``: never the plaintext; verification lives in
       :mod:`apply_pilot.features.users.security`.
     * ``is_active``: soft-disable flag; inactive users cannot log in.
+    * ``is_admin``: whether this user may access the ``/admin/*`` surface.
+      Defaults to ``False``; the first registered user is NOT
+      automatically an admin — an operator must promote them with the
+      ``apply-pilot promote --email <email>`` CLI. There is no
+      self-service path to become an admin; this keeps the public
+      signup surface unprivileged.
     * ``created_at`` / ``updated_at``: server-side timestamps.
     """
 
@@ -74,6 +90,16 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(512), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # NOTE: the ``server_default`` is the canonical Postgres-compatible
+    # spelling (``sa.text("false")``); the Python-side ``default`` is a
+    # belt-and-suspenders fallback for code paths that bypass Alembic
+    # (e.g. ``Base.metadata.create_all`` in the sqlite test harness).
+    is_admin: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=sa_text("false"),
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -82,7 +108,10 @@ class User(Base):
     )
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
-        return f"User(id={self.id!s}, email={self.email!r}, is_active={self.is_active})"
+        return (
+            f"User(id={self.id!s}, email={self.email!r}, "
+            f"is_active={self.is_active}, is_admin={self.is_admin})"
+        )
 
 
 class UserSession(Base):

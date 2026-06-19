@@ -220,6 +220,7 @@ def create_app(settings: FastAPISettings | None = None) -> FastAPI:
     )
 
     # Register feature routers.
+    from apply_pilot.features.admin import admin_web_router
     from apply_pilot.features.admin import router as admin_router
     from apply_pilot.features.apply_worker.api import (
         apply_history_router,
@@ -241,11 +242,14 @@ def create_app(settings: FastAPISettings | None = None) -> FastAPI:
     )
     from apply_pilot.features.sources.api import router as sources_router
     from apply_pilot.features.telegram.digest.api import router as digest_router
+    from apply_pilot.features.users.api import router as auth_router
     from apply_pilot.features.writing_style_memory.api import (
         router as writing_style_memory_router,
     )
 
+    app.include_router(admin_web_router)
     app.include_router(admin_router)
+    app.include_router(auth_router)
     app.include_router(apply_worker_router)
     app.include_router(apply_history_router)
     app.include_router(cover_letter_style_router)

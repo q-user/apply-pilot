@@ -57,7 +57,9 @@ class UserRead(TimestampedSchema):
     """Output shape for user resources.
 
     The ``id`` is a UUID; Pydantic renders it as a canonical string in
-    JSON responses.
+    JSON responses. ``is_admin`` mirrors the :class:`User` column — the
+    HTTP create endpoint deliberately never sets it (operators must
+    promote users with the ``apply-pilot promote --email <email>`` CLI).
     """
 
     model_config = ConfigDict(extra="forbid", frozen=False)
@@ -65,6 +67,10 @@ class UserRead(TimestampedSchema):
     id: uuid.UUID = Field(description="Stable identifier of the user.")
     email: EmailAddress
     is_active: bool = Field(default=True)
+    is_admin: bool = Field(
+        default=False,
+        description="Whether this user can access /admin/*.",
+    )
 
 
 class AuthToken(BaseModel):

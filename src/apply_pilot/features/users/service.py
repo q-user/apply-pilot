@@ -69,6 +69,7 @@ def _user_to_dto(user: User) -> UserRead:
         id=user.id,
         email=user.email,
         is_active=user.is_active,
+        is_admin=user.is_admin,
         created_at=user.created_at,
         updated_at=user.updated_at,
     )
