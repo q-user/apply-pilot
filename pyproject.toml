@@ -27,6 +27,7 @@ dependencies = [
 [project.scripts]
 apply-pilot-api = "apply_pilot.app:run"
 apply-pilot-bot = "apply_pilot.features.telegram.process:main"
+apply-pilot = "apply_pilot.cli:main"
 
 [project.optional-dependencies]
 dev = [
@@ -85,6 +86,7 @@ unknown-argument      = "warn"
 
 [dependency-groups]
 dev = [
+    "psycopg2-binary>=2.9.12",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",
     "pytest-timeout>=2.4.0",

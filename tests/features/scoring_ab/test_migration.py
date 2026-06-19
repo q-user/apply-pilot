@@ -77,8 +77,17 @@ def test_migration_upgrade_creates_three_tables(sqlite_file: str) -> None:
         engine.dispose()
 
 
+@pytest.mark.timeout(30)
 def test_migration_downgrade_removes_three_tables(sqlite_file: str) -> None:
-    """The migration downgrade must drop the three new tables."""
+    """The migration downgrade must drop the three new tables.
+
+    Marked with a per-test 30 s timeout because the test runs three
+    sequential ``alembic`` subprocess invocations (each cold-starts
+    ``uv`` and takes 1–2 s); under ``pytest -n auto`` the global
+    5 s pytest-timeout is too tight when other workers compete for CPU.
+    The downgrade itself completes in well under 1 s — the longer
+    budget only gives the test room to breathe.
+    """
     _alembic("upgrade", "eb6c1c51520c", db_path=sqlite_file)
     _alembic("upgrade", "g7h8i9j0k1l2", db_path=sqlite_file)
     _alembic("downgrade", "eb6c1c51520c", db_path=sqlite_file)

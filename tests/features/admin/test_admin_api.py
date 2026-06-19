@@ -291,6 +291,67 @@ def make_app(
         application.dependency_overrides[get_integration_status_store] = lambda: integration_store
         application.dependency_overrides[get_integration_status_worker] = lambda: integration_worker
         application.dependency_overrides[get_admin_auth_required] = lambda: auth_required
+
+        # Issue #171 tightened the admin auth gate: ``require_admin_user``
+        # now also looks up the user record and checks ``is_admin``. The
+        # tests in this module use a synthetic UUID that has no backing
+        # ``User`` row, so the strict lookup would 401/403. We override
+        # the dependency to skip the user-record lookup while still
+        # honouring the ``APP_ADMIN_REQUIRE_AUTH`` flag and the bearer
+        # scheme:
+        #
+        # * ``auth_required=False`` (the default in the legacy tests)
+        #   returns ``"anonymous"`` without touching the token store —
+        #   the same behaviour the pre-#171 gate had.
+        # * ``auth_required=True`` requires a valid bearer token; the
+        #   synthetic id flows through unchanged.
+        #
+        # The dedicated :mod:`tests.features.admin.test_admin_auth_gate`
+        # suite exercises the production gate (token + ``is_admin``)
+        # end-to-end.
+        from fastapi import Depends
+        from fastapi.security import HTTPAuthorizationCredentials
+
+        from apply_pilot.features.admin._auth import _bearer_scheme, require_admin_user
+        from apply_pilot.features.users.security import (
+            InvalidTokenError,
+            default_token_store,
+        )
+
+        def _admin_override(
+            auth_required: bool = Depends(get_admin_auth_required),  # noqa: B008
+            credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),  # noqa: B008
+        ) -> str:
+            if not auth_required:
+                return "anonymous"
+            if credentials is None:
+                from fastapi import HTTPException, status
+
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail={
+                        "code": "authentication_required",
+                        "message": "bearer token is required",
+                    },
+                )
+            try:
+                # The token must still resolve — this preserves the
+                # 401 ``invalid_token`` contract for the
+                # ``test_admin_endpoints_reject_invalid_token`` test.
+                default_token_store().resolve(credentials.credentials)
+            except InvalidTokenError as exc:
+                from fastapi import HTTPException, status
+
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail={
+                        "code": "invalid_token",
+                        "message": "the supplied token is invalid or expired",
+                    },
+                ) from exc
+            return admin_user_id
+
+        application.dependency_overrides[require_admin_user] = _admin_override
         # The default dependencies for the other admin routers read
         # from a real DB session; the scoring_ab / source_metrics slices
         # both expose a public ``get_*_repository`` factory we can

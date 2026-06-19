@@ -18,6 +18,7 @@ from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from typing import Protocol
 
+from sqlalchemy import func as sa_func
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -32,7 +33,14 @@ class UsersRepository(Protocol):
     the stats service needs a single repository that owns that list.
     """
 
-    def create(self, *, email: str, hashed_password: str, is_active: bool) -> User: ...
+    def create(
+        self,
+        *,
+        email: str,
+        hashed_password: str,
+        is_active: bool,
+        is_admin: bool = False,
+    ) -> User: ...
     def get_by_id(self, user_id: uuid.UUID) -> User | None: ...
     def get_by_email(self, email: str) -> User | None: ...
     def list_all(self) -> Sequence[User]: ...
@@ -55,7 +63,14 @@ class InMemoryUsersRepository:
         self._by_id: dict[uuid.UUID, User] = {}
         self._by_email: dict[str, uuid.UUID] = {}
 
-    def create(self, *, email: str, hashed_password: str, is_active: bool) -> User:
+    def create(
+        self,
+        *,
+        email: str,
+        hashed_password: str,
+        is_active: bool,
+        is_admin: bool = False,
+    ) -> User:
         normalised = email.lower()
         if normalised in self._by_email:
             # Mirror SQLAlchemy's IntegrityError contract for the
@@ -66,6 +81,7 @@ class InMemoryUsersRepository:
             email=normalised,
             hashed_password=hashed_password,
             is_active=is_active,
+            is_admin=is_admin,
         )
         # The SQLAlchemy model relies on ``server_default=func.now()``
         # to populate ``created_at``. The in-memory path has no
@@ -93,6 +109,24 @@ class InMemoryUsersRepository:
         to enumerate the users that have linked a Telegram account.
         """
         return list(self._by_id.values())
+
+    def list_paginated(self, *, limit: int, offset: int) -> list[User]:
+        """Return up to *limit* users starting at *offset*.
+
+        Mirror of :meth:`SqlAlchemyUsersRepository.list_paginated` so
+        in-memory and SQL implementations are interchangeable. The
+        order is ``created_at`` descending, then ``id`` ascending for
+        stable pagination across calls.
+        """
+        rows = sorted(
+            self._by_id.values(),
+            key=lambda u: (-u.created_at.timestamp(), str(u.id)),
+        )
+        return rows[offset : offset + limit]
+
+    def count(self) -> int:
+        """Return the total number of users in the repository."""
+        return len(self._by_id)
 
 
 class _DuplicateEmailError(Exception):
@@ -135,7 +169,14 @@ class SqlAlchemyUsersRepository:
             raise RuntimeError("SqlAlchemyUsersRepository is not bound to a session")
         return self._session_factory()
 
-    def create(self, *, email: str, hashed_password: str, is_active: bool) -> User:
+    def create(
+        self,
+        *,
+        email: str,
+        hashed_password: str,
+        is_active: bool,
+        is_admin: bool = False,
+    ) -> User:
         normalised = email.lower()
         session = self._scope()
         try:
@@ -143,6 +184,7 @@ class SqlAlchemyUsersRepository:
                 email=normalised,
                 hashed_password=hashed_password,
                 is_active=is_active,
+                is_admin=is_admin,
             )
             session.add(user)
             session.commit()
@@ -184,6 +226,40 @@ class SqlAlchemyUsersRepository:
         try:
             statement = select(User).order_by(User.created_at.asc())
             return list(session.execute(statement).scalars().all())
+        finally:
+            if self._session is None:
+                session.close()
+
+    def list_paginated(self, *, limit: int, offset: int) -> list[User]:
+        """Return up to *limit* users starting at *offset*.
+
+        Ordered by ``created_at DESC, id ASC`` so pagination is stable
+        across requests even when multiple users share a ``created_at``
+        value. Used by the admin ``/admin/users`` HTML page (issue #171).
+        """
+        session = self._scope()
+        try:
+            statement = (
+                select(User)
+                .order_by(User.created_at.desc(), User.id.asc())
+                .offset(offset)
+                .limit(limit)
+            )
+            return list(session.execute(statement).scalars().all())
+        finally:
+            if self._session is None:
+                session.close()
+
+    def count(self) -> int:
+        """Return the total number of users in the database.
+
+        Used by the admin ``/admin/users`` HTML page to compute the
+        total page count for the pagination footer.
+        """
+        session = self._scope()
+        try:
+            statement = select(sa_func.count()).select_from(User)
+            return int(session.execute(statement).scalar_one())
         finally:
             if self._session is None:
                 session.close()
