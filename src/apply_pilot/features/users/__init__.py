@@ -11,9 +11,18 @@ Endpoints
 ---------
 
 * ``POST /auth/register`` — create a new user.
-* ``POST /auth/login`` — verify credentials, return a bearer token.
-* ``POST /auth/logout`` — invalidate a bearer token.
-* ``GET /auth/me`` — return the user behind a bearer token.
+* ``POST /auth/login`` — verify credentials, return a bearer token
+  *and* set a browser-friendly session cookie. HTML clients are
+  redirected to ``/dashboard`` (or the safe ``next`` query);
+  JSON clients get the bearer token only.
+* ``POST /auth/logout`` — invalidate a bearer token and clear the
+  cookie. HTML clients are redirected to ``/``; JSON clients get a
+  204.
+* ``GET /auth/login`` — render the inline-HTML login form. A
+  valid session cookie bounces the visitor to ``?next=...`` or
+  ``/dashboard`` instead.
+* ``GET /auth/me`` — return the user behind a bearer token or the
+  session cookie.
 
 Storage
 -------
@@ -28,6 +37,8 @@ Security
 * :func:`hash_password` / :func:`verify_password` — PBKDF2-HMAC-SHA256.
 * :class:`InMemoryTokenStore` / :func:`issue_token` / :func:`verify_token` —
   in-process bearer-token bookkeeping.
+* :mod:`apply_pilot.features.users.session` — the browser session
+  cookie contract (settings + set/clear/get helpers).
 """
 
 from __future__ import annotations
@@ -62,9 +73,20 @@ from apply_pilot.features.users.service import (
     AuthService,
     DuplicateEmailError,
 )
+from apply_pilot.features.users.session import (
+    LOGIN_PATH,
+    LOGOUT_PATH,
+    SESSION_COOKIE_NAME,
+    AuthSessionSettings,
+    clear_session_cookie,
+    get_auth_session_settings,
+    get_session_token,
+    set_session_cookie,
+)
 
 __all__ = [
     "AuthService",
+    "AuthSessionSettings",
     "AuthToken",
     "AuthenticatedUser",
     "AuthenticationError",
@@ -73,6 +95,9 @@ __all__ = [
     "InMemoryUserSessionRepository",
     "InMemoryUsersRepository",
     "InvalidTokenError",
+    "LOGIN_PATH",
+    "LOGOUT_PATH",
+    "SESSION_COOKIE_NAME",
     "SqlAlchemyUserSessionRepository",
     "SqlAlchemyUsersRepository",
     "TokenStore",
@@ -83,9 +108,13 @@ __all__ = [
     "UserSession",
     "UserSessionRepository",
     "UsersRepository",
+    "clear_session_cookie",
+    "get_auth_session_settings",
+    "get_session_token",
     "hash_password",
     "hash_token",
     "issue_token",
+    "set_session_cookie",
     "verify_password",
     "verify_token",
 ]
