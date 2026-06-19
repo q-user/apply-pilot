@@ -50,3 +50,12 @@ build/
 *.sqlite3
 
 .agents/github_bootstrap_plan.md
+
+# Local data (Docker bind mount for SQLite)
+.data/
+
+# Local secrets (never commit)
+.env
+.env.local
+.env.*.local
+!.env.example
