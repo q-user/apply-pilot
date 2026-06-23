@@ -143,6 +143,19 @@ _LANDING_HTML = """<!doctype html>
           </a>
         </li>
         <li>
+          <a href="/auth/login">
+            Sign in
+            <small>Email + password, sets a session cookie for the dashboard.</small>
+          </a>
+        </li>
+        <li>
+          <a href="/auth/register">
+            Register
+            <small>Create an account. Operator must run
+              <code>apply-pilot promote</code> for admin access.</small>
+          </a>
+        </li>
+        <li>
           <a href="/dashboard">
             Dashboard
             <small>Per-user summary of matches, applications, and digest.</small>
