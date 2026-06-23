@@ -48,10 +48,10 @@ def build_digest_sender(
     Factored out so the API route handler and (eventually) the
     background ``DigestRunner`` entry point share the same wiring.
     """
-    match_repo = SqlVacancyMatchRepository(session_factory=lambda: session)
+    match_repo = SqlVacancyMatchRepository(session=session)
     telegram_repo = SqlAlchemyTelegramAccountRepository(session=session)
     user_repo = SqlAlchemyUsersRepository(session=session)
-    profile_repo = SqlSearchProfileRepository(session_factory=lambda: session)
+    profile_repo = SqlSearchProfileRepository(session=session)
     stats_service = StatsService(
         match_repo=match_repo,
         telegram_account_repo=telegram_repo,

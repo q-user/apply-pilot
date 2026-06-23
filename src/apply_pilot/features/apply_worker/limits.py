@@ -387,16 +387,25 @@ class SqlRateLimiter:
 
     def __init__(
         self,
+        session: Session | None = None,
         *,
-        session_factory: Callable[[], Session],
+        session_factory: Callable[[], Session] | None = None,
         settings: ApplyWorkerSettings,
         clock: Callable[[], datetime] | None = None,
     ) -> None:
+        if session is not None and session_factory is not None:
+            raise ValueError("pass either session or session_factory, not both")
+        if session is None and session_factory is None:
+            raise ValueError("SqlRateLimiter requires a Session or session_factory")
+        self._session = session
         self._session_factory = session_factory
         self._settings = settings
         self._clock: Callable[[], datetime] = clock or _default_clock
 
     def _scope(self) -> Session:
+        if self._session is not None:
+            return self._session
+        assert self._session_factory is not None
         return self._session_factory()
 
     def _count_in_window(
@@ -444,7 +453,8 @@ class SqlRateLimiter:
                 session, user_id=user_id, key=key, window=DAILY_WINDOW
             )
         finally:
-            session.close()
+            if self._session is None:
+                session.close()
 
         hourly = _window_status(
             used=hourly_count,
@@ -500,7 +510,8 @@ class SqlRateLimiter:
             session.rollback()
             raise
         finally:
-            session.close()
+            if self._session is None:
+                session.close()
 
 
 # ---------------------------------------------------------------------------

@@ -305,12 +305,18 @@ class SqlVacancyRepository:
 
     def __init__(
         self,
+        session: Session | None = None,
         *,
         session_factory: Callable[[], Session] | None = None,
     ) -> None:
+        if session is not None and session_factory is not None:
+            raise ValueError("pass either session or session_factory, not both")
+        self._session = session
         self._session_factory = session_factory
 
     def _scope(self) -> Session:
+        if self._session is not None:
+            return self._session
         if self._session_factory is None:
             raise RuntimeError("SqlVacancyRepository is not bound to a session")
         return self._session_factory()
@@ -375,14 +381,16 @@ class SqlVacancyRepository:
             session.rollback()
             raise
         finally:
-            session.close()
+            if self._session is None:
+                session.close()
 
     def get_by_id(self, vacancy_id: uuid.UUID) -> Vacancy | None:
         session = self._scope()
         try:
             return session.get(Vacancy, vacancy_id)
         finally:
-            session.close()
+            if self._session is None:
+                session.close()
 
     def list_by_source(self, source: str) -> Sequence[Vacancy]:
         session = self._scope()
@@ -392,7 +400,8 @@ class SqlVacancyRepository:
             )
             return list(session.execute(statement).scalars().all())
         finally:
-            session.close()
+            if self._session is None:
+                session.close()
 
     def list_recent(self, *, limit: int) -> Sequence[Vacancy]:
         session = self._scope()
@@ -400,7 +409,8 @@ class SqlVacancyRepository:
             statement = select(Vacancy).order_by(Vacancy.created_at.desc()).limit(limit)
             return list(session.execute(statement).scalars().all())
         finally:
-            session.close()
+            if self._session is None:
+                session.close()
 
     def find_by_source(self, source: str, source_id: str) -> list[Vacancy]:
         """Return the (at most one) row matching ``(source, source_id)``.
@@ -418,7 +428,8 @@ class SqlVacancyRepository:
             )
             return list(session.execute(statement).scalars().all())
         finally:
-            session.close()
+            if self._session is None:
+                session.close()
 
     def find_by_content_hash(self, content_hash: str) -> list[Vacancy]:
         """Return all rows whose ``content_hash`` equals ``content_hash``.
@@ -431,7 +442,8 @@ class SqlVacancyRepository:
             statement = select(Vacancy).where(Vacancy.content_hash == content_hash)
             return list(session.execute(statement).scalars().all())
         finally:
-            session.close()
+            if self._session is None:
+                session.close()
 
     def list_with_filters(
         self,
@@ -463,7 +475,8 @@ class SqlVacancyRepository:
             statement = statement.limit(limit).offset(offset)
             return list(session.execute(statement).scalars().all())
         finally:
-            session.close()
+            if self._session is None:
+                session.close()
 
     def count_with_filters(
         self,
@@ -484,7 +497,8 @@ class SqlVacancyRepository:
             count_stmt = select(func.count()).select_from(statement.subquery())
             return int(session.execute(count_stmt).scalar_one())
         finally:
-            session.close()
+            if self._session is None:
+                session.close()
 
     @staticmethod
     def _build_filtered_query(

@@ -171,12 +171,18 @@ class SqlScoringReviewQueue:
 
     def __init__(
         self,
+        session: Session | None = None,
         *,
         session_factory: Callable[[], Session] | None = None,
     ) -> None:
+        if session is not None and session_factory is not None:
+            raise ValueError("pass either session or session_factory, not both")
+        self._session = session
         self._session_factory = session_factory
 
     def _scope(self) -> Session:
+        if self._session is not None:
+            return self._session
         if self._session_factory is None:
             raise RuntimeError("SqlScoringReviewQueue is not bound to a session")
         return self._session_factory()
@@ -217,7 +223,8 @@ class SqlScoringReviewQueue:
                 for match, profile in rows
             ]
         finally:
-            session.close()
+            if self._session is None:
+                session.close()
 
     def mark_reviewed(self, match_id: uuid.UUID) -> None:
         session = self._scope()
@@ -226,7 +233,8 @@ class SqlScoringReviewQueue:
             if match is None:
                 raise NotFoundError.for_entity("vacancy match", match_id)
         finally:
-            session.close()
+            if self._session is None:
+                session.close()
 
 
 __all__ = [

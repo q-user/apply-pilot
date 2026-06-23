@@ -75,7 +75,7 @@ def get_search_profile_service(
     session: Session = Depends(get_db),  # noqa: B008
 ) -> SearchProfileService:
     """Build a ``SearchProfileService`` for the current request."""
-    repo = SqlSearchProfileRepository(session_factory=lambda: session)
+    repo = SqlSearchProfileRepository(session=session)
     return SearchProfileService(repo)
 
 

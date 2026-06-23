@@ -73,8 +73,8 @@ def get_match_service(
     Both repositories share the request-scoped session so the API call
     participates in a single transaction.
     """
-    match_repo = SqlVacancyMatchRepository(session_factory=lambda: session)
-    profile_repo = SqlSearchProfileRepository(session_factory=lambda: session)
+    match_repo = SqlVacancyMatchRepository(session=session)
+    profile_repo = SqlSearchProfileRepository(session=session)
     return MatchService(match_repo=match_repo, profile_repo=profile_repo)
 
 
