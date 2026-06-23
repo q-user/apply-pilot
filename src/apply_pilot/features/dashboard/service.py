@@ -337,10 +337,12 @@ class DashboardService:
         a ``NULL`` ``finished_at`` are excluded (they are not
         terminal yet).
         """
-        vacancies = self._all_vacancies()
+        matches = list(self._match_repo.list_by_user(user_id))
+        # Fetch only vacancies referenced by the user's matches
+        vacancy_ids = [m.vacancy_id for m in matches]
+        vacancies = list(self._vacancy_repo.get_by_ids(vacancy_ids))
         vacancies_by_id = {v.id: v for v in vacancies}
 
-        matches = list(self._match_repo.list_by_user(user_id))
         applications = list(self._apply_job_repo.list_by_user(user_id, limit=10_000))
 
         # Build a per-match source lookup so the funnel can group
@@ -527,7 +529,12 @@ class DashboardService:
         # needed) and pre-build a per-match index.
         match_by_id: dict[uuid.UUID, VacancyMatch] = {m.id: m for m in matches}
         if source is not None:
-            vacancies = self._all_vacancies()
+            # Fetch only vacancies referenced by terminal apply jobs
+            # that match the user's matches
+            relevant_match_ids = [job.match_id for job in terminals]
+            relevant_matches = [match_by_id[mid] for mid in relevant_match_ids if mid in match_by_id]
+            vacancy_ids = [m.vacancy_id for m in relevant_matches]
+            vacancies = list(self._vacancy_repo.get_by_ids(vacancy_ids))
             vacancies_by_id = {v.id: v for v in vacancies}
         else:
             vacancies_by_id = {}
@@ -583,19 +590,6 @@ class DashboardService:
         """
         rows = self._apply_job_repo.list_by_user(user_id, limit=limit)
         return list(rows)
-
-    def _all_vacancies(self) -> Sequence[Vacancy]:
-        """Return every :class:`Vacancy` in the repo.
-
-        The dashboard's analytics aggregations need a full
-        vacancy-by-id index to resolve :class:`VacancyMatch.vacancy_id`
-        → source. The SQL implementation's :meth:`list_recent` is
-        used as the cheapest "give me everything" call; the in-memory
-        implementation just returns the underlying dict. The limit is
-        generous so the entire catalogue fits; the slice is a
-        low-traffic read endpoint and the rows are small.
-        """
-        return list(self._vacancy_repo.list_recent(limit=1_000_000))
 
     def _compute_digest(self, user_id: uuid.UUID) -> UserStats:
         """Return the embedded :class:`UserStats`.

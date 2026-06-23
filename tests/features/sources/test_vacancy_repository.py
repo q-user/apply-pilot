@@ -164,6 +164,33 @@ class TestListRecent:
         assert recent[1].id == a.id
 
 
+class TestGetByIds:
+    def test_get_by_ids_returns_matching_vacancies(self, repo: VacancyRepository) -> None:
+        v1 = repo.upsert(_vacancy(source_id="1", title="Vacancy 1"))
+        v2 = repo.upsert(_vacancy(source_id="2", title="Vacancy 2"))
+        v3 = repo.upsert(_vacancy(source_id="3", title="Vacancy 3"))
+
+        result = list(repo.get_by_ids([v1.id, v3.id]))
+
+        assert len(result) == 2
+        assert {v.id for v in result} == {v1.id, v3.id}
+
+    def test_get_by_ids_returns_empty_for_unknown_ids(self, repo: VacancyRepository) -> None:
+        repo.upsert(_vacancy(source_id="1"))
+        result = list(repo.get_by_ids([uuid.uuid4(), uuid.uuid4()]))
+        assert result == []
+
+    def test_get_by_ids_returns_empty_for_empty_list(self, repo: VacancyRepository) -> None:
+        result = list(repo.get_by_ids([]))
+        assert result == []
+
+    def test_get_by_ids_handles_duplicates(self, repo: VacancyRepository) -> None:
+        v1 = repo.upsert(_vacancy(source_id="1"))
+        result = list(repo.get_by_ids([v1.id, v1.id]))
+        assert len(result) == 1
+        assert result[0].id == v1.id
+
+
 # ---------------------------------------------------------------------------
 # SQL repository
 # ---------------------------------------------------------------------------
@@ -276,6 +303,31 @@ class TestSqlRepository:
         persisted = sql_repo.upsert(v)
         assert persisted.salary_gross is False
         assert persisted.salary_currency == "RUR"
+
+    def test_get_by_ids_returns_matching_vacancies(self, sql_repo: SqlVacancyRepository) -> None:
+        v1 = sql_repo.upsert(_vacancy(source_id="1", title="Vacancy 1"))
+        v2 = sql_repo.upsert(_vacancy(source_id="2", title="Vacancy 2"))
+        v3 = sql_repo.upsert(_vacancy(source_id="3", title="Vacancy 3"))
+
+        result = list(sql_repo.get_by_ids([v1.id, v3.id]))
+
+        assert len(result) == 2
+        assert {v.id for v in result} == {v1.id, v3.id}
+
+    def test_get_by_ids_returns_empty_for_unknown_ids(self, sql_repo: SqlVacancyRepository) -> None:
+        sql_repo.upsert(_vacancy(source_id="1"))
+        result = list(sql_repo.get_by_ids([uuid.uuid4(), uuid.uuid4()]))
+        assert result == []
+
+    def test_get_by_ids_returns_empty_for_empty_list(self, sql_repo: SqlVacancyRepository) -> None:
+        result = list(sql_repo.get_by_ids([]))
+        assert result == []
+
+    def test_get_by_ids_handles_duplicates(self, sql_repo: SqlVacancyRepository) -> None:
+        v1 = sql_repo.upsert(_vacancy(source_id="1"))
+        result = list(sql_repo.get_by_ids([v1.id, v1.id]))
+        assert len(result) == 1
+        assert result[0].id == v1.id
 
 
 # ---------------------------------------------------------------------------
