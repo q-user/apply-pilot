@@ -8,28 +8,23 @@ to call the real hh.ru endpoints.
 
 from __future__ import annotations
 
-import os
 from collections.abc import Iterator
 
 import pytest
-from cryptography.fernet import Fernet
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import StaticPool, create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from apply_pilot.config import HhOAuthSettings
 from apply_pilot.db import Base, get_db
 from apply_pilot.features.hh.api import (
     get_hh_oauth_client,
-    get_hh_oauth_settings_dep,
     get_hh_oauth_state_store,
 )
 from apply_pilot.features.hh.api import (
     router as hh_router,
 )
-from apply_pilot.features.hh.encryption import CredentialEncryptor
 from apply_pilot.features.hh.oauth import (
     HhOAuthStateStore,
     HhTokenResponse,
@@ -37,9 +32,6 @@ from apply_pilot.features.hh.oauth import (
 )
 from apply_pilot.features.users import models as _users_models  # noqa: F401
 from apply_pilot.features.users.api import router as auth_router
-
-_TEST_ENCRYPTOR = CredentialEncryptor(key=Fernet.generate_key())
-_TEST_ENCRYPTOR_FERNET_KEY = Fernet.generate_key().decode()
 
 
 @pytest.fixture
@@ -87,24 +79,6 @@ def app(engine: Engine) -> Iterator[FastAPI]:
 
     application.dependency_overrides[get_hh_oauth_state_store] = _override_state_store
     application.dependency_overrides[get_hh_oauth_client] = _override_oauth_client
-
-    # Override the settings dep too; otherwise the real env-var path runs
-    # and raises ValueError at request time when APP_HH_CLIENT_ID is unset.
-    test_hh_settings = HhOAuthSettings(
-        client_id="test-client-id",
-        client_secret="test-client-secret",
-        redirect_uri="http://localhost/callback",
-    )
-
-    def _override_settings() -> HhOAuthSettings:
-        return test_hh_settings
-
-    application.dependency_overrides[get_hh_oauth_settings_dep] = _override_settings
-
-    # Ensure the encryption env var is set; ``_get_encryptor`` reads it
-    # at request time. Real production deployments supply this via the
-    # environment; tests just need any valid Fernet key.
-    os.environ.setdefault("APP_HH_ENCRYPTION_KEY", _TEST_ENCRYPTOR_FERNET_KEY)
 
     # Stash the fakes on the app so tests can introspect / pre-load them.
     application.state.oauth_state_store = state_store
