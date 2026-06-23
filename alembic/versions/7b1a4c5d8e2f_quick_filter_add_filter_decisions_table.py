@@ -1,7 +1,7 @@
 """quick_filter: add filter_decisions table
 
 Revision ID: 7b1a4c5d8e2f
-Revises: 5a3c8f7e1b2d, b1d2e3f4a5b6, d4e7f8a9b123, d5f8a9b0c123, e20f9a1b2c3d
+Revises: 5a3c8f7e1b2d, b1d2e3f4a5b6, d4e7f8a9b123, d5f8a9b0c123
 Create Date: 2026-06-15 23:00:00.000000
 
 Adds the ``filter_decisions`` table that persists the in-memory
@@ -30,10 +30,15 @@ The ``(search_profile_id, created_at)`` composite index accelerates
 the "show me the most recent decisions for this profile" listing
 query that powers the review UI.
 
-This migration merges the five currently-open alembic heads into a
+This migration merges the four currently-open alembic heads into a
 single linear chain by declaring all of them as ``down_revision``
 sources. Once this revision lands, ``alembic upgrade head`` resolves
 to a single target.
+
+.. note::
+   M10 (issue #204) removed the ``e20f9a1b2c3d_hh_add_hh_credentials_table``
+   migration along with the HH OAuth path, so the merge set dropped
+   from five to four parents.
 """
 
 from __future__ import annotations
@@ -45,13 +50,12 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "7b1a4c5d8e2f"
-# Merge the five currently-open heads into a single linear chain.
+# Merge the four currently-open heads into a single linear chain.
 down_revision: str | Sequence[str] | None = (
     "5a3c8f7e1b2d",
     "b1d2e3f4a5b6",
     "d4e7f8a9b123",
     "d5f8a9b0c123",
-    "e20f9a1b2c3d",
 )
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None

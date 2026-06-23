@@ -1,7 +1,7 @@
 """writing_style_memory: add style_memory_entries table
 
 Revision ID: 71a2b3c4d5e6
-Revises: eb6c1c51520c, f1a2b3c4d5e6
+Revises: eb6c1c51520c
 Create Date: 2026-06-17 11:00:00.000000
 
 Adds the ``style_memory_entries`` table that backs the
@@ -43,6 +43,13 @@ in this chain. The branch is a merge of the two heads that existed
 at the time of writing (``eb6c1c51520c`` — search profiles
 is_preferred, and ``f1a2b3c4d5e6`` — hh resume links), so the chain
 stays linear.
+
+.. note::
+   M10 (issue #204) removed the HH OAuth / apply path, including the
+   ``f1a2b3c4d5e6_hh_add_hh_resume_links_table`` migration. The
+   ``down_revision`` above used to be the tuple
+   ``("eb6c1c51520c", "f1a2b3c4d5e6")``; we now point only at
+   ``eb6c1c51520c`` because the other branch is gone.
 """
 
 from __future__ import annotations
@@ -54,9 +61,10 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "71a2b3c4d5e6"
-# Two-headed parent: this migration merges the ``eb6c1c51520c`` and
-# ``f1a2b3c4d5e6`` heads and adds the style memory table on top.
-down_revision: str | Sequence[str] | None = ("eb6c1c51520c", "f1a2b3c4d5e6")
+# Originally merged the ``eb6c1c51520c`` and ``f1a2b3c4d5e6`` heads.
+# M10 dropped the ``f1a2b3c4d5e6`` migration, so the parent is now
+# only ``eb6c1c51520c``.
+down_revision: str | Sequence[str] | None = "eb6c1c51520c"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

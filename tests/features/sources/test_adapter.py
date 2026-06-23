@@ -15,7 +15,7 @@ sites in future). It exposes the full source lifecycle:
 :class:`HhSourceAdapter` is the hh.ru implementation: a thin wrapper that
 delegates to the existing :class:`HHVacancySearchClient`,
 :class:`VacancyNormalizer`, :class:`HhScreeningQuestionExtractor` and
-:class:`HhApplyAdapter` — it composes them rather than replacing any of
+the apply adapter — it composes them rather than replacing any of
 them, so the rest of the slice keeps its narrow contracts.
 
 :class:`AdapterRegistry` is a small in-memory index keyed by the
@@ -24,9 +24,9 @@ looks adapters up there.
 
 The tests prefer DI / in-memory fakes — no ``Mock``. The
 :class:`HhHttpVacancySearchClient` is replaced by
-:class:`InMemoryHhVacancySearchClient`, the real :class:`HhApplyAdapter`
-is replaced by a recording in-memory stand-in that still satisfies the
-:class:`ApplyAdapter` Protocol.
+:class:`InMemoryHhVacancySearchClient`, and the production apply
+adapter is replaced by a recording in-memory stand-in that still
+satisfies the :class:`ApplyAdapter` Protocol.
 """
 
 from __future__ import annotations
@@ -58,8 +58,8 @@ from apply_pilot.features.sources.normalizer import VacancyNormalizer
 class _RecordingApplyAdapter:
     """In-memory :class:`ApplyAdapter` that records calls and returns a fixed result.
 
-    The real :class:`~apply_pilot.features.hh.apply.HhApplyAdapter` is
-    integration-tested separately against ``httpx.MockTransport``; here
+    The production apply adapter (the headless-browser integration
+    tracked in #206) is tested separately against its own driver; here
     we want to assert *delegation* — that :class:`HhSourceAdapter.apply`
     forwards the job to the injected adapter and returns its result
     verbatim. A recording fake is the right tool for that.

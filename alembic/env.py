@@ -18,7 +18,6 @@ from apply_pilot.features.cover_letter import (
 from apply_pilot.features.cover_letter_style import (
     models as _cover_letter_style_models,  # noqa: F401  (register CoverLetterStyle)
 )
-from apply_pilot.features.hh import models as _hh_models  # noqa: F401  (register HHCredential)
 from apply_pilot.features.matches import (
     models as _matches_models,  # noqa: F401  (register VacancyMatch)
 )

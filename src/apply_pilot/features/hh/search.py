@@ -178,9 +178,8 @@ class InMemoryHhVacancySearchClient:
 
 
 #: Resolves a bearer token for a given user, or returns ``None`` if no
-#: credentials are stored. The signature is sync because the
-#: ``HHCredentialService`` is sync; the wrapper makes it trivially
-#: overridable in tests.
+#: credentials are stored. The signature is sync; the wrapper makes it
+#: trivially overridable in tests.
 HHTokenProvider = Callable[[uuid.UUID], str | None]
 
 
