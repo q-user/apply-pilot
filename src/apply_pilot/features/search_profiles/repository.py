@@ -98,12 +98,18 @@ class SqlSearchProfileRepository:
 
     def __init__(
         self,
+        session: Session | None = None,
         *,
         session_factory: Callable[[], Session] | None = None,
     ) -> None:
+        if session is not None and session_factory is not None:
+            raise ValueError("pass either session or session_factory, not both")
+        self._session = session
         self._session_factory = session_factory
 
     def _scope(self) -> Session:
+        if self._session is not None:
+            return self._session
         if self._session_factory is None:
             raise RuntimeError("SqlSearchProfileRepository is not bound to a session")
         return self._session_factory()
@@ -119,14 +125,16 @@ class SqlSearchProfileRepository:
             session.rollback()
             raise
         finally:
-            session.close()
+            if self._session is None:
+                session.close()
 
     def get_by_id(self, profile_id: uuid.UUID) -> SearchProfile | None:
         session = self._scope()
         try:
             return session.get(SearchProfile, profile_id)
         finally:
-            session.close()
+            if self._session is None:
+                session.close()
 
     def list_by_user(self, user_id: uuid.UUID) -> Sequence[SearchProfile]:
         session = self._scope()
@@ -138,7 +146,8 @@ class SqlSearchProfileRepository:
             )
             return list(session.execute(statement).scalars().all())
         finally:
-            session.close()
+            if self._session is None:
+                session.close()
 
     def list_active(self) -> Sequence[SearchProfile]:
         session = self._scope()
@@ -150,7 +159,8 @@ class SqlSearchProfileRepository:
             )
             return list(session.execute(statement).scalars().all())
         finally:
-            session.close()
+            if self._session is None:
+                session.close()
 
     def update(self, profile: SearchProfile) -> SearchProfile:
         session = self._scope()
@@ -163,7 +173,8 @@ class SqlSearchProfileRepository:
             session.rollback()
             raise
         finally:
-            session.close()
+            if self._session is None:
+                session.close()
 
     def delete(self, profile: SearchProfile) -> None:
         session = self._scope()
@@ -174,7 +185,8 @@ class SqlSearchProfileRepository:
             session.rollback()
             raise
         finally:
-            session.close()
+            if self._session is None:
+                session.close()
 
 
 __all__ = [

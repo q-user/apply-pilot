@@ -91,11 +91,11 @@ def get_dashboard_service(
     dashboard read is consistent. The service builds the
     :class:`StatsService` lazily on the first :meth:`get_summary` call.
     """
-    match_repo = SqlVacancyMatchRepository(session_factory=lambda: session)
-    apply_job_repo = SqlApplyJobRepository(session_factory=lambda: session)
+    match_repo = SqlVacancyMatchRepository(session=session)
+    apply_job_repo = SqlApplyJobRepository(session=session)
     cover_letter_repo = SqlCoverLetterDraftRepository(session=session)
-    vacancy_repo = SqlVacancyRepository(session_factory=lambda: session)
-    profile_repo = SqlSearchProfileRepository(session_factory=lambda: session)
+    vacancy_repo = SqlVacancyRepository(session=session)
+    profile_repo = SqlSearchProfileRepository(session=session)
     telegram_repo = SqlAlchemyTelegramAccountRepository(session=session)
     user_repo = SqlAlchemyUsersRepository(session=session)
     return DashboardService(

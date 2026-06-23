@@ -53,7 +53,7 @@ def get_source_metrics_service(
     default wires the SQL-backed repository off the request-scoped
     session from :func:`get_db`.
     """
-    metric_repo = SqlSourceMetricRepository(session_factory=lambda: session)
+    metric_repo = SqlSourceMetricRepository(session=session)
     return SourceMetricsService(metric_repo=metric_repo)
 
 
@@ -68,7 +68,7 @@ def get_vacancy_list_service(
     repository backing. The metrics service is wired in too so every
     ingest call records the per-source event set (M7, issue #62).
     """
-    repo = SqlVacancyRepository(session_factory=lambda: session)
+    repo = SqlVacancyRepository(session=session)
     return SourceService(repository=repo, metrics=metrics)
 
 

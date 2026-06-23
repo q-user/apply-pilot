@@ -69,7 +69,7 @@ def get_scoring_review_service(
     same transaction. Tests override this dependency to inject the
     in-memory fakes.
     """
-    queue = SqlScoringReviewQueue(session_factory=lambda: session)
+    queue = SqlScoringReviewQueue(session=session)
     audit_repo = SqlAuditLogRepository(session=session)
     audit_service: AuditService = AuditService(audit_repo=audit_repo)
     return ScoringReviewService(queue=queue, audit_service=audit_service)

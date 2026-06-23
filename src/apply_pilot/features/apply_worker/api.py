@@ -136,15 +136,12 @@ def get_apply_job_service(
     tune the retry policy tune the anti-spam budget.
     """
 
-    def _session_scope() -> Session:
-        return session
-
-    job_repo = SqlApplyJobRepository(session_factory=_session_scope)
-    match_repo = SqlVacancyMatchRepository(session_factory=_session_scope)
-    profile_repo = SqlSearchProfileRepository(session_factory=_session_scope)
-    history_repo = SqlApplyStatusHistoryRepository(session_factory=_session_scope)
+    job_repo = SqlApplyJobRepository(session=session)
+    match_repo = SqlVacancyMatchRepository(session=session)
+    profile_repo = SqlSearchProfileRepository(session=session)
+    history_repo = SqlApplyStatusHistoryRepository(session=session)
     rate_limiter: RateLimiter = SqlRateLimiter(
-        session_factory=_session_scope,
+        session=session,
         settings=get_apply_worker_settings(),
     )
     return ApplyJobService(

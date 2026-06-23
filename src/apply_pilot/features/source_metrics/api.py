@@ -49,7 +49,7 @@ def get_source_metric_repository(
 
     Tests override this dependency to inject the in-memory fake.
     """
-    return SqlSourceMetricRepository(session_factory=lambda: session)
+    return SqlSourceMetricRepository(session=session)
 
 
 @router.get(

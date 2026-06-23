@@ -240,12 +240,18 @@ class SqlVacancyMatchRepository:
 
     def __init__(
         self,
+        session: Session | None = None,
         *,
         session_factory: Callable[[], Session] | None = None,
     ) -> None:
+        if session is not None and session_factory is not None:
+            raise ValueError("pass either session or session_factory, not both")
+        self._session = session
         self._session_factory = session_factory
 
     def _scope(self) -> Session:
+        if self._session is not None:
+            return self._session
         if self._session_factory is None:
             raise RuntimeError("SqlVacancyMatchRepository is not bound to a session")
         return self._session_factory()
@@ -263,7 +269,8 @@ class SqlVacancyMatchRepository:
             session.rollback()
             raise
         finally:
-            session.close()
+            if self._session is None:
+                session.close()
 
     def update_status(
         self,
@@ -290,7 +297,8 @@ class SqlVacancyMatchRepository:
             session.rollback()
             raise
         finally:
-            session.close()
+            if self._session is None:
+                session.close()
 
     def update_scoring(
         self,
@@ -324,7 +332,8 @@ class SqlVacancyMatchRepository:
             session.rollback()
             raise
         finally:
-            session.close()
+            if self._session is None:
+                session.close()
 
     def list_pending(self, *, limit: int = 50) -> Sequence[VacancyMatch]:
         """Return ``new``/``review`` matches that have not been scored yet."""
@@ -341,7 +350,8 @@ class SqlVacancyMatchRepository:
             )
             return list(session.execute(statement).scalars().all())
         finally:
-            session.close()
+            if self._session is None:
+                session.close()
 
     def bulk_create_ignore_conflicts(
         self, matches: Sequence[VacancyMatch]
@@ -387,7 +397,8 @@ class SqlVacancyMatchRepository:
             session.rollback()
             raise
         finally:
-            session.close()
+            if self._session is None:
+                session.close()
         # Re-fetch the canonical rows so the caller observes server-side
         # defaults (created_at, …) and skips rows the unique constraint
         # silently dropped.
@@ -403,7 +414,8 @@ class SqlVacancyMatchRepository:
         try:
             return session.get(VacancyMatch, match_id)
         finally:
-            session.close()
+            if self._session is None:
+                session.close()
 
     def list_by_profile(
         self,
@@ -424,7 +436,8 @@ class SqlVacancyMatchRepository:
                 statement = statement.where(VacancyMatch.status == status)
             return list(session.execute(statement).scalars().all())
         finally:
-            session.close()
+            if self._session is None:
+                session.close()
 
     def list_by_user(
         self,
@@ -444,7 +457,8 @@ class SqlVacancyMatchRepository:
                 statement = statement.where(VacancyMatch.status == status)
             return list(session.execute(statement).scalars().all())
         finally:
-            session.close()
+            if self._session is None:
+                session.close()
 
     def list_by_profile_ids(
         self,
@@ -467,7 +481,8 @@ class SqlVacancyMatchRepository:
                 statement = statement.where(VacancyMatch.status == status)
             return list(session.execute(statement).scalars().all())
         finally:
-            session.close()
+            if self._session is None:
+                session.close()
 
     def find_existing(self, profile_id: uuid.UUID, vacancy_id: uuid.UUID) -> VacancyMatch | None:
         session = self._scope()
@@ -478,7 +493,8 @@ class SqlVacancyMatchRepository:
             )
             return session.execute(statement).scalar_one_or_none()
         finally:
-            session.close()
+            if self._session is None:
+                session.close()
 
 
 __all__ = [
