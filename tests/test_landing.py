@@ -58,3 +58,22 @@ def test_landing_page_links_to_health() -> None:
     assert 'href="/admin/health"' in response.text
     # The dashboard surface (for authenticated users) should also be linked.
     assert 'href="/dashboard"' in response.text
+
+
+def test_landing_page_links_to_auth_endpoints() -> None:
+    """The landing page surfaces the auth surface (issue #199).
+
+    A fresh operator must be able to reach ``/auth/login`` and
+    ``/auth/register`` from the public landing page without knowing
+    the URL out of band. The links do not weaken the admin bootstrap
+    model — registration still never sets ``is_admin``; the
+    ``apply-pilot promote`` CLI is the only path to admin.
+    """
+    app = create_app()
+
+    with TestClient(app) as client:
+        response = client.get("/")
+
+    body = response.text
+    assert 'href="/auth/login"' in body
+    assert 'href="/auth/register"' in body
