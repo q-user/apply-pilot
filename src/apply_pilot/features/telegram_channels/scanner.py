@@ -117,6 +117,18 @@ class TelegramChannelScanner(BaseProcess):
     # Loop
     # ------------------------------------------------------------------
 
+    async def _wait_for_shutdown_no_log(self, timeout: float) -> None:
+        """Wait for the shutdown event without emitting a log line.
+
+        ``BaseProcess.wait_for_shutdown`` logs a ``process.shutdown``
+        event unconditionally; using it from an error-recovery
+        branch would emit misleading noise while the worker is still
+        alive. This wrapper delegates to the underlying event
+        with a timeout and without the side effect.
+        """
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(self._shutdown_event.wait(), timeout=timeout)
+
     async def run(self) -> int:
         """Poll until shutdown is requested.
 
@@ -138,17 +150,10 @@ class TelegramChannelScanner(BaseProcess):
                         "telegram_channels.scanner.tick_failed",
                         extra={"event": "telegram_channels.scanner.tick_failed"},
                     )
-                    # ``wait_for`` cancels the underlying ``Event.wait()`` on
-                    # timeout, so no extra task is leaked across cycles. We
-                    # call ``_shutdown_event.wait()`` directly instead of
-                    # ``BaseProcess.wait_for_shutdown()`` because the latter
-                    # logs a ``process.shutdown`` event that is misleading
-                    # while the worker is still alive and just backing off.
-                    with contextlib.suppress(TimeoutError):
-                        await asyncio.wait_for(
-                            self._shutdown_event.wait(),
-                            timeout=_ERROR_BACKOFF_SECONDS,
-                        )
+                    # Wait for shutdown with a short timeout, but don't
+                    # emit the misleading ``process.shutdown`` log that
+                    # ``BaseProcess.wait_for_shutdown`` produces.
+                    await self._wait_for_shutdown_no_log(_ERROR_BACKOFF_SECONDS)
                     continue
 
                 if self.is_shutdown_set():
