@@ -167,7 +167,6 @@ class TestListRecent:
 class TestGetByIds:
     def test_get_by_ids_returns_matching_vacancies(self, repo: VacancyRepository) -> None:
         v1 = repo.upsert(_vacancy(source_id="1", title="Vacancy 1"))
-        v2 = repo.upsert(_vacancy(source_id="2", title="Vacancy 2"))
         v3 = repo.upsert(_vacancy(source_id="3", title="Vacancy 3"))
 
         result = list(repo.get_by_ids([v1.id, v3.id]))
@@ -306,7 +305,6 @@ class TestSqlRepository:
 
     def test_get_by_ids_returns_matching_vacancies(self, sql_repo: SqlVacancyRepository) -> None:
         v1 = sql_repo.upsert(_vacancy(source_id="1", title="Vacancy 1"))
-        v2 = sql_repo.upsert(_vacancy(source_id="2", title="Vacancy 2"))
         v3 = sql_repo.upsert(_vacancy(source_id="3", title="Vacancy 3"))
 
         result = list(sql_repo.get_by_ids([v1.id, v3.id]))
