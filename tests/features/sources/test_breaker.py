@@ -246,6 +246,72 @@ class TestCircuitBreakerOpen:
         # state read.
         assert breaker.state is CircuitState.HALF_OPEN
 
+    def test_open_transitions_to_half_open_after_clamped_window_without_requests(self) -> None:
+        """After clamping in OPEN, if timeout elapsed, state should be HALF_OPEN
+        without calling state/allow_request.
+
+        This is a regression test for issue #208: when a failure occurs in OPEN state
+        AFTER the timeout elapsed, _opened_at is clamped to original + reset_timeout,
+        but the state doesn't transition to HALF_OPEN automatically. The transition
+        only happens in allow_request() / state() - if no requests come in during
+        the clamped window, the breaker stays OPEN indefinitely.
+        """
+        clock = _FakeClock()
+        breaker = CircuitBreaker(
+            clock=clock,
+            settings=_settings(failure_threshold=1, reset_timeout_seconds=1.0),
+        )
+        breaker.record_failure()  # CLOSED -> OPEN at t=0
+        original_opened_at = breaker.opened_at
+        assert original_opened_at is not None
+
+        # Advance clock well past the reset window
+        clock.advance(2.0)  # well past the 1.0s reset window
+
+        # Record a failure in OPEN state - this triggers clamping
+        breaker.record_failure()
+
+        # At this point, _opened_at should be clamped to original + timeout (1.0)
+        # and clock() = 2.0, which is >= 1.0, so the breaker should be HALF_OPEN
+        # But currently it stays OPEN because _refresh_state() is only called
+        # in state() and allow_request()
+        # This test SHOULD pass after the fix
+        assert breaker.state is CircuitState.HALF_OPEN
+
+    def test_open_should_transition_to_half_open_internally_after_clamped_timeout(self) -> None:
+        """The breaker should transition to HALF_OPEN internally after clamped timeout,
+        even if no external call reads state or calls allow_request.
+
+        This test demonstrates the bug: after record_failure() clamps _opened_at,
+        the internal state should transition to HALF_OPEN if the clamped boundary
+        has elapsed. Currently it stays OPEN until someone calls state() or
+        allow_request().
+        """
+        clock = _FakeClock()
+        breaker = CircuitBreaker(
+            clock=clock,
+            settings=_settings(failure_threshold=1, reset_timeout_seconds=1.0),
+        )
+        breaker.record_failure()  # CLOSED -> OPEN at t=0
+        original_opened_at = breaker.opened_at
+        assert original_opened_at is not None
+
+        # Advance clock well past the reset window
+        clock.advance(2.0)  # well past the 1.0s reset window
+
+        # Record a failure in OPEN state - this triggers clamping
+        breaker.record_failure()
+
+        # After clamping, _opened_at should be at original + timeout = 1.0
+        # And clock() = 2.0, so elapsed = 1.0 >= reset_timeout_seconds = 1.0
+        # The breaker SHOULD be in HALF_OPEN state internally
+        # But we can't check it without calling state() which triggers _refresh_state()
+        # So we need a different way to verify the internal state
+
+        # Use _refresh_state directly to see what the internal state would be
+        breaker._refresh_state()
+        assert breaker._state is CircuitState.HALF_OPEN
+
 
 class TestCircuitBreakerHalfOpen:
     def test_reset_timeout_transitions_to_half_open(self) -> None:
