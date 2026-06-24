@@ -14,10 +14,9 @@ the slice already ships:
 * :class:`~apply_pilot.features.screening.extractor.HhScreeningQuestionExtractor` —
   builds screening question rows from ``raw["questions"]``.
 * An :class:`~apply_pilot.features.apply_worker.runtime.ApplyAdapter`
-  with ``name == "hh"`` — the apply submission transport (the
-  production
-  :class:`~apply_pilot.features.hh.apply.HhApplyAdapter` or a fake in
-  tests).
+  with ``name == "hh"`` — the apply submission transport (an
+  integration with the headless-browser tool tracked in #206, or a
+  recording in-memory fake in tests).
 
 The adapter is the single place that wires these collaborators
 together. It does not replace any of them — every existing test keeps
@@ -149,10 +148,9 @@ class HhSourceAdapter:
         The adapter is the
         :class:`~apply_pilot.features.apply_worker.runtime.ApplyAdapter`
         Protocol — a ``name`` attribute plus an async
-        :meth:`ApplyAdapter.submit`. Both
-        :class:`~apply_pilot.features.hh.apply.HhApplyAdapter` (the
-        production implementation) and the recording in-memory fake
-        used in tests satisfy that contract.
+        :meth:`ApplyAdapter.submit`. The production implementation is
+        provided by the headless-browser integration tracked in #206;
+        tests substitute a recording in-memory fake.
         """
         return await self._apply_adapter.submit(job)
 

@@ -1,8 +1,8 @@
 """Admin slice — integration health view (M6, issue #57).
 
 This module owns the contract for reporting the health of every external
-integration the service depends on (hh.ru OAuth, the LLM provider, the
-database, ...). The slice has three moving parts:
+integration the service depends on (LLM provider, database, ...). The
+slice has three moving parts:
 
 * :class:`IntegrationStatus` — the immutable value object the
   ``GET /admin/integrations`` endpoint returns.
@@ -16,6 +16,12 @@ database, ...). The slice has three moving parts:
 The slice is the single source of truth for ``admin/integrations``;
 the FastAPI router in :mod:`apply_pilot.features.admin.api` is a thin
 wrapper that maps the store to HTTP.
+
+Note (M10): the hh.ru OAuth checker has been removed. The HH OAuth
+flow is no longer used (apply is delegated to a separate headless-
+browser tool, see issue #206). The public HH read endpoints remain
+in the :mod:`apply_pilot.features.hh` package but are not modelled as
+a separate integration health entry.
 """
 
 from __future__ import annotations
@@ -28,7 +34,6 @@ from typing import Any, Protocol, runtime_checkable
 
 import httpx
 
-from apply_pilot.features.hh.oauth import HhHttpOAuthClient
 from apply_pilot.features.scoring.llm import HttpLLMClient
 from apply_pilot.runtime.process import BaseProcess
 
@@ -50,7 +55,6 @@ STATUS_UNKNOWN: str = "unknown"
 __all__ = [
     "DatabaseChecker",
     "DEFAULT_REFRESH_INTERVAL_SECONDS",
-    "HhOAuthChecker",
     "InMemoryIntegrationStatusStore",
     "IntegrationChecker",
     "IntegrationStatus",
@@ -76,7 +80,7 @@ class IntegrationStatus:
     Attributes
     ----------
     name:
-        Stable identifier the API exposes (e.g. ``"hh"``, ``"llm"``,
+        Stable identifier the API exposes (e.g. ``"llm"``,
         ``"database"``). The :class:`IntegrationStatusWorker` keys the
         store by this value.
     status:
@@ -179,86 +183,6 @@ def _now() -> Any:
     from datetime import UTC, datetime
 
     return datetime.now(UTC)
-
-
-class HhOAuthChecker:
-    """Health check for the hh.ru OAuth token endpoint.
-
-    The check performs a ``refresh_tokens`` call with a synthetic
-    refresh token. The endpoint is expected to reject the token —
-    ``200`` and ``400`` (invalid_grant) both prove the service is
-    reachable and speaking OAuth correctly. A ``401`` means the client
-    credentials are wrong; any other failure mode is treated as
-    ``unhealthy``.
-    """
-
-    name: str = "hh"
-
-    def __init__(self, *, client: HhHttpOAuthClient) -> None:
-        self._client = client
-        self._logger = logging.getLogger(f"{_LOG_PREFIX}HhOAuthChecker")
-
-    async def check(self) -> IntegrationStatus:
-        """Run the check and translate the response into an :class:`IntegrationStatus`."""
-        from apply_pilot.features.hh.oauth import OAuthExchangeError
-
-        started = time.monotonic()
-        # ``health-check`` is a synthetic refresh token — the endpoint is
-        # expected to reject it. We are only testing reachability and
-        # credential validity, not actually refreshing any user token.
-        try:
-            await self._client.refresh_tokens(refresh_token="health-check")
-        except OAuthExchangeError as exc:
-            latency_ms = int((time.monotonic() - started) * 1000)
-            status_code = exc.status_code
-            if status_code in (200, 400):
-                # 200 means the endpoint ignored the bogus token and
-                # still returned data (extreme edge case); 400 is the
-                # common, healthy "invalid_grant" response.
-                return IntegrationStatus(
-                    name=self.name,
-                    status=STATUS_HEALTHY,
-                    last_checked_at=_now(),
-                    error=None,
-                    metadata={"status_code": status_code, "latency_ms": latency_ms},
-                )
-            # 401 means the configured client credentials are wrong.
-            return IntegrationStatus(
-                name=self.name,
-                status=STATUS_UNHEALTHY,
-                last_checked_at=_now(),
-                error=f"hh.ru OAuth returned HTTP {status_code}: {exc}",
-                metadata={"status_code": status_code, "latency_ms": latency_ms},
-            )
-        except Exception as exc:  # noqa: BLE001 — network/parse failures are unhealthy
-            latency_ms = int((time.monotonic() - started) * 1000)
-            self._logger.warning(
-                "admin.integrations.hh_oauth_check_failed",
-                extra={
-                    "event": "admin.integrations.hh_oauth_check_failed",
-                    "error": str(exc),
-                },
-            )
-            return IntegrationStatus(
-                name=self.name,
-                status=STATUS_UNHEALTHY,
-                last_checked_at=_now(),
-                error=f"hh.ru OAuth check failed: {exc}",
-                metadata={"latency_ms": latency_ms},
-            )
-
-        # 200 with a parsed body — the endpoint is healthy and the
-        # credentials are valid. This branch is hit when hh.ru happens
-        # to accept our synthetic token (it shouldn't, but treat it as
-        # healthy because the whole point of the check is to be green).
-        latency_ms = int((time.monotonic() - started) * 1000)
-        return IntegrationStatus(
-            name=self.name,
-            status=STATUS_HEALTHY,
-            last_checked_at=_now(),
-            error=None,
-            metadata={"status_code": 200, "latency_ms": latency_ms},
-        )
 
 
 class LlmChecker:

@@ -42,8 +42,8 @@ Public surface
 * :class:`InMemoryIntegrationStatusStore` — the default store.
 * :class:`IntegrationStatusWorker` — the long-running
   :class:`BaseProcess` that drives the refresh loop.
-* :class:`HhOAuthChecker`, :class:`LlmChecker`, :class:`DatabaseChecker`
-  — the three concrete :class:`IntegrationChecker` implementations.
+* :class:`LlmChecker`, :class:`DatabaseChecker` — the two concrete
+  :class:`IntegrationChecker` implementations.
 * :class:`HealthStatus` — status label enum.
 * :class:`HealthCheckResult` — immutable probe result.
 * :class:`HealthCheck` — Protocol every probe implements.
@@ -74,7 +74,6 @@ from apply_pilot.features.admin.health import (
 )
 from apply_pilot.features.admin.integrations import (
     DatabaseChecker,
-    HhOAuthChecker,
     InMemoryIntegrationStatusStore,
     IntegrationChecker,
     IntegrationStatus,
@@ -90,7 +89,6 @@ __all__ = [
     "HealthCheck",
     "HealthCheckResult",
     "HealthStatus",
-    "HhOAuthChecker",
     "InMemoryIntegrationStatusStore",
     "IntegrationChecker",
     "IntegrationStatus",

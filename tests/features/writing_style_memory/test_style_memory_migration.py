@@ -94,9 +94,12 @@ def test_style_memory_alembic_upgrade_creates_table(tmp_path: Path) -> None:
 def test_style_memory_alembic_downgrade_drops_table(tmp_path: Path) -> None:
     """``alembic downgrade`` removes the style_memory_entries table.
 
-    The migration is a merge node with two parents; we downgrade to
-    one of the parents (``f1a2b3c4d5e6``) and assert the table is
-    gone. This is enough to exercise the downgrade path.
+    Originally the migration was a merge node with two parents
+    (``eb6c1c51520c`` and ``f1a2b3c4d5e6``); the test used to downgrade
+    to the ``f1a2b3c4d5e6`` parent and assert the table is gone. M10
+    (issue #204) dropped the ``f1a2b3c4d5e6`` migration, so the
+    ``71a2b3c4d5e6`` revision now has a single parent. We downgrade
+    to ``eb6c1c51520c`` instead.
     """
     db_path = tmp_path / "style_memory_migration.db"
     url = f"sqlite+pysqlite:///{db_path}"
@@ -115,9 +118,10 @@ def test_style_memory_alembic_downgrade_drops_table(tmp_path: Path) -> None:
     )
     assert "style_memory_entries" in _table_names(db_path)
 
-    # Downgrade to one of the merge parents.
+    # Downgrade to the parent. Was ``f1a2b3c4d5e6`` (the other merge
+    # parent) before M10 dropped that revision.
     result = subprocess.run(
-        [python, "-m", "alembic", "downgrade", "f1a2b3c4d5e6"],
+        [python, "-m", "alembic", "downgrade", "eb6c1c51520c"],
         cwd=repo_root,
         env=env,
         capture_output=True,

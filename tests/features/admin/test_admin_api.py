@@ -44,7 +44,6 @@ from apply_pilot.features.admin.health import (
     get_health_checks,
 )
 from apply_pilot.features.admin.integrations import (
-    HhOAuthChecker,
     InMemoryIntegrationStatusStore,
     IntegrationStatus,
     IntegrationStatusWorker,
@@ -52,7 +51,6 @@ from apply_pilot.features.admin.integrations import (
 )
 from apply_pilot.features.audit import models as _audit_models  # noqa: F401
 from apply_pilot.features.audit import repository as _audit_repository  # noqa: F401
-from apply_pilot.features.hh.oauth import HhHttpOAuthClient
 from apply_pilot.features.matches import models as _match_models  # noqa: F401
 from apply_pilot.features.scoring_ab import models as _scoring_ab_models  # noqa: F401
 from apply_pilot.features.scoring_ab.api import router as scoring_ab_router
@@ -76,23 +74,6 @@ from apply_pilot.features.users.security import issue_token
 # ---------------------------------------------------------------------------
 # Helpers / fakes
 # ---------------------------------------------------------------------------
-
-
-def _hh_oauth_handler(status_code: int) -> Any:
-    def handler(request: httpx.Request) -> httpx.Response:
-        if status_code == 200:
-            return httpx.Response(
-                200,
-                json={
-                    "access_token": "fake-access-token",
-                    "refresh_token": "fake-refresh-token",
-                    "expires_in": 3600,
-                    "token_type": "bearer",
-                },
-            )
-        return httpx.Response(status_code, json={"error": "invalid_grant"})
-
-    return handler
 
 
 def _llm_handler(request: httpx.Request) -> httpx.Response:
@@ -160,9 +141,9 @@ def override_get_db(session_factory: Any) -> Any:
 def integration_store() -> InMemoryIntegrationStatusStore:
     store = InMemoryIntegrationStatusStore()
     store.update(
-        "hh",
+        "llm",
         IntegrationStatus(
-            name="hh",
+            name="llm",
             status="healthy",
             last_checked_at=datetime.now(UTC),
             error=None,
@@ -176,14 +157,6 @@ def integration_store() -> InMemoryIntegrationStatusStore:
 def integration_worker(
     integration_store: InMemoryIntegrationStatusStore,
 ) -> IntegrationStatusWorker:
-    hh = HhOAuthChecker(
-        client=HhHttpOAuthClient(
-            client_id="cid",
-            client_secret="secret",
-            redirect_uri="https://example.com/cb",
-            transport=httpx.MockTransport(_hh_oauth_handler(200)),
-        )
-    )
     llm = LlmChecker(
         client=__import__(
             "apply_pilot.features.scoring.llm", fromlist=["HttpLLMClient", "LLMSettings"]
@@ -196,7 +169,7 @@ def integration_worker(
     )
     return IntegrationStatusWorker(
         store=integration_store,
-        checkers=[hh, llm],
+        checkers=[llm],
         refresh_interval_seconds=60.0,
         name="issue-145-worker",
     )

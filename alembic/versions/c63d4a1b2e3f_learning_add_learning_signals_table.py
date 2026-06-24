@@ -1,7 +1,7 @@
 """learning: add learning_signals table for the M8 feedback store
 
 Revision ID: c63d4a1b2e3f
-Revises: eb6c1c51520c, f1a2b3c4d5e6
+Revises: eb6c1c51520c
 Create Date: 2026-06-17 12:00:00.000000
 
 Issue #63 (M8: Add learning signals from user rejections). This
@@ -49,6 +49,13 @@ and to keep the table definition next to its documentation. It
 branches off both currently-open heads
 (``eb6c1c51520c`` — search_profiles is_preferred, and
 ``f1a2b3c4d5e6`` — hh resume links) so the chain stays linear.
+
+.. note::
+   M10 (issue #204) removed the HH OAuth / apply path, including the
+   ``f1a2b3c4d5e6_hh_add_hh_resume_links_table`` migration. The
+   ``down_revision`` above used to be the tuple
+   ``("eb6c1c51520c", "f1a2b3c4d5e6")``; we now point only at
+   ``eb6c1c51520c`` because the other branch is gone.
 """
 
 from __future__ import annotations
@@ -60,10 +67,10 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "c63d4a1b2e3f"
-# Branch off both currently-open heads so this revision merges the
-# chain back to a single linear head. Same pattern as PR #118
-# (issue #30, revision ``a1b2c3d4e5f6``).
-down_revision: str | Sequence[str] | None = ("eb6c1c51520c", "f1a2b3c4d5e6")
+# Originally branched off both currently-open heads to merge the chain.
+# M10 dropped the ``f1a2b3c4d5e6`` migration, so the parent is now
+# only ``eb6c1c51520c``.
+down_revision: str | Sequence[str] | None = "eb6c1c51520c"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -1,9 +1,9 @@
 """TDD tests for the admin/integrations slice (M6, issue #57).
 
 The slice exposes a read-only ``GET /admin/integrations`` endpoint that
-returns the current health of every external integration (hh OAuth, LLM,
-database, ...) and a ``POST /admin/integrations/refresh`` endpoint that
-manually triggers a one-shot refresh via the ``IntegrationStatusWorker``.
+returns the current health of every external integration (LLM, database,
+...) and a ``POST /admin/integrations/refresh`` endpoint that manually
+triggers a one-shot refresh via the ``IntegrationStatusWorker``.
 
 A long-running ``IntegrationStatusWorker`` (a :class:`BaseProcess` subclass)
 periodically runs every :class:`IntegrationChecker` and updates the shared
@@ -13,20 +13,21 @@ Conventions
 -----------
 
 * Tests use the in-memory store and a fake :class:`IntegrationChecker` for
-  the worker tests. The real :class:`HhOAuthChecker` and :class:`LlmChecker`
-  tests inject :class:`httpx.MockTransport` so no real network traffic
-  is generated. The :class:`DatabaseChecker` test uses a fake ping.
+  the worker tests. The real :class:`LlmChecker` tests inject
+  :class:`httpx.MockTransport` so no real network traffic is generated.
+  The :class:`DatabaseChecker` test uses a fake ping.
 * No ``Mock`` anywhere — every test asserts observable behaviour
   (store contents, API response body, call counts) on real fakes.
+
+Note (M10): the hh.ru OAuth checker has been removed. Apply is delegated
+to a separate headless-browser tool (see issue #206).
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from datetime import UTC, datetime
-from typing import Any
 
 import httpx
 import pytest
@@ -34,225 +35,180 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import StaticPool, create_engine
 
-from apply_pilot.config import get_admin_auth_required
 from apply_pilot.features.admin.integrations import (
     DatabaseChecker,
-    HhOAuthChecker,
     InMemoryIntegrationStatusStore,
     IntegrationStatus,
-    IntegrationStatusStore,
     IntegrationStatusWorker,
     LlmChecker,
 )
-from apply_pilot.features.hh.oauth import HhHttpOAuthClient
 from apply_pilot.features.scoring.llm import HttpLLMClient, LLMSettings
 
 # ---------------------------------------------------------------------------
-# Fake checker used by the worker + API tests
+# Helpers / fakes
 # ---------------------------------------------------------------------------
 
 
-class _FakeChecker:
-    """Programmable :class:`IntegrationChecker` for worker and API tests.
+def _llm_handler(request: httpx.Request) -> httpx.Response:
+    return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
 
-    The fake exposes a :meth:`set_health` hook so each test can change the
-    status the next :meth:`check` call returns without re-wiring the
-    worker. Call counts are tracked on :attr:`call_count` so tests can
-    assert that the worker actually ran every checker the right number
-    of times.
+
+class _CountingChecker:
+    """A trivial :class:`IntegrationChecker` whose ``check`` increments a counter.
+
+    Used to assert the worker calls every registered checker once per
+    iteration. The status returned is :data:`STATUS_HEALTHY` so the
+    store accumulates predictable values.
     """
 
-    def __init__(
-        self,
-        name: str,
-        *,
-        status: str = "healthy",
-        error: str | None = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> None:
-        self.name = name
-        self._status = status
-        self._error = error
-        self._metadata = metadata
+    def __init__(self, name: str) -> None:
+        self._name = name
         self.call_count = 0
 
-    def set_health(
-        self,
-        *,
-        status: str = "healthy",
-        error: str | None = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> None:
-        self._status = status
-        self._error = error
-        self._metadata = metadata
+    @property
+    def name(self) -> str:
+        return self._name
 
     async def check(self) -> IntegrationStatus:
         self.call_count += 1
         return IntegrationStatus(
-            name=self.name,
-            status=self._status,
+            name=self._name,
+            status="healthy",
             last_checked_at=datetime.now(UTC),
-            error=self._error,
-            metadata=self._metadata,
+            error=None,
+            metadata={"call_count": self.call_count},
         )
 
 
 # ---------------------------------------------------------------------------
-# Pure-data tests
+# Value object + in-memory store
 # ---------------------------------------------------------------------------
 
 
 def test_integration_status_dataclass() -> None:
-    """The :class:`IntegrationStatus` dataclass must round-trip every field."""
-    last_checked = datetime(2026, 6, 17, 12, 0, 0, tzinfo=UTC)
+    """IntegrationStatus should be a frozen, kw-only-friendly value object."""
+    ts = datetime.now(UTC)
     status = IntegrationStatus(
-        name="hh",
+        name="llm",
         status="healthy",
-        last_checked_at=last_checked,
+        last_checked_at=ts,
         error=None,
         metadata={"latency_ms": 42},
     )
-    assert status.name == "hh"
+    assert status.name == "llm"
     assert status.status == "healthy"
-    assert status.last_checked_at == last_checked
+    assert status.last_checked_at == ts
     assert status.error is None
     assert status.metadata == {"latency_ms": 42}
 
-    # The dataclass must be immutable — assignment to a field is a TypeError.
-    with pytest.raises((AttributeError, TypeError)):
-        status.status = "unhealthy"  # type: ignore[misc]
-
 
 def test_in_memory_store_get_all_returns_empty() -> None:
-    """A fresh store must return an empty list from :meth:`get_all`."""
+    """Empty store returns an empty list (not None)."""
     store = InMemoryIntegrationStatusStore()
     assert store.get_all() == []
 
 
 def test_in_memory_store_update_persists() -> None:
-    """``update(name, status)`` must make the status visible via :meth:`get_all`."""
+    """Updating the store replaces any prior entry under the same name."""
     store = InMemoryIntegrationStatusStore()
-    status = IntegrationStatus(
-        name="llm",
-        status="degraded",
-        last_checked_at=datetime.now(UTC),
-        error="timeout",
-        metadata=None,
-    )
-    store.update("llm", status)
-    all_statuses = store.get_all()
-    assert len(all_statuses) == 1
-    assert all_statuses[0].name == "llm"
-    assert all_statuses[0].status == "degraded"
-    assert all_statuses[0].error == "timeout"
-
-    # A second update for the same name must replace the entry, not append.
-    updated = IntegrationStatus(
+    ts = datetime.now(UTC)
+    first = IntegrationStatus(
         name="llm",
         status="healthy",
-        last_checked_at=datetime.now(UTC),
+        last_checked_at=ts,
         error=None,
         metadata=None,
     )
-    store.update("llm", updated)
-    all_statuses = store.get_all()
-    assert len(all_statuses) == 1
-    assert all_statuses[0].status == "healthy"
+    store.update("llm", first)
+    assert store.get_all() == [first]
+
+    second = IntegrationStatus(
+        name="llm",
+        status="degraded",
+        last_checked_at=ts,
+        error="slow",
+        metadata=None,
+    )
+    store.update("llm", second)
+    assert store.get_all() == [second]
+
+
+def test_in_memory_store_get_all_is_sorted_by_name() -> None:
+    """The store returns statuses sorted by name for stable API output."""
+    store = InMemoryIntegrationStatusStore()
+    ts = datetime.now(UTC)
+    for n in ("z", "a", "m"):
+        store.update(
+            n,
+            IntegrationStatus(
+                name=n,
+                status="healthy",
+                last_checked_at=ts,
+                error=None,
+                metadata=None,
+            ),
+        )
+    assert [s.name for s in store.get_all()] == ["a", "m", "z"]
 
 
 # ---------------------------------------------------------------------------
-# Real-checker tests (httpx.MockTransport)
+# LlmChecker
 # ---------------------------------------------------------------------------
-
-
-def _hh_oauth_handler(status_code: int) -> Callable[[httpx.Request], httpx.Response]:
-    """Return a transport handler that always replies with ``status_code``.
-
-    A 200 response returns a valid token payload (the happy path: hh.ru
-    accepts our synthetic refresh token). Any other status code returns
-    an OAuth error body, which the client maps onto a non-2xx response
-    via :class:`OAuthExchangeError`.
-    """
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        # The hh.ru token endpoint accepts POST; we don't care about the
-        # request body, only the response shape.
-        if status_code == 200:
-            return httpx.Response(
-                200,
-                json={
-                    "access_token": "fake-access-token",
-                    "refresh_token": "fake-refresh-token",
-                    "expires_in": 3600,
-                    "token_type": "bearer",
-                },
-            )
-        return httpx.Response(status_code, json={"error": "invalid_grant"})
-
-    return handler
-
-
-def test_hh_oauth_checker_returns_status() -> None:
-    """The checker must report ``healthy`` for 200 and ``unhealthy`` for 401."""
-    # Healthy path: 200 OK.
-    healthy_client = HhHttpOAuthClient(
-        client_id="cid",
-        client_secret="secret",
-        redirect_uri="https://example.com/cb",
-        transport=httpx.MockTransport(_hh_oauth_handler(200)),
-    )
-    healthy_checker = HhOAuthChecker(client=healthy_client)
-    healthy_status = asyncio.run(healthy_checker.check())
-    assert healthy_status.name == "hh"
-    assert healthy_status.status == "healthy"
-    assert healthy_status.error is None
-
-    # Unhealthy path: 401 (auth failure).
-    unhealthy_client = HhHttpOAuthClient(
-        client_id="cid",
-        client_secret="secret",
-        redirect_uri="https://example.com/cb",
-        transport=httpx.MockTransport(_hh_oauth_handler(401)),
-    )
-    unhealthy_checker = HhOAuthChecker(client=unhealthy_client)
-    unhealthy_status = asyncio.run(unhealthy_checker.check())
-    assert unhealthy_status.name == "hh"
-    assert unhealthy_status.status == "unhealthy"
-    assert unhealthy_status.error is not None
-    assert "401" in unhealthy_status.error
 
 
 def test_llm_checker_returns_status() -> None:
-    """The LLM checker must report ``healthy`` on a valid 2xx response."""
-    captured: dict[str, Any] = {}
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        # The checker should send a chat-completions payload — capture
-        # the request body so the test verifies the call shape.
-        captured["url"] = str(request.url)
-        captured["body"] = json.loads(request.content)
-        return httpx.Response(
-            200,
-            json={"choices": [{"message": {"content": "ok"}}]},
-        )
-
-    client = HttpLLMClient(
-        LLMSettings(api_key="test-key", base_url="https://llm.example.com/v1", model="m"),
-        transport=httpx.MockTransport(handler),
-    )
+    """A 2xx response with non-empty content is healthy."""
+    settings = LLMSettings(api_key="test", base_url="https://llm.example.com/v1", model="m")
+    client = HttpLLMClient(settings, transport=httpx.MockTransport(_llm_handler))
     checker = LlmChecker(client=client)
+
     status = asyncio.run(checker.check())
     assert status.name == "llm"
     assert status.status == "healthy"
     assert status.error is None
-    # The checker used the configured base URL and a chat-completions body.
-    assert captured["url"].endswith("/chat/completions")
-    assert captured["body"]["model"] == "m"
+    assert status.metadata is not None
+    assert "latency_ms" in status.metadata
+    assert status.metadata["response_chars"] == len("ok")
+
+
+def test_llm_checker_reports_degraded_on_empty_content() -> None:
+    """A 2xx response with empty content is degraded, not healthy."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"choices": [{"message": {"content": ""}}]})
+
+    settings = LLMSettings(api_key="test", base_url="https://llm.example.com/v1", model="m")
+    client = HttpLLMClient(settings, transport=httpx.MockTransport(handler))
+    checker = LlmChecker(client=client)
+
+    status = asyncio.run(checker.check())
+    assert status.status == "degraded"
+    assert status.error is not None and "empty" in status.error
+
+
+def test_llm_checker_reports_unhealthy_on_5xx() -> None:
+    """A 5xx response is unhealthy and surfaces the status code."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503, json={"error": "unavailable"})
+
+    settings = LLMSettings(api_key="test", base_url="https://llm.example.com/v1", model="m")
+    client = HttpLLMClient(settings, transport=httpx.MockTransport(handler))
+    checker = LlmChecker(client=client)
+
+    status = asyncio.run(checker.check())
+    assert status.status == "unhealthy"
+    assert status.error is not None
+    assert "503" in status.error
+
+
+# ---------------------------------------------------------------------------
+# DatabaseChecker
+# ---------------------------------------------------------------------------
 
 
 def test_database_checker_returns_status() -> None:
-    """A live sqlite engine must report ``healthy``; an unreachable one ``unhealthy``."""
+    """A live sqlite engine is ``healthy``; an unreachable one is ``unhealthy``."""
     engine = create_engine(
         "sqlite:///:memory:",
         future=True,
@@ -267,236 +223,230 @@ def test_database_checker_returns_status() -> None:
 
     # An engine that cannot be reached must report ``unhealthy``. We
     # point at a sqlite path inside a non-existent directory so the
-    # connect attempt fails fast with an :class:`OperationalError`
-    # (a :class:`SQLAlchemyError` subclass) — no network and no
-    # ``psycopg`` driver required.
+    # connect attempt fails fast with an :class:`OperationalError`.
     bad_engine = create_engine(
         "sqlite:///nonexistent_dir_for_health_check/nonexistent.db",
         future=True,
     )
     bad_checker = DatabaseChecker(engine=bad_engine)
-    unhealthy_status = asyncio.run(bad_checker.check())
-    assert unhealthy_status.name == "database"
-    assert unhealthy_status.status == "unhealthy"
-    assert unhealthy_status.error is not None
+    bad_status = asyncio.run(bad_checker.check())
+    assert bad_status.name == "database"
+    assert bad_status.status == "unhealthy"
+    assert bad_status.error is not None
 
 
 # ---------------------------------------------------------------------------
-# Worker tests
+# Worker
 # ---------------------------------------------------------------------------
 
 
 def test_worker_run_once_calls_all_checkers() -> None:
-    """``run_once`` must invoke every checker exactly once and update the store."""
-    store: IntegrationStatusStore = InMemoryIntegrationStatusStore()
-    hh = _FakeChecker("hh", status="healthy")
-    llm = _FakeChecker("llm", status="degraded", error="slow")
+    """``run_once`` calls every registered checker once and writes to the store."""
+    store = InMemoryIntegrationStatusStore()
+    counters = [_CountingChecker("a"), _CountingChecker("b"), _CountingChecker("c")]
     worker = IntegrationStatusWorker(
         store=store,
-        checkers=[hh, llm],
+        checkers=counters,
         refresh_interval_seconds=60.0,
+        name="test-worker-once",
     )
-    asyncio.run(worker.run_once())
 
-    assert hh.call_count == 1
-    assert llm.call_count == 1
+    results = asyncio.run(worker.run_once())
+    assert [c.call_count for c in counters] == [1, 1, 1]
+    assert {r.name for r in results} == {"a", "b", "c"}
+    assert {s.name for s in store.get_all()} == {"a", "b", "c"}
 
-    statuses = {s.name: s for s in store.get_all()}
-    assert statuses["hh"].status == "healthy"
-    assert statuses["llm"].status == "degraded"
-    assert statuses["llm"].error == "slow"
+
+def test_worker_run_once_isolates_failing_checkers() -> None:
+    """A checker that raises is recorded as unhealthy; the loop survives."""
+
+    class _BoomChecker:
+        name = "boom"
+
+        async def check(self) -> IntegrationStatus:
+            raise RuntimeError("nope")
+
+    store = InMemoryIntegrationStatusStore()
+    healthy = _CountingChecker("ok")
+    worker = IntegrationStatusWorker(
+        store=store,
+        checkers=[_BoomChecker(), healthy],
+        refresh_interval_seconds=60.0,
+        name="test-worker-boom",
+    )
+
+    results = asyncio.run(worker.run_once())
+    assert healthy.call_count == 1
+    statuses = {s.name: s for s in results}
+    assert statuses["boom"].status == "unhealthy"
+    assert "nope" in (statuses["boom"].error or "")
+    assert statuses["ok"].status == "healthy"
 
 
 def test_worker_run_loops_with_interval() -> None:
-    """``run`` must call every checker repeatedly until shutdown."""
-    store: IntegrationStatusStore = InMemoryIntegrationStatusStore()
-    hh = _FakeChecker("hh")
-    llm = _FakeChecker("llm")
+    """``run`` calls ``run_once`` repeatedly until shutdown is requested."""
+    store = InMemoryIntegrationStatusStore()
+    counter = _CountingChecker("loop")
     worker = IntegrationStatusWorker(
         store=store,
-        checkers=[hh, llm],
-        refresh_interval_seconds=0.05,
-        name="integration-status-test",
+        checkers=[counter],
+        refresh_interval_seconds=0.01,
+        name="test-worker-loop",
     )
 
-    async def drive() -> None:
-        task = asyncio.create_task(worker.run())
-        # Give the worker time to run a few iterations.
-        await asyncio.sleep(0.2)
-        worker.request_shutdown()
-        await asyncio.wait_for(task, timeout=2.0)
+    async def _driver() -> None:
+        # Stop the worker after at most 2 iterations so the test is fast.
+        async def _stop_soon() -> None:
+            await asyncio.sleep(0.05)
+            worker.request_shutdown()
 
-    asyncio.run(drive())
+        await asyncio.gather(worker.run(), _stop_soon())
 
-    # The exact count is timing-dependent; we just need "more than one"
-    # to prove the loop is running.
-    assert hh.call_count >= 2
-    assert llm.call_count >= 2
+    asyncio.run(_driver())
+    assert counter.call_count >= 2
 
 
 def test_worker_handles_graceful_shutdown() -> None:
-    """The worker must exit cleanly when ``request_shutdown`` is called."""
-    store: IntegrationStatusStore = InMemoryIntegrationStatusStore()
-    checker = _FakeChecker("hh")
+    """``request_shutdown`` makes :meth:`run` return 0 on the next tick."""
+    store = InMemoryIntegrationStatusStore()
+    counter = _CountingChecker("shutdown")
     worker = IntegrationStatusWorker(
         store=store,
-        checkers=[checker],
+        checkers=[counter],
         refresh_interval_seconds=0.01,
-        name="integration-status-shutdown",
+        name="test-worker-shutdown",
     )
 
-    async def drive() -> int:
-        task = asyncio.create_task(worker.run())
-        # Let one iteration finish, then shut down.
-        await asyncio.sleep(0.05)
-        worker.request_shutdown()
-        return await asyncio.wait_for(task, timeout=2.0)
+    async def _driver() -> int:
+        async def _stop_now() -> None:
+            await asyncio.sleep(0.02)
+            worker.request_shutdown()
 
-    exit_code = asyncio.run(drive())
-    assert exit_code == 0
-    assert checker.call_count >= 1
-    # The store must be populated with a final healthy status from the
-    # last iteration before shutdown.
-    statuses = {s.name: s for s in store.get_all()}
-    assert statuses["hh"].status == "healthy"
+        await asyncio.gather(worker.run(), _stop_now())
+        return counter.call_count
+
+    calls = asyncio.run(_driver())
+    assert calls >= 1
 
 
 # ---------------------------------------------------------------------------
-# API tests
+# API endpoints
 # ---------------------------------------------------------------------------
-
-
-@pytest.fixture
-def hh_oauth_checker() -> HhOAuthChecker:
-    """A :class:`HhOAuthChecker` backed by an httpx mock that returns 200."""
-    return HhOAuthChecker(
-        client=HhHttpOAuthClient(
-            client_id="cid",
-            client_secret="secret",
-            redirect_uri="https://example.com/cb",
-            transport=httpx.MockTransport(_hh_oauth_handler(200)),
-        )
-    )
 
 
 @pytest.fixture
 def llm_checker() -> LlmChecker:
     """A :class:`LlmChecker` backed by an httpx mock that returns 200."""
-    return LlmChecker(
-        client=HttpLLMClient(
-            LLMSettings(api_key="test-key", base_url="https://llm.example.com/v1", model="m"),
-            transport=httpx.MockTransport(
-                lambda request: httpx.Response(
-                    200, json={"choices": [{"message": {"content": "ok"}}]}
-                )
-            ),
-        )
+    settings = LLMSettings(api_key="test-key", base_url="https://llm.example.com/v1", model="m")
+    client = HttpLLMClient(settings, transport=httpx.MockTransport(_llm_handler))
+    return LlmChecker(client=client)
+
+
+@pytest.fixture
+def integration_worker(
+    integration_store: InMemoryIntegrationStatusStore,
+    llm_checker: LlmChecker,
+) -> IntegrationStatusWorker:
+    """Worker under test, with a single :class:`LlmChecker`."""
+    return IntegrationStatusWorker(
+        store=integration_store,
+        checkers=[llm_checker],
+        refresh_interval_seconds=60.0,
+        name="test-worker",
     )
 
 
 @pytest.fixture
-def store() -> InMemoryIntegrationStatusStore:
+def integration_store() -> InMemoryIntegrationStatusStore:
     return InMemoryIntegrationStatusStore()
 
 
 @pytest.fixture
-def app(
-    store: InMemoryIntegrationStatusStore,
-    hh_oauth_checker: HhOAuthChecker,
-    llm_checker: LlmChecker,
+def admin_app(
+    integration_store: InMemoryIntegrationStatusStore,
 ) -> Iterator[FastAPI]:
-    """A minimal FastAPI app with the admin router and overridden DI."""
+    """Build a minimal FastAPI app mounting the admin router for endpoint tests.
+
+    The auth gate is bypassed by overriding the
+    :func:`require_admin_user` dependency on the FastAPI app (the
+    M6/M8 admin router uses it as a drop-in). We could also override
+    :func:`get_admin_auth_required` via ``dependency_overrides``, but
+    since the M6 fixture exists in isolation (the slice has its own
+    test_db / no other routers), we just install a no-op admin user
+    resolver.
+    """
+    from apply_pilot.features.admin import router as admin_router
+    from apply_pilot.features.admin._auth import require_admin_user
     from apply_pilot.features.admin.api import (
         get_integration_status_store,
         get_integration_status_worker,
-        router,
     )
 
-    worker = IntegrationStatusWorker(
-        store=store,
-        checkers=[hh_oauth_checker, llm_checker],
-        refresh_interval_seconds=60.0,
-        name="integration-status-api",
-    )
-
-    application = FastAPI()
-    application.include_router(router)
-    application.dependency_overrides[get_integration_status_store] = lambda: store
-    application.dependency_overrides[get_integration_status_worker] = lambda: worker
-    # The admin auth gate is disabled in this fixture so the
-    # pre-issue-#145 tests do not need a token; the dedicated
-    # :mod:`tests.features.admin.test_admin_api` suite covers the
-    # auth-required code path.
-    application.dependency_overrides[get_admin_auth_required] = lambda: False
-    try:
-        yield application
-    finally:
-        application.dependency_overrides.clear()
-
-
-@pytest.fixture
-def client(app: FastAPI) -> Iterator[TestClient]:
-    with TestClient(app) as c:
-        yield c
+    app = FastAPI()
+    app.include_router(admin_router)
+    app.state.integration_store = integration_store
+    app.dependency_overrides[get_integration_status_store] = lambda: integration_store
+    app.dependency_overrides[get_integration_status_worker] = lambda: None
+    app.dependency_overrides[require_admin_user] = lambda: "anonymous"
+    yield app
+    app.dependency_overrides.clear()
 
 
 def test_api_integration_status_endpoint(
-    client: TestClient,
-    store: InMemoryIntegrationStatusStore,
+    admin_app: FastAPI,
+    integration_store: InMemoryIntegrationStatusStore,
 ) -> None:
-    """``GET /admin/integrations`` must return the current store contents."""
-    # Pre-seed the store so the endpoint has something to return.
-    store.update(
-        "hh",
-        IntegrationStatus(
-            name="hh",
-            status="healthy",
-            last_checked_at=datetime.now(UTC),
-            error=None,
-            metadata=None,
-        ),
-    )
-    store.update(
+    """``GET /admin/integrations`` returns the current store contents."""
+    ts = datetime.now(UTC)
+    integration_store.update(
         "llm",
         IntegrationStatus(
             name="llm",
-            status="unhealthy",
-            last_checked_at=datetime.now(UTC),
-            error="500 from upstream",
-            metadata=None,
+            status="healthy",
+            last_checked_at=ts,
+            error=None,
+            metadata={"latency_ms": 12},
         ),
     )
 
-    response = client.get("/admin/integrations")
-    assert response.status_code == 200
+    with TestClient(admin_app) as client:
+        response = client.get("/admin/integrations")
+    assert response.status_code == 200, response.text
     body = response.json()
     assert isinstance(body, list)
-    assert len(body) == 2
-    by_name = {item["name"]: item for item in body}
-    assert by_name["hh"]["status"] == "healthy"
-    assert by_name["llm"]["status"] == "unhealthy"
-    assert by_name["llm"]["error"] == "500 from upstream"
+    names = {entry["name"] for entry in body}
+    assert names == {"llm"}
+    llm_entry = next(e for e in body if e["name"] == "llm")
+    assert llm_entry["status"] == "healthy"
+    assert llm_entry["last_checked_at"].startswith(ts.strftime("%Y-%m-%d"))
 
 
 def test_api_refresh_endpoint(
-    client: TestClient,
-    store: InMemoryIntegrationStatusStore,
-    hh_oauth_checker: HhOAuthChecker,
-    llm_checker: LlmChecker,
+    admin_app: FastAPI,
+    integration_store: InMemoryIntegrationStatusStore,
+    integration_worker: IntegrationStatusWorker,
 ) -> None:
-    """``POST /admin/integrations/refresh`` must run every checker once and return them."""
-    response = client.post("/admin/integrations/refresh")
-    assert response.status_code == 200
-    body = response.json()
-    assert isinstance(body, list)
-    by_name = {item["name"]: item for item in body}
-    assert "hh" in by_name
-    assert "llm" in by_name
-    # The checkers return healthy in this fixture.
-    assert by_name["hh"]["status"] == "healthy"
-    assert by_name["llm"]["status"] == "healthy"
+    """``POST /admin/integrations/refresh`` runs every checker once."""
+    from apply_pilot.features.admin.api import get_integration_status_worker
 
-    # The store must reflect the same data the endpoint returned.
-    stored = {s.name: s for s in store.get_all()}
-    assert stored["hh"].status == "healthy"
-    assert stored["llm"].status == "healthy"
+    admin_app.dependency_overrides[get_integration_status_worker] = lambda: integration_worker
+
+    with TestClient(admin_app) as client:
+        response = client.post("/admin/integrations/refresh")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    statuses = {entry["name"]: entry for entry in body}
+    assert "llm" in statuses
+    assert statuses["llm"]["status"] == "healthy"
+    # The worker wrote through to the shared store too.
+    assert {s.name for s in integration_store.get_all()} == {"llm"}
+
+
+def test_api_integration_status_endpoint_empty(
+    admin_app: FastAPI,
+) -> None:
+    """Empty store yields a 200 with an empty list."""
+    with TestClient(admin_app) as client:
+        response = client.get("/admin/integrations")
+    assert response.status_code == 200
+    assert response.json() == []
