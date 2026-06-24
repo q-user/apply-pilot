@@ -37,7 +37,11 @@ from sqlalchemy.orm import Session
 from apply_pilot.config import get_admin_auth_required
 from apply_pilot.db import get_db
 from apply_pilot.features.users.models import User
-from apply_pilot.features.users.security import InvalidTokenError, default_token_store
+from apply_pilot.features.users.security import (
+    InvalidTokenError,
+    TokenStore,
+    default_token_store,
+)
 from apply_pilot.features.users.session import get_session_token
 
 _LOGGER = logging.getLogger("apply_pilot.features.admin.auth")
@@ -45,6 +49,18 @@ _LOGGER = logging.getLogger("apply_pilot.features.admin.auth")
 # ``auto_error=False`` lets us return our own 401 with a stable JSON
 # shape instead of FastAPI's default ``{"detail": "Not authenticated"}``.
 _bearer_scheme = HTTPBearer(auto_error=False)
+
+
+def get_token_store() -> TokenStore:
+    """Return the :class:`TokenStore` used by the admin auth gate.
+
+    Defaults to the process-wide :func:`default_token_store` so
+    production behaviour is identical to the pre-#209 wiring. Tests
+    (and any future Redis-backed deployment) override this dependency
+    via :attr:`fastapi.FastAPI.dependency_overrides` to inject a custom
+    store without monkey-patching :mod:`apply_pilot.features.users.security`.
+    """
+    return default_token_store()
 
 
 def _http_error(status_code: int, code: str, message: str) -> HTTPException:
@@ -68,14 +84,13 @@ def _resolve_bearer_token(
     return get_session_token(request)
 
 
-def _resolve_user_id_from_token(token: str) -> str:
-    """Resolve ``token`` through the in-memory token store.
+def _resolve_user_id_from_token(token: str, token_store: TokenStore) -> str:
+    """Resolve ``token`` through the injected *token_store*.
 
     Raises :class:`InvalidTokenError` (caught and translated to 401
     by the caller) for unknown / expired / revoked tokens.
     """
-    tokens = default_token_store()
-    return tokens.resolve(token)
+    return token_store.resolve(token)
 
 
 def _load_admin_flag(session: Session, user_id: uuid.UUID) -> tuple[bool, bool] | None:
@@ -97,6 +112,7 @@ def require_admin_user(
     auth_required: bool = Depends(get_admin_auth_required),  # noqa: B008
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),  # noqa: B008
     session: Session = Depends(get_db),  # noqa: B008
+    token_store: TokenStore = Depends(get_token_store),  # noqa: B008
 ) -> str:
     """Validate the caller and return the resolved user id (as a string).
 
@@ -116,12 +132,14 @@ def require_admin_user(
       string ``"anonymous"``. Use only for local development or behind
       a network ACL that already restricts access to the admin surface.
 
-    Tests override the underlying :func:`get_admin_auth_required`
-    dependency through :attr:`fastapi.FastAPI.dependency_overrides` to
-    flip the flag without touching the environment. The pre-issue-#171
-    test suites (``test_admin_api``, ``test_integrations``) further
-    override :func:`require_admin_user` itself: they issue tokens for
-    a synthetic UUID that has no backing ``User`` row, so the strict
+    The :class:`TokenStore` is supplied through FastAPI's dependency
+    injection (issue #209). Production wiring keeps the default
+    :func:`default_token_store`; tests inject a fresh store via
+    :attr:`fastapi.FastAPI.dependency_overrides` keyed on
+    :func:`get_token_store`. The pre-issue-#171 test suites
+    (``test_admin_api``, ``test_integrations``) further override
+    :func:`require_admin_user` itself: they issue tokens for a
+    synthetic UUID that has no backing ``User`` row, so the strict
     lookup would 401/403. The override is documented in those files.
     """
     if not auth_required:
@@ -134,7 +152,7 @@ def require_admin_user(
             "bearer token or session cookie is required",
         )
     try:
-        user_id_str = _resolve_user_id_from_token(token)
+        user_id_str = _resolve_user_id_from_token(token, token_store)
     except InvalidTokenError as exc:
         _LOGGER.info(
             "admin.auth.invalid_token",
@@ -187,6 +205,7 @@ def resolve_admin_user(
     auth_required: bool = Depends(get_admin_auth_required),  # noqa: B008
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),  # noqa: B008
     session: Session = Depends(get_db),  # noqa: B008
+    token_store: TokenStore = Depends(get_token_store),  # noqa: B008
 ) -> User:
     """Validate the caller and return the resolved :class:`User` record.
 
@@ -198,9 +217,10 @@ def resolve_admin_user(
 
     The auth check is identical to :func:`require_admin_user` — same
     401 / 403 contract, same header/cookie fallback, same production
-    gate. The two functions could be merged, but keeping them apart
-    avoids touching every ``_admin_user: str = Depends(require_admin_user)``
-    consumer in the JSON admin endpoints.
+    gate, same pluggable :class:`TokenStore` (issue #209). The two
+    functions could be merged, but keeping them apart avoids touching
+    every ``_admin_user: str = Depends(require_admin_user)`` consumer
+    in the JSON admin endpoints.
     """
     if not auth_required:
         raise _http_error(
@@ -216,7 +236,7 @@ def resolve_admin_user(
             "bearer token or session cookie is required",
         )
     try:
-        user_id_str = _resolve_user_id_from_token(token)
+        user_id_str = _resolve_user_id_from_token(token, token_store)
     except InvalidTokenError as exc:
         _LOGGER.info(
             "admin.auth.invalid_token",
@@ -257,4 +277,4 @@ def resolve_admin_user(
     return user
 
 
-__all__ = ["require_admin_user", "resolve_admin_user"]
+__all__ = ["get_token_store", "require_admin_user", "resolve_admin_user"]

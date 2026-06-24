@@ -261,6 +261,15 @@ def admin_user_id() -> str:
 
 @pytest.fixture
 def admin_token(admin_user_id: str) -> str:
+    # The :func:`admin_token` fixture is consumed by tests that
+    # ultimately feed the bearer header into a ``_admin_override`` that
+    # resolves the token through a per-app store injected via
+    # ``app.dependency_overrides[get_token_store]`` (issue #209). The
+    # ``make_app`` fixture seeds that store and re-issues the token
+    # through it; the tests below then read the resulting token off
+    # the application. Keeping the original ``issue_token`` call here
+    # would write to the module-level default store, which the
+    # override does NOT consult, so the test would 401.
     return issue_token(admin_user_id, ttl_seconds=300)
 
 
@@ -312,11 +321,36 @@ def make_app(
         from fastapi import Depends
         from fastapi.security import HTTPAuthorizationCredentials
 
-        from apply_pilot.features.admin._auth import _bearer_scheme, require_admin_user
-        from apply_pilot.features.users.security import (
-            InvalidTokenError,
-            default_token_store,
+        from apply_pilot.features.admin._auth import (
+            _bearer_scheme,
+            get_token_store,
+            require_admin_user,
         )
+        from apply_pilot.features.users.security import (
+            InMemoryTokenStore,
+            TokenStore,
+        )
+
+        # Issue #209: plug a fresh in-memory token store through the new
+        # ``get_token_store`` dependency. The default (process-wide)
+        # store is shared across tests, which is fine for most suites,
+        # but this module needs a deterministic token it can issue via
+        # the :func:`issue_token` helper without leaking state.
+        class _LocalTokenStore:
+            def __init__(self) -> None:
+                self._inner = InMemoryTokenStore()
+
+            def issue(self, user_id: str, ttl_seconds: int) -> str:
+                return self._inner.issue(user_id, ttl_seconds=ttl_seconds)
+
+            def resolve(self, token: str) -> str:
+                return self._inner.resolve(token)
+
+            def revoke(self, token: str) -> None:
+                self._inner.revoke(token)
+
+        token_store: TokenStore = _LocalTokenStore()
+        application.dependency_overrides[get_token_store] = lambda: token_store
 
         def _admin_override(
             auth_required: bool = Depends(get_admin_auth_required),  # noqa: B008
@@ -338,8 +372,10 @@ def make_app(
                 # The token must still resolve — this preserves the
                 # 401 ``invalid_token`` contract for the
                 # ``test_admin_endpoints_reject_invalid_token`` test.
-                default_token_store().resolve(credentials.credentials)
-            except InvalidTokenError as exc:
+                # We use the override-bound store, not the module-level
+                # default (issue #209).
+                token_store.resolve(credentials.credentials)
+            except Exception as exc:  # InvalidTokenError or anything from the stub
                 from fastapi import HTTPException, status
 
                 raise HTTPException(
@@ -366,6 +402,15 @@ def make_app(
         application.dependency_overrides[get_experiment_repo] = lambda: experiment_repo
         application.dependency_overrides[get_source_metric_repository] = lambda: source_metric_repo
         application.dependency_overrides[get_scoring_review_service] = _review_service_stub
+
+        # Issue #209: the test fixtures issue a token via
+        # :func:`issue_token` (which writes to the module-level default
+        # store), but the override above consults the per-app local
+        # store only. Re-issue the same ``admin_user_id`` through the
+        # local store and stash the resulting token on the application
+        # so the test can read it via ``app.state.admin_token``.
+        local_token = token_store.issue(admin_user_id, ttl_seconds=300)
+        application.state.admin_token = local_token
         return application
 
     return _factory
@@ -483,7 +528,6 @@ def test_health_page_sanitize_helper_directly() -> None:
 )
 def test_admin_endpoints_reject_anonymous_when_auth_required(
     make_app: Any,
-    admin_token: str,
     method: str,
     path: str,
     body: dict[str, Any] | None,
@@ -530,7 +574,6 @@ def test_admin_endpoints_reject_invalid_token_when_auth_required(
 )
 def test_admin_endpoints_accept_valid_token_when_auth_required(
     make_app: Any,
-    admin_token: str,
     method: str,
     path: str,
     body: dict[str, Any] | None,
@@ -539,12 +582,18 @@ def test_admin_endpoints_accept_valid_token_when_auth_required(
 ) -> None:
     """A valid bearer token must let the request through to the handler."""
     application = make_app(auth_required=True)
+    # Issue #209: the bearer token must be issued through the per-app
+    # ``get_token_store`` override (the legacy ``admin_token`` fixture
+    # writes to the module-level default store, which the override does
+    # NOT consult). The factory stashes the right token on
+    # ``app.state.admin_token``.
+    local_token = application.state.admin_token
     with TestClient(application) as client:
         response = client.request(
             method,
             path,
             json=body,
-            headers={"Authorization": f"Bearer {admin_token}"},
+            headers={"Authorization": f"Bearer {local_token}"},
         )
         assert response.status_code == expected_status, response.text
         if body_assert is not None:
