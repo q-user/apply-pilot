@@ -82,6 +82,21 @@ def app(engine: Engine) -> Iterator[FastAPI]:
     application = create_app()
     application.dependency_overrides[get_db] = _override_get_db
     application.dependency_overrides[get_admin_auth_required] = lambda: True
+    # The new ``/admin/sources/metrics`` tests (issue #209) hit a route
+    # whose default ``get_source_metric_repository`` factory opens a
+    # SQLAlchemy session against a real ``source_metric_events`` table.
+    # Swap in the in-memory fake so the test does not need a populated
+    # DB. The pre-existing tests in this file hit ``/admin/integrations``
+    # and ``/admin/health`` and never reach the SQL repository, but
+    # applying the override unconditionally is safe.
+    from apply_pilot.features.source_metrics.api import get_source_metric_repository
+    from apply_pilot.features.source_metrics.repository import (
+        InMemorySourceMetricRepository,
+    )
+
+    application.dependency_overrides[get_source_metric_repository] = (
+        lambda: InMemorySourceMetricRepository()
+    )
     try:
         yield application
     finally:
@@ -281,3 +296,143 @@ class _StubHealthCheck:
 
     async def run(self) -> HealthCheckResult:
         return self._result
+
+
+# ---------------------------------------------------------------------------
+# Tests — pluggable token store (issue #209)
+# ---------------------------------------------------------------------------
+
+
+class _RecordingTokenStore:
+    """Minimal :class:`TokenStore` stub that records every call.
+
+    The stub satisfies the :class:`TokenStore` protocol and is the
+    canonical way to prove that ``require_admin_user`` now reaches the
+    dependency-injected store rather than the module-level
+    :func:`default_token_store`.
+    """
+
+    def __init__(self) -> None:
+        self.issued: list[tuple[str, int]] = []
+        self.resolved: list[str] = []
+        self._records: dict[str, str] = {}
+
+    def issue(self, user_id: str, ttl_seconds: int) -> str:
+        token = f"recording-{len(self.issued)}"
+        self.issued.append((user_id, ttl_seconds))
+        self._records[token] = user_id
+        return token
+
+    def resolve(self, token: str) -> str:
+        from apply_pilot.features.users.security import InvalidTokenError
+
+        self.resolved.append(token)
+        try:
+            return self._records[token]
+        except KeyError as exc:
+            raise InvalidTokenError("unknown token") from exc
+
+    def revoke(self, token: str) -> None:
+        self._records.pop(token, None)
+
+
+def test_token_store_dependency_is_overridable(app: FastAPI, client: TestClient) -> None:
+    """A custom ``TokenStore`` injected via ``get_token_store`` is honoured.
+
+    Replaces the pre-#209 pattern of monkey-patching
+    :func:`default_token_store` with the FastAPI-native
+    :attr:`app.dependency_overrides` mechanism. We override
+    :func:`get_token_store` directly and assert the stub saw the
+    request — i.e. ``require_admin_user`` resolved the token through
+    the injected store, not the module default.
+
+    Uses ``GET /admin/sources/metrics`` because it has only the JSON
+    variant (no HTML twin at the same path), so the request routes
+    through :func:`require_admin_user` and exercises the new DI
+    wiring end-to-end.
+    """
+    from apply_pilot.features.admin._auth import get_token_store
+
+    stub = _RecordingTokenStore()
+    # Seed a token the stub recognises (would NOT be in the default store).
+    user_id = "00000000-0000-0000-0000-000000abcdef"
+    user_uuid = uuid.UUID(user_id)
+    token = stub.issue(user_id, ttl_seconds=300)
+
+    # Seed the user row directly under the synthetic id so the auth
+    # gate's ``is_admin`` lookup finds it.
+    from apply_pilot.features.users.models import User
+    from apply_pilot.features.users.security import hash_password
+
+    get_db_override = app.dependency_overrides[get_db]
+    gen = get_db_override()
+    session = next(iter(gen))
+    try:
+        session.add(
+            User(
+                id=user_uuid,
+                email="override-store@example.com",
+                hashed_password=hash_password("hunter2!!"),
+                is_active=True,
+                is_admin=True,
+            )
+        )
+        session.commit()
+    finally:
+        with suppress(StopIteration):
+            next(gen)
+
+    app.dependency_overrides[get_token_store] = lambda: stub
+
+    response = client.get(
+        "/admin/sources/metrics?source=hh",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200, response.text
+    # The stub recorded exactly one resolve call: the auth gate routed
+    # the token through the injected store, NOT the module default.
+    assert stub.resolved == [token]
+
+
+def test_default_token_store_is_used_when_no_override(app: FastAPI, client: TestClient) -> None:
+    """Without an override, ``require_admin_user`` keeps using the default store.
+
+    A token issued through :func:`issue_token` (which writes to the
+    module-level default store) must continue to authenticate the
+    caller end-to-end. This is the production behaviour and the test
+    pins it. Uses ``/admin/sources/metrics`` (JSON-only) to route
+    through :func:`require_admin_user` rather than the HTML path.
+    """
+    token = _admin_token_for("ops@example.com", is_admin=True, app=app)
+
+    response = client.get(
+        "/admin/sources/metrics?source=hh",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200, response.text
+
+
+def test_token_store_override_rejects_unknown_tokens(app: FastAPI, client: TestClient) -> None:
+    """A custom store that does not know the token must yield 401.
+
+    Proves the override is the *only* store consulted: a token issued
+    through the default store is unknown to the override stub, so the
+    auth gate must return 401.
+    """
+    from apply_pilot.features.admin._auth import get_token_store
+
+    stub = _RecordingTokenStore()
+    app.dependency_overrides[get_token_store] = lambda: stub
+
+    # Issue a token via the default store — the stub does NOT know it.
+    default_token = _admin_token_for("ops@example.com", is_admin=True, app=app)
+
+    response = client.get(
+        "/admin/sources/metrics?source=hh",
+        headers={"Authorization": f"Bearer {default_token}"},
+    )
+    assert response.status_code == 401
+    assert response.json()["detail"]["code"] == "invalid_token"
+    # The stub was consulted (i.e. the override is live) and rejected
+    # the token because the default store issued it, not the stub.
+    assert stub.resolved == [default_token]
