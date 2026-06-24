@@ -30,20 +30,22 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 import httpx
 
-# NOTE: ``HttpLLMClient`` is imported lazily inside :class:`LlmChecker`
-# because eager-loading it here closes a circular import that prevents
-# ``uvicorn apply_pilot.app:create_app --factory`` from booting
-# (issue #225). The import chain ``admin.integrations`` →
+from apply_pilot.runtime.process import BaseProcess
+
+# NOTE: ``HttpLLMClient`` is referenced lazily to break a circular import
+# that prevents ``uvicorn apply_pilot.app:create_app --factory`` from
+# booting (issue #225). The import chain ``admin.integrations`` →
 # ``scoring.llm`` → ``cover_letter.service`` (which re-imports
 # ``scoring.llm`` at module load) deadlocks at startup. ``HttpLLMClient``
-# is only used as a type annotation on :meth:`LlmChecker.__init__`; with
-# ``from __future__ import annotations`` (above) the annotation is a
-# string, so no runtime import is needed.
-from apply_pilot.runtime.process import BaseProcess
+# is only used as a type annotation on :meth:`LlmChecker.__init__``; with
+# ``TYPE_CHECKING`` it is resolved at type-check time only, and the
+# runtime never imports ``scoring.llm`` from this module.
+if TYPE_CHECKING:
+    from apply_pilot.features.scoring.llm import HttpLLMClient
 
 _LOG_PREFIX = "apply_pilot.features.admin.integrations."
 
@@ -208,7 +210,7 @@ class LlmChecker:
     #: so the check stays cheap even on slow providers.
     _PROBE_PROMPT: str = "ping"
 
-    def __init__(self, *, client: HttpLLMClient) -> None:  # type: ignore[name-defined]  # noqa: F821 — see note at top
+    def __init__(self, *, client: HttpLLMClient) -> None:
         self._client = client
         self._logger = logging.getLogger(f"{_LOG_PREFIX}LlmChecker")
 
