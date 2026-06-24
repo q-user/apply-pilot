@@ -94,8 +94,8 @@ def app(engine: Engine) -> Iterator[FastAPI]:
         InMemorySourceMetricRepository,
     )
 
-    application.dependency_overrides[get_source_metric_repository] = (
-        lambda: InMemorySourceMetricRepository()
+    application.dependency_overrides[get_source_metric_repository] = lambda: (
+        InMemorySourceMetricRepository()
     )
     try:
         yield application
