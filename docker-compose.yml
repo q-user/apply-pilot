@@ -94,10 +94,12 @@ services:
     image: apply-pilot:dev
     container_name: apply-pilot-max-bot
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
-      DATABASE_URL: ${DATABASE_URL:-sqlite+pysqlite:////data/app.db}
+      APP_DATABASE_URL: ${APP_DATABASE_URL:-sqlite+pysqlite:////data/app.db}
       REDIS_URL: redis://redis:6379/0
       MAX_BOT_TOKEN: ${MAX_BOT_TOKEN:?set MAX_BOT_TOKEN in .env}
       MAX_POLLING_TIMEOUT: ${MAX_POLLING_TIMEOUT:-30}
