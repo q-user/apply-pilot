@@ -21,9 +21,6 @@ import uuid
 from dataclasses import dataclass
 from typing import Protocol
 
-# Module-level constant to avoid creating a new UUID object on each comparison
-ZERO_UUID = uuid.UUID(int=0)
-
 from apply_pilot.features.audit.models import AuditEventType
 from apply_pilot.features.audit.service import AuditService
 from apply_pilot.features.matches.models import MatchStatus
@@ -37,6 +34,9 @@ from apply_pilot.features.messaging.protocols import MessagingAccountRepository
 from apply_pilot.features.writing_style_memory.service import StyleMemoryService
 
 _LOGGER = logging.getLogger("apply_pilot.features.messaging.actions.accept")
+
+# Module-level constant to avoid creating a new UUID object on each comparison
+ZERO_UUID = uuid.UUID(int=0)
 
 
 # ---------------------------------------------------------------------------
