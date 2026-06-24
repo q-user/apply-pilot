@@ -247,7 +247,8 @@ class TestCircuitBreakerOpen:
         assert breaker.state is CircuitState.HALF_OPEN
 
     def test_open_transitions_to_half_open_after_clamped_window_without_requests(self) -> None:
-        """After clamping in OPEN, if timeout elapsed, state should be HALF_OPEN without calling state/allow_request.
+        """After clamping in OPEN, if timeout elapsed, state should be HALF_OPEN
+        without calling state/allow_request.
 
         This is a regression test for issue #208: when a failure occurs in OPEN state
         AFTER the timeout elapsed, _opened_at is clamped to original + reset_timeout,
