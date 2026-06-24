@@ -15,6 +15,7 @@ handoff into the source service.
 from __future__ import annotations
 
 import asyncio
+import logging
 
 import pytest
 
@@ -279,6 +280,58 @@ class TestScannerRun:
                 )
 
             asyncio_run(drive())
+        finally:
+            _scanner_module._ERROR_BACKOFF_SECONDS = original_backoff
+
+    def test_error_backoff_does_not_emit_process_shutdown_log(self, caplog) -> None:
+        """Regression for #211.
+
+        During error backoff, the scanner waits on the shutdown event
+        with a short timeout. The old ``_wait_for_shutdown_no_log``
+        helper (removed in #147) suppressed the misleading
+        ``process.shutdown`` log that ``BaseProcess.wait_for_shutdown``
+        emits. This test ensures that no such log is emitted while the
+        worker is still alive and just backing off.
+        """
+        scanner, _client, _service, _repo = _make_scanner(poll_interval_seconds=0.01)
+
+        # Shrink the inter-error backoff so the test runs fast.
+        original_backoff = _scanner_module._ERROR_BACKOFF_SECONDS
+        _scanner_module._ERROR_BACKOFF_SECONDS = 0.02
+        try:
+            # Replace ``_tick`` with a coroutine that always raises.
+            async def always_fail() -> None:
+                raise RuntimeError("boom")
+
+            scanner._tick = always_fail  # type: ignore[method-assign]
+
+            # Capture logs from the scanner's logger
+            with caplog.at_level(
+                logging.INFO, logger="apply_pilot.runtime.telegram-channel-scanner"
+            ):
+
+                async def drive() -> None:
+                    task = asyncio.create_task(scanner.run())
+                    try:
+                        # Wait for a couple of error-recovery cycles.
+                        await asyncio.sleep(0.15)
+                    finally:
+                        scanner.stop()
+                        await asyncio.wait_for(task, timeout=5.0)
+
+                asyncio_run(drive())
+
+            # Filter for process.shutdown events from the base process logger
+            shutdown_logs = [
+                record
+                for record in caplog.records
+                if record.name == "apply_pilot.runtime.telegram-channel-scanner"
+                and getattr(record, "event", None) == "process.shutdown"
+            ]
+            assert not shutdown_logs, (
+                f"Expected no process.shutdown logs during error backoff, "
+                f"but got {len(shutdown_logs)}: {[(r.message, r.event) for r in shutdown_logs]}"
+            )
         finally:
             _scanner_module._ERROR_BACKOFF_SECONDS = original_backoff
 
