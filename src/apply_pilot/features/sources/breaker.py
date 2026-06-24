@@ -321,6 +321,11 @@ class CircuitBreaker:
                 self._clock(),
                 self._opened_at_original + self._settings.reset_timeout_seconds,
             )
+            # Do NOT transition to HALF_OPEN here. The transition is
+            # handled by ``_refresh_state`` (called via ``state`` and
+            # ``allow_request``). Transitioning here would cause
+            # subsequent failures in the same outage to re-open the
+            # breaker with a fresh timestamp (issue #208).
             return
         if self._state is CircuitState.HALF_OPEN:
             self._open(now=self._clock())
