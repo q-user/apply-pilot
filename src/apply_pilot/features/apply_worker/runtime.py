@@ -48,9 +48,19 @@ from typing import Protocol
 from apply_pilot.features.apply_worker.models import ApplyJob
 from apply_pilot.features.apply_worker.service import ApplyJobService
 from apply_pilot.features.matches.models import MatchStatus
-from apply_pilot.features.matches.service import MatchService
 from apply_pilot.features.sources.models import Vacancy
 from apply_pilot.runtime.process import BaseProcess
+
+# ``MatchService`` is imported lazily inside :meth:`ApplyWorker._handle_success`
+# to break the ``apply_worker`` ↔ ``matches`` import cycle:
+# ``messaging.actions.accept`` → ``matches.service`` →
+# ``apply_worker.__init__`` → ``apply_worker.runtime`` (this module). A
+# top-level ``from ... import MatchService`` here would re-enter
+# ``matches.service`` while it is still being constructed and explode with
+# ``ImportError: cannot import name 'MatchService' from partially
+# initialised module ...``. The annotation on
+# :meth:`ApplyWorker.__init__` is already a string at runtime thanks to
+# ``from __future__ import annotations``, so the type is preserved.
 
 #: Maximum number of attempts before a retryable failure is dead-lettered.
 #: Three attempts means at most two retries after the first failure.
@@ -275,8 +285,14 @@ class ApplyWorker:
         external_id = result.external_application_id or ""
         completed = self._job_service.complete(job.id, external_application_id=external_id)
         # Flip the underlying match to ``applied`` so the dashboard and
-        # the audit log see a consistent view.
-        self._match_service.update_status(job.match_id, MatchStatus.APPLIED.value)
+        # the audit log see a consistent view. ``MatchService`` is imported
+        # lazily here to break the ``apply_worker`` ↔ ``matches`` import
+        # cycle (see the module-level comment); the import is cheap on
+        # every call thanks to ``sys.modules`` caching.
+        from apply_pilot.features.matches.service import MatchService  # noqa: PLC0415
+
+        match_service: MatchService = self._match_service
+        match_service.update_status(job.match_id, MatchStatus.APPLIED.value)
         self._logger.info(
             "apply_worker.completed",
             extra={
