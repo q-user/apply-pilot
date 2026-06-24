@@ -532,7 +532,9 @@ class DashboardService:
             # Fetch only vacancies referenced by terminal apply jobs
             # that match the user's matches
             relevant_match_ids = [job.match_id for job in terminals]
-            relevant_matches = [match_by_id[mid] for mid in relevant_match_ids if mid in match_by_id]
+            relevant_matches = [
+                match_by_id[mid] for mid in relevant_match_ids if mid in match_by_id
+            ]
             vacancy_ids = [m.vacancy_id for m in relevant_matches]
             vacancies = list(self._vacancy_repo.get_by_ids(vacancy_ids))
             vacancies_by_id = {v.id: v for v in vacancies}
