@@ -68,6 +68,7 @@ class VacancyRepository(Protocol):
         location: str | None = None,
         since: datetime | None = None,
     ) -> int: ...
+    def get_by_ids(self, vacancy_ids: Sequence[uuid.UUID]) -> Sequence[Vacancy]: ...
 
 
 # ---------------------------------------------------------------------------
@@ -253,6 +254,16 @@ class InMemoryVacancyRepository:
                 since=since,
             )
         )
+
+    def get_by_ids(self, vacancy_ids: Sequence[uuid.UUID]) -> Sequence[Vacancy]:
+        """Return vacancies matching the given IDs.
+
+        Returns the vacancies in the same order as the input IDs,
+        skipping any IDs that don't exist.
+        """
+        # Use a set for O(1) lookup, then filter to preserve order
+        id_set = set(vacancy_ids)
+        return [v for v in self._by_id.values() if v.id in id_set]
 
 
 # ---------------------------------------------------------------------------
@@ -496,6 +507,30 @@ class SqlVacancyRepository:
             )
             count_stmt = select(func.count()).select_from(statement.subquery())
             return int(session.execute(count_stmt).scalar_one())
+        finally:
+            if self._session is None:
+                session.close()
+
+    def get_by_ids(self, vacancy_ids: Sequence[uuid.UUID]) -> Sequence[Vacancy]:
+        """Return vacancies matching the given IDs.
+
+        Uses a single ``WHERE id IN (... )`` query for efficiency.
+        Returns vacancies in the same order as the input IDs,
+        skipping any IDs that don't exist. Duplicate IDs in the
+        input are deduplicated in the output.
+        """
+        if not vacancy_ids:
+            return []
+        # Deduplicate input while preserving order
+        seen: set[uuid.UUID] = set()
+        unique_ids = [vid for vid in vacancy_ids if vid not in seen and not seen.add(vid)]
+        session = self._scope()
+        try:
+            statement = select(Vacancy).where(Vacancy.id.in_(unique_ids))
+            rows = list(session.execute(statement).scalars().all())
+            # Preserve input order
+            row_by_id = {r.id: r for r in rows}
+            return [row_by_id[vid] for vid in unique_ids if vid in row_by_id]
         finally:
             if self._session is None:
                 session.close()
