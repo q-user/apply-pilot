@@ -35,6 +35,9 @@ from apply_pilot.features.writing_style_memory.service import StyleMemoryService
 
 _LOGGER = logging.getLogger("apply_pilot.features.messaging.actions.accept")
 
+# Module-level constant to avoid creating a new UUID object on each comparison
+ZERO_UUID = uuid.UUID(int=0)
+
 
 # ---------------------------------------------------------------------------
 # Allowed source statuses
@@ -376,7 +379,7 @@ class AcceptActionHandler:
         # also rejected as a sentinel "missing" value — it cannot
         # satisfy the ``cover_letter_drafts.id`` FK in production.
         cover_letter_id = getattr(draft, "id", None)
-        if cover_letter_id is None or cover_letter_id == uuid.UUID(int=0):
+        if cover_letter_id is None or cover_letter_id == ZERO_UUID:
             return
         try:
             self._style_memory_service.record_accepted_letter(  # type: ignore[union-attr]
