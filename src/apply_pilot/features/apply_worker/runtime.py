@@ -43,13 +43,22 @@ import asyncio
 import logging
 import uuid
 from dataclasses import dataclass
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from apply_pilot.features.apply_worker.models import ApplyJob
 from apply_pilot.features.apply_worker.service import ApplyJobService
 from apply_pilot.features.matches.models import MatchStatus
 from apply_pilot.features.sources.models import Vacancy
 from apply_pilot.runtime.process import BaseProcess
+
+if TYPE_CHECKING:
+    # Imported only for type checkers / annotations to keep the runtime
+    # import graph free of the ``apply_worker`` ↔ ``matches`` cycle
+    # (see the module-level comment below). The annotation on
+    # :meth:`ApplyWorker.__init__` would otherwise leave
+    # ``MatchService`` undefined at lint time, since the module no
+    # longer imports it eagerly.
+    from apply_pilot.features.matches.service import MatchService
 
 # ``MatchService`` is imported lazily inside :meth:`ApplyWorker._handle_success`
 # to break the ``apply_worker`` ↔ ``matches`` import cycle:
@@ -289,7 +298,7 @@ class ApplyWorker:
         # lazily here to break the ``apply_worker`` ↔ ``matches`` import
         # cycle (see the module-level comment); the import is cheap on
         # every call thanks to ``sys.modules`` caching.
-        from apply_pilot.features.matches.service import MatchService  # noqa: PLC0415
+        from apply_pilot.features.matches.service import MatchService  # noqa: F401, PLC0415
 
         match_service: MatchService = self._match_service
         match_service.update_status(job.match_id, MatchStatus.APPLIED.value)
