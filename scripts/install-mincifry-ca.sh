@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
 # Install MinCifry (Russian Ministry of Digital Development) CA certificates
 # on the host so local development tooling trusts platform-api2.max.ru.
+#
+# Container images get the same certs via `COPY certs/*.crt …` in the
+# Dockerfile; this script is the host-side (and offline-CI) equivalent
+# for machines that do not run via Docker. The downloaded .crt source is
+# kept publishable in the tree for offline use and reproducibility.
 # See:
 #   - https://docs.lanbilling.ru/52/integration/sber/install_sertificates_mincifry/
 #   - GitHub issue #233 (fix(ssl): platform-api2.max.ru certificate not trusted)
+#   - certs/README.md (provenance, validity, when to update)
 #
 # Usage:
 #   ./scripts/install-mincifry-ca.sh           # auto-detect distro
