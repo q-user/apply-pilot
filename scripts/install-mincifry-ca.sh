@@ -41,6 +41,9 @@ $SUDO curl -fsSL "$SUB_CA_URL" -o "$TARGET_DIR/$SUB_CA_FILE"
 echo "Downloaded $SUB_CA_FILE"
 $SUDO "$UPDATE_CMD"
 
+echo "MinCifry Root CA SHA-256: $(openssl x509 -in "$TARGET_DIR/$ROOT_CA_FILE" -noout -fingerprint -sha256 | cut -d= -f2)"
+echo "MinCifry Sub  CA SHA-256: $(openssl x509 -in "$TARGET_DIR/$SUB_CA_FILE" -noout -fingerprint -sha256 | cut -d= -f2)"
+
 cat <<'HINT'
 
 MinCifry CA certificates installed.

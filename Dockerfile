@@ -37,14 +37,20 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # See issue #233 and
 # https://docs.lanbilling.ru/52/integration/sber/install_sertificates_mincifry/
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && apt-get install -y --no-install-recommends ca-certificates curl openssl \
     && rm -rf /var/lib/apt/lists/* \
     && install -d /usr/local/share/ca-certificates \
     && curl -fsSL https://gu-st.ru/content/lending/russian_trusted_root_ca_pem.crt \
         -o /usr/local/share/ca-certificates/russian_trusted_root_ca_pem.crt \
     && curl -fsSL https://gu-st.ru/content/lending/russian_trusted_sub_ca_pem.crt \
         -o /usr/local/share/ca-certificates/russian_trusted_sub_ca_pem.crt \
-    && update-ca-certificates
+    && update-ca-certificates \
+    && echo "MinCifry Root CA SHA-256: $(openssl x509 \
+           -in /usr/local/share/ca-certificates/russian_trusted_root_ca_pem.crt \
+           -noout -fingerprint -sha256 | cut -d= -f2)" \
+    && echo "MinCifry Sub  CA SHA-256: $(openssl x509 \
+           -in /usr/local/share/ca-certificates/russian_trusted_sub_ca_pem.crt \
+           -noout -fingerprint -sha256 | cut -d= -f2)"
 
 # Point Python HTTP clients at the OS trust store — they default to certifi
 # and ignore update-ca-certificates otherwise (requests, httpx, aiohttp, ...).
