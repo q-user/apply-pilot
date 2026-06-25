@@ -34,17 +34,18 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # so the new MAX API domain platform-api2.max.ru (migration deadline
 # 2026-07-19) is reachable. Its TLS chain is signed by the Russian Trusted
 # CA, which is not in the default Mozilla bundle shipped in this slim image.
-# See issue #233 and
+#
+# The certs are vendored under ./certs so we build offline: no curl to
+# gu-st.ru means no flaky rebuild from upstream outages (a transient
+# curl-35 cost us a real rebuild retry before vendoring). See issue #233,
+# certs/README.md for provenance/validity/when-to-update, and
 # https://docs.lanbilling.ru/52/integration/sber/install_sertificates_mincifry/
+# for the upstream guide.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl openssl \
-    && rm -rf /var/lib/apt/lists/* \
-    && install -d /usr/local/share/ca-certificates \
-    && curl -fsSL https://gu-st.ru/content/lending/russian_trusted_root_ca_pem.crt \
-        -o /usr/local/share/ca-certificates/russian_trusted_root_ca_pem.crt \
-    && curl -fsSL https://gu-st.ru/content/lending/russian_trusted_sub_ca_pem.crt \
-        -o /usr/local/share/ca-certificates/russian_trusted_sub_ca_pem.crt \
-    && update-ca-certificates \
+    && apt-get install -y --no-install-recommends ca-certificates openssl \
+    && rm -rf /var/lib/apt/lists/*
+COPY certs/*.crt /usr/local/share/ca-certificates/
+RUN update-ca-certificates \
     && echo "MinCifry Root CA SHA-256: $(openssl x509 \
            -in /usr/local/share/ca-certificates/russian_trusted_root_ca_pem.crt \
            -noout -fingerprint -sha256 | cut -d= -f2)" \
