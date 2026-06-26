@@ -306,12 +306,17 @@ If T4 (#245) prefers a friendlier test double for HTTP (e.g. `respx` for declara
 
 ## References
 
-- M11 epic: [#239](https://github.com/q-user/apply-pilot/issues/239) (with comments #1, #2, #3, #4, #5, #6 [batch proposal + close-out note])
+- M11 epic: [#239](https://github.com/q-user/apply-pilot/issues/239) — **closed retro**; see retro comment for T1–T6 squash-merge trailers.
 - T1 issue: [#242](https://github.com/q-user/apply-pilot/issues/242) (this doc closes it)
-- Consumer slices:
+  - Merged-via: PR [#248](https://github.com/q-user/apply-pilot/pull/248) @ [`fbed7625`](https://github.com/q-user/apply-pilot/commit/fbed7625b2a6cc830ebf103470de2e462be8ba2a) — squash 2026-06-25
+- Consumer slices (all merged, parent epic [#239](https://github.com/q-user/apply-pilot/issues/239)):
   - T2 [#243](https://github.com/q-user/apply-pilot/issues/243) — adapter implementation
+    - Merged-via: PR [#249](https://github.com/q-user/apply-pilot/pull/249) @ [`e5bf87f`](https://github.com/q-user/apply-pilot/commit/e5bf87f85bc6195e1d1ac30b6d5843132dbc0181) — squash 2026-06-25
   - T3 [#244](https://github.com/q-user/apply-pilot/issues/244) — config layer
+    - Merged-via: PR [#250](https://github.com/q-user/apply-pilot/pull/250) @ [`10453fa`](https://github.com/q-user/apply-pilot/commit/10453facfd6654ed16c6dac8ef845a4a4c117e11) — squash 2026-06-26
   - T4 [#245](https://github.com/q-user/apply-pilot/issues/245) — VSA test slice
-  - T5 [#246](https://github.com/q-user/apply-pilot/issues/246) — worker integration, **closes [#206](https://github.com/q-user/apply-pilot/issues/206)**
+    - Merged-via: PR [#252](https://github.com/q-user/apply-pilot/pull/252) @ [`79fdf87`](https://github.com/q-user/apply-pilot/commit/79fdf8705d3d89bf78c8b072a65059b256687548) — squash 2026-06-26
+  - T5 [#246](https://github.com/q-user/apply-pilot/issues/246) — worker integration, **closes [#206](https://github.com/q-user/apply-pilot/issues/206)** (auto-closed by PR [#253](https://github.com/q-user/apply-pilot/pull/253))
+    - Merged-via: PR [#253](https://github.com/q-user/apply-pilot/pull/253) @ [`2ca85a1`](https://github.com/q-user/apply-pilot/commit/2ca85a12958764a0b858d03ad7279bfdf12de124) — squash 2026-06-26
   - T6 [#247](https://github.com/q-user/apply-pilot/issues/247) — observability + SaaS-readiness
-- External read-only orientation: `/home/mikhail/projects/hh_apply` (observed patterns only — no code copy)
+    - Merged-via: PR [#251](https://github.com/q-user/apply-pilot/pull/251) @ [`0bf5d18`](https://github.com/q-user/apply-pilot/commit/0bf5d18135222555eb039f0618b63b27483ad685) — squash 2026-06-26
