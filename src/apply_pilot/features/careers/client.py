@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable
-from typing import Protocol
+from typing import Protocol, cast
 
 import httpx
 
@@ -143,7 +143,7 @@ class InMemoryCareersHttpClient:
                 # The list was exhausted on a prior call; treat the
                 # missing entry as "no more pre-registered responses".
                 raise KeyError(url)
-            return payload.pop(0)
+            return cast(httpx.Response, payload.pop(0))
         return payload
 
     def call_count(self, url: str) -> int:

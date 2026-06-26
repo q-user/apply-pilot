@@ -1,4 +1,5 @@
 """`apply_once` orchestrator — JSON POST, status mapping, retry policy with backoff + jitter."""
+
 from __future__ import annotations
 
 import asyncio
@@ -10,7 +11,7 @@ from typing import Any
 
 import httpx
 
-from .client import HHApplyClient, NEGOTIATIONS_PATH, DEFAULT_BASE_URL
+from .client import DEFAULT_BASE_URL, NEGOTIATIONS_PATH, HHApplyClient
 from .models import ApplyError, ApplyRequest, ApplyResult, ApplyStatus, HHApplyError
 
 logger = logging.getLogger(__name__)
@@ -98,7 +99,9 @@ async def apply_once(
     for attempt in range(1, policy.max_retries + 1):
         logger.debug(
             "hh_apply: attempt %d/%d for vacancy %s",
-            attempt, policy.max_retries, request.vacancy_id,
+            attempt,
+            policy.max_retries,
+            request.vacancy_id,
         )
         try:
             response = await client.request_with_xsrf_retry(
@@ -114,7 +117,8 @@ async def apply_once(
             last_retry_raw = {"exception": type(exc).__name__, "message": str(exc)}
             logger.warning(
                 "hh_apply: transport exception on attempt %d: %s",
-                attempt, exc,
+                attempt,
+                exc,
             )
             jitter = random.uniform(0, policy.jitter_ms)
             await asyncio.sleep((delay_ms + jitter) / 1000.0)
@@ -126,41 +130,61 @@ async def apply_once(
 
         if status_code in (200, 201):
             return _build_apply_result(
-                ApplyStatus.success, status_code, raw, attempt,
+                ApplyStatus.success,
+                status_code,
+                raw,
+                attempt,
             )
         if status_code == 400:
             err = ApplyError(
-                code="validation_error", message="Bad request payload from server",
-                http_status=400, raw=raw,
+                code="validation_error",
+                message="Bad request payload from server",
+                http_status=400,
+                raw=raw,
             )
             return _build_apply_result(
-                ApplyStatus.validation_error, status_code, raw, attempt, error=err,
+                ApplyStatus.validation_error,
+                status_code,
+                raw,
+                attempt,
+                error=err,
             )
         if status_code == 401:
             # client.request_with_xsrf_retry already attempted one refresh; terminal here.
             err = ApplyError(
                 code="csrf_invalid",
                 message="CSRF/XSRF invalid after refresh — session dead",
-                http_status=401, raw=raw,
+                http_status=401,
+                raw=raw,
             )
             return _build_apply_result(
-                ApplyStatus.auth_required, status_code, raw, attempt, error=err,
+                ApplyStatus.auth_required,
+                status_code,
+                raw,
+                attempt,
+                error=err,
             )
         if status_code == 409:
             return _build_apply_result(
-                ApplyStatus.idle_already_applied, status_code, raw, attempt,
+                ApplyStatus.idle_already_applied,
+                status_code,
+                raw,
+                attempt,
             )
         if status_code == 429:
             last_retry_status, last_retry_raw = 429, raw
             logger.warning(
                 "hh_apply: 429 rate-limited (attempt %d/%d) — backing off",
-                attempt, policy.max_retries,
+                attempt,
+                policy.max_retries,
             )
         elif status_code >= 500:
             last_retry_status, last_retry_raw = status_code, raw
             logger.warning(
                 "hh_apply: %d upstream error (attempt %d/%d) — backing off",
-                status_code, attempt, policy.max_retries,
+                status_code,
+                attempt,
+                policy.max_retries,
             )
         else:
             raise HHApplyError(
@@ -175,16 +199,23 @@ async def apply_once(
     # Exhausted retries — return rate-limited or upstream-error terminal.
     if last_retry_status == 429:
         err = ApplyError(
-            code="rate_limited", message="Too many requests after retries",
-            http_status=429, raw=last_retry_raw,
+            code="rate_limited",
+            message="Too many requests after retries",
+            http_status=429,
+            raw=last_retry_raw,
         )
         return _build_apply_result(
-            ApplyStatus.rate_limited, 429, last_retry_raw or {}, policy.max_retries, error=err,
+            ApplyStatus.rate_limited,
+            429,
+            last_retry_raw or {},
+            policy.max_retries,
+            error=err,
         )
     err = ApplyError(
         code="upstream_error",
         message=f"Upstream {last_retry_status or 0} after retries",
-        http_status=last_retry_status or 0, raw=last_retry_raw,
+        http_status=last_retry_status or 0,
+        raw=last_retry_raw,
     )
     return _build_apply_result(
         ApplyStatus.upstream_error,

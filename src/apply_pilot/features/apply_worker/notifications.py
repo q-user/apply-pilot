@@ -98,7 +98,7 @@ class TelegramApplyNotifier:
         # * in a sync context (a request handler or a unit test) we
         #   fall back to ``asyncio.run`` so the message goes out
         #   before this method returns.
-        coro = self._telegram_bot.send_message(chat_id, text)
+        coro = self._telegram_bot.send_message(chat_id, text)  # type: ignore[unresolved-attribute]
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:

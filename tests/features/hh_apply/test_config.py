@@ -1,4 +1,5 @@
 """HHApplySettings — env-var loading, per-tenant overrides, defaults from contract."""
+
 from __future__ import annotations
 
 import pytest

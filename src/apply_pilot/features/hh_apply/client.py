@@ -1,4 +1,5 @@
 """Async httpx client with Android-UA defaults, allowlist cookie jar, XSRF auto-refresh on 401."""
+
 from __future__ import annotations
 
 import logging
@@ -6,6 +7,8 @@ from http.cookiejar import MozillaCookieJar
 from typing import Any
 
 import httpx
+
+from .models import HHApplyError
 
 logger = logging.getLogger(__name__)
 
@@ -84,9 +87,7 @@ class HHApplyClient(httpx.AsyncClient):
             )
         return xsrf
 
-    async def request_with_xsrf_retry(
-        self, method: str, url: str, **kwargs: Any
-    ) -> httpx.Response:
+    async def request_with_xsrf_retry(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
         """Send a request with the current `_xsrf` value; on HTTP 401, refresh + retry ONCE."""
         headers = dict(kwargs.pop("headers", {}) or {})
         xsrf_initial = self.cookies.get("_xsrf")

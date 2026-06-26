@@ -23,6 +23,7 @@ from datetime import UTC, date, datetime
 from typing import Protocol
 
 from apply_pilot.features.matches.models import MatchStatus, VacancyMatch
+from apply_pilot.features.search_profiles.models import SearchProfile
 from apply_pilot.features.telegram.digest.models import UserStats
 from apply_pilot.features.users.models import User
 
@@ -52,7 +53,7 @@ class _UserRepo(Protocol):
 
 
 class _ProfileRepo(Protocol):
-    def list_by_user(self, user_id: uuid.UUID) -> Sequence[object]: ...
+    def list_by_user(self, user_id: uuid.UUID) -> Sequence[SearchProfile]: ...
 
 
 # Statuses that count as "new from the user's perspective".
