@@ -15,11 +15,21 @@ WORKDIR /app
 # Copy only the lock-related metadata first to maximise Docker layer caching.
 COPY pyproject.toml uv.lock ./
 
-# Install production dependencies into a project-local virtualenv.
-# --frozen pins to uv.lock; --no-dev excludes test-only deps.
-# This stage also installs the project itself so [project.scripts]
-# console scripts (e.g. apply-pilot-max-bot) are materialized into
-# /app/.venv/bin/ for the runtime stage to inherit.
+# Install production DEPENDENCIES only (no project install) into a project-local
+# virtualenv. --no-install-project skips setuptools.build_editable -- the
+# project source tree is not yet in the build context, so [project]
+# readme + setuptools-build would otherwise fail with missing ./src and
+# ./README.md. Caching this layer here means code-only changes below do not
+# bust the dep-download cache.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --no-install-project
+
+# Now layer in the project source tree + readme so the second uv sync can
+# install the project itself (materialising [project.scripts] console
+# scripts like apply-pilot-max-bot into /app/.venv/bin/ for the runtime
+# stage to inherit).
+COPY src ./src
+COPY README.md ./README.md
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
