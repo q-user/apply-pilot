@@ -12,6 +12,7 @@ from .models import (
     HHApplyError,
 )
 from .client import HHApplyClient
+from .config import HHApplySettings, TenantCredentials
 from .service import RetryPolicy, apply_once
 
 __all__ = [
@@ -23,4 +24,6 @@ __all__ = [
     "HHApplyError",
     "HHApplyClient",
     "RetryPolicy",
+    "HHApplySettings",
+    "TenantCredentials",
 ]
