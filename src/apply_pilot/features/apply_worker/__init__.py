@@ -27,6 +27,8 @@ Public surface
 * :class:`ApplyAdapter` — Protocol the apply worker dispatches to.
 * :class:`ApplyWorker` — per-iteration worker that drains the queue.
 * :class:`ApplyWorkerProcess` — long-running process driving the worker.
+* :class:`HHApplyAdapter` — T5 (#246) adapter that bridges :class:`ApplyJob`
+  to ``hh_apply.apply_once`` with idempotency + observability hooks.
 * :class:`RateLimiter` / :class:`RateLimitResult` / :class:`WindowStatus` /
   :class:`RateLimitExceeded` / :class:`InMemoryRateLimiter` /
   :class:`SqlRateLimiter` — per-user anti-spam cap machinery
@@ -47,6 +49,10 @@ The slice is consumed by:
 
 from __future__ import annotations
 
+from apply_pilot.features.apply_worker.hh_adapter import (
+    HHApplyAdapter,
+    build_default_hh_apply_adapter,
+)
 from apply_pilot.features.apply_worker.limits import (
     APPLY_KEY,
     DAILY_WINDOW,
@@ -107,6 +113,7 @@ __all__ = [
     "DEFAULT_MAX_ATTEMPTS",
     "DEFAULT_RETRY_BACKOFF",
     "HOURLY_WINDOW",
+    "HHApplyAdapter",
     "NO_ADAPTER_ERROR",
     "VACANCY_NOT_FOUND_ERROR",
     "ApplyAdapter",
@@ -141,6 +148,7 @@ __all__ = [
     "apply_job_to_dto",
     "apply_rate_limit_to_dto",
     "apply_status_history_to_dto",
+    "build_default_hh_apply_adapter",
     "compute_idempotency_key",
     "default_rate_limiter",
 ]
