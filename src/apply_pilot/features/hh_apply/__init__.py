@@ -13,6 +13,19 @@ from .models import (
 )
 from .client import HHApplyClient
 from .config import HHApplySettings, TenantCredentials
+from .observability import (
+    ApplyEvent,
+    EventType,
+    EventDispatcher,
+    MetricsSnapshot,
+    MetricsAccumulator,
+)
+from .tenancy import (
+    TenantResolution,
+    TenantCredentialProvider,
+    EnvTenantCredentialProvider,
+    MultiTenantProvider,
+)
 from .service import RetryPolicy, apply_once
 
 __all__ = [
@@ -26,4 +39,14 @@ __all__ = [
     "RetryPolicy",
     "HHApplySettings",
     "TenantCredentials",
+    # T6 additions (#247):
+    "ApplyEvent",
+    "EventType",
+    "EventDispatcher",
+    "MetricsSnapshot",
+    "MetricsAccumulator",
+    "TenantResolution",
+    "TenantCredentialProvider",
+    "EnvTenantCredentialProvider",
+    "MultiTenantProvider",
 ]
