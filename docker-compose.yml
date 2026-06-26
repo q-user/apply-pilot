@@ -103,7 +103,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       MAX_BOT_TOKEN: ${MAX_BOT_TOKEN:?set MAX_BOT_TOKEN in .env}
       MAX_POLLING_TIMEOUT: ${MAX_POLLING_TIMEOUT:-30}
-    command: ["apply-pilot-max-bot"]
+    command: ["/app/.venv/bin/apply-pilot-max-bot"]
     volumes:
       - ./.data:/data
     restart: unless-stopped
