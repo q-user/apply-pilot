@@ -16,10 +16,12 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 
 # Install production dependencies into a project-local virtualenv.
-# --frozen pins to uv.lock; --no-install-project keeps the image lean until
-# the source is copied in the next stage.
+# --frozen pins to uv.lock; --no-dev excludes test-only deps.
+# This stage also installs the project itself so [project.scripts]
+# console scripts (e.g. apply-pilot-max-bot) are materialized into
+# /app/.venv/bin/ for the runtime stage to inherit.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-install-project
+    uv sync --frozen --no-dev
 
 # ---- runtime ---------------------------------------------------------------
 FROM python:3.13-slim-bookworm AS runtime
