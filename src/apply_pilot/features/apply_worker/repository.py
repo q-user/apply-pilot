@@ -32,7 +32,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
-from typing import Protocol, runtime_checkable
+from typing import Optional, Protocol, runtime_checkable
 
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
@@ -668,3 +668,38 @@ __all__ = [
     "SqlApplyJobRepository",
     "SqlApplyStatusHistoryRepository",
 ]
+
+
+# ============================================================================
+# T5 #246: Idempotency tracker
+# ============================================================================
+
+
+class IdempotencyTracker(Protocol):
+    async def has_successful(self, idempotency_key: str) -> bool: ...
+    async def record_success(
+        self, idempotency_key: str, negotiation_id: Optional[str] = None
+    ) -> None: ...
+
+
+class InMemoryIdempotencyTracker:
+    def __init__(self) -> None:
+        self._state: Dict[str, Optional[str]] = {}
+
+    async def has_successful(self, idempotency_key: str) -> bool:
+        return idempotency_key in self._state
+
+    async def record_success(
+        self, idempotency_key: str, negotiation_id: Optional[str] = None
+    ) -> None:
+        self._state[idempotency_key] = negotiation_id
+
+
+class NoOpIdempotencyTracker:
+    async def has_successful(self, idempotency_key: str) -> bool:
+        return False
+
+    async def record_success(
+        self, idempotency_key: str, negotiation_id: Optional[str] = None
+    ) -> None:
+        return None
