@@ -1,4 +1,5 @@
 """EnvTenantCredentialProvider — OSS default + per-tenant resolution. MultiTenantProvider stub."""
+
 from __future__ import annotations
 
 import pytest

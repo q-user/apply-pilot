@@ -1,9 +1,9 @@
 """EventDispatcher + MetricsAccumulator — exception-safe listeners + snapshot."""
+
 from __future__ import annotations
 
 import pytest
 
-from apply_pilot.features.hh_apply.models import ApplyStatus
 from apply_pilot.features.hh_apply.observability import (
     ApplyEvent,
     EventDispatcher,

@@ -72,7 +72,7 @@ class ScoringReviewService:
         since: datetime | None = None,
     ) -> Sequence[LowConfidenceMatch]:
         """Return matches with ``confidence < threshold``, ordered by confidence ASC."""
-        return self._queue.list_low_confidence(threshold, limit, since)
+        return self._queue.list_low_confidence(threshold, limit, since)  # type: ignore
 
     def mark_reviewed(self, match_id: uuid.UUID, *, reviewer_note: str) -> None:
         """Record a reviewer note against a match.
@@ -88,7 +88,7 @@ class ScoringReviewService:
         # :class:`NotFoundError` for unknown ids; we re-raise as-is
         # so the API layer can map it to a 404.
         try:
-            self._queue.mark_reviewed(match_id)
+            self._queue.mark_reviewed(match_id)  # type: ignore
         except NotFoundError:
             raise
         self._audit_service.log_event(

@@ -30,7 +30,7 @@ import statistics
 import uuid
 from collections.abc import Callable, Sequence
 from datetime import datetime
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from apply_pilot.features.apply_worker.models import ApplyJob, ApplyJobStatus
 from apply_pilot.features.cover_letter.models import CoverLetterDraft
@@ -113,14 +113,14 @@ class _CoverLetterRepo(Protocol):
 class _TelegramAccountRepo(Protocol):
     """Subset of the telegram-account repository the digest uses."""
 
-    def list_all(self) -> Sequence[object]: ...
+    def list_all(self) -> Sequence[Any]: ...
 
 
 @runtime_checkable
 class _UserRepo(Protocol):
     """Subset of the users repository the digest uses."""
 
-    def list_all(self) -> Sequence[object]: ...
+    def list_all(self) -> Sequence[Any]: ...
     def get_by_id(self, user_id: uuid.UUID) -> object | None: ...
 
 
@@ -128,7 +128,7 @@ class _UserRepo(Protocol):
 class _ProfileRepo(Protocol):
     """Subset of :class:`SearchProfileRepository` the service uses."""
 
-    def list_by_user(self, user_id: uuid.UUID) -> Sequence[object]: ...
+    def list_by_user(self, user_id: uuid.UUID) -> Sequence[Any]: ...
 
 
 # ---------------------------------------------------------------------------
@@ -137,7 +137,7 @@ class _ProfileRepo(Protocol):
 
 
 def _bucket_by_status(
-    rows: Sequence[object],
+    rows: Sequence[Any],
     *,
     get_status: Callable[[object], str | None],
     statuses: Sequence[str],

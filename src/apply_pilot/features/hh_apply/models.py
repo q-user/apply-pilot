@@ -1,13 +1,14 @@
 """Pydantic models for the hh_apply slice — request, result, error, status enum, exception."""
+
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
 
-class ApplyStatus(str, Enum):
+class ApplyStatus(StrEnum):
     """Terminal status values for `apply_once` — see docs/integrations/hh_apply.md §1."""
 
     success = "success"

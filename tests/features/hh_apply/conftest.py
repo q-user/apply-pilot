@@ -3,9 +3,10 @@
 NO real hh.ru calls. NO `Mock`-overuse. Tests use InMemoryCookieJar, FakeClock,
 and httpx.MockTransport (built-in, no extra dep).
 """
+
 from __future__ import annotations
 
-from typing import Callable, Iterator, Optional, Tuple
+from collections.abc import Callable
 
 import httpx
 import pytest
@@ -13,8 +14,7 @@ import pytest
 from apply_pilot.features.hh_apply.client import HHApplyClient
 from apply_pilot.features.hh_apply.config import HHApplySettings
 
-
-ALLOWED_DOMAINS: Tuple[str, ...] = ("hh.ru", "hh.kz", "hh.uz")
+ALLOWED_DOMAINS: tuple[str, ...] = ("hh.ru", "hh.kz", "hh.uz")
 
 
 class InMemoryCookieJar:
@@ -23,12 +23,12 @@ class InMemoryCookieJar:
     Used in tests as a stand-in for MozillaCookieJar without filesystem I/O.
     """
 
-    def __init__(self, allow: Tuple[str, ...] = ALLOWED_DOMAINS) -> None:
+    def __init__(self, allow: tuple[str, ...] = ALLOWED_DOMAINS) -> None:
         self._allow = allow
-        self._cookies: dict[Tuple[str, str, str], str] = {}
+        self._cookies: dict[tuple[str, str, str], str] = {}
 
     @staticmethod
-    def _domain_allowed(domain: str, allow: Tuple[str, ...]) -> bool:
+    def _domain_allowed(domain: str, allow: tuple[str, ...]) -> bool:
         d = domain.lstrip(".")
         return any(d == h or d.endswith("." + h) for h in allow)
 
@@ -37,10 +37,11 @@ class InMemoryCookieJar:
             return
         self._cookies[(domain, path, name)] = value
 
-    def get(self, name: str, domain: Optional[str] = None) -> Optional[str]:
+    def get(self, name: str, domain: str | None = None) -> str | None:
         # Match HHApplyClient.cookies.get() pattern: optional domain filter.
         candidates = [
-            v for (d, p, n), v in self._cookies.items()
+            v
+            for (d, p, n), v in self._cookies.items()
             if n == name and (domain is None or d == domain)
         ]
         return candidates[0] if candidates else None
@@ -79,7 +80,9 @@ def make_transport_client() -> Callable[[Callable[[httpx.Request], httpx.Respons
 
     Pass a handler that returns httpx.Response per request; this keeps tests in-memory.
     """
+
     def _factory(handler: Callable[[httpx.Request], httpx.Response]) -> HHApplyClient:
         transport = httpx.MockTransport(handler)
         return HHApplyClient(transport=transport)
+
     return _factory

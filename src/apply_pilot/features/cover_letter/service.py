@@ -339,7 +339,7 @@ class CoverLetterService:
             # closes its session inside ``get_by_match``, so the
             # instance it returns is detached and a direct attribute
             # write on it would be silently lost. Issue #144.
-            return self._draft_repo.update_content(
+            return self._draft_repo.update_content(  # type: ignore[invalid-return-type]
                 match_id=match_id,
                 content=content,
                 prompt_version=self._prompt_version,

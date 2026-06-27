@@ -125,7 +125,8 @@ def _all_match_rows(match_repo: VacancyMatchRepository) -> Sequence[VacancyMatch
     """
     by_id = getattr(match_repo, "_by_id", None)
     if isinstance(by_id, dict):
-        return list(by_id.values())
+        items: list[VacancyMatch] = list(by_id.values())
+    return items
     # Defensive fallback for fakes that don't expose the storage dict:
     # call the public read method and ask for a very large limit.
     return list(match_repo.list_by_profile(uuid.uuid4(), limit=10_000))

@@ -1,4 +1,5 @@
 """apply_once — status mapping, retry policy, payload shape (force/lux/message)."""
+
 from __future__ import annotations
 
 import json
@@ -9,10 +10,9 @@ import pytest
 from apply_pilot.features.hh_apply.client import HHApplyClient
 from apply_pilot.features.hh_apply.models import (
     ApplyRequest,
-    ApplyResult,
     ApplyStatus,
 )
-from apply_pilot.features.hh_apply.service import apply_once, RetryPolicy
+from apply_pilot.features.hh_apply.service import RetryPolicy, apply_once
 
 
 def _client_with_responses(responses: list[httpx.Response]) -> HHApplyClient:
@@ -35,9 +35,11 @@ def _post_json(request: httpx.Request) -> dict:
 class TestApplyOnceStatusMapping:
     @pytest.mark.asyncio
     async def test_201_success(self) -> None:
-        client = _client_with_responses([
-            httpx.Response(201, json={"id": "neg-1", "vacancy_id": "v1", "state": "applied"}),
-        ])
+        client = _client_with_responses(
+            [
+                httpx.Response(201, json={"id": "neg-1", "vacancy_id": "v1", "state": "applied"}),
+            ]
+        )
         result = await apply_once(
             ApplyRequest(vacancy_id="v1", resume_id="r1", message="hi"),
             client=client,
@@ -49,9 +51,11 @@ class TestApplyOnceStatusMapping:
 
     @pytest.mark.asyncio
     async def test_400_validation_error(self) -> None:
-        client = _client_with_responses([
-            httpx.Response(400, json={"errors": {"message": ["Required field"]}}),
-        ])
+        client = _client_with_responses(
+            [
+                httpx.Response(400, json={"errors": {"message": ["Required field"]}}),
+            ]
+        )
         result = await apply_once(
             ApplyRequest(vacancy_id="v1", resume_id="r1", message="hi"),
             client=client,
@@ -62,9 +66,11 @@ class TestApplyOnceStatusMapping:
 
     @pytest.mark.asyncio
     async def test_409_idle_already_applied(self) -> None:
-        client = _client_with_responses([
-            httpx.Response(409, json={"error": "already_applied", "negotiation_id": "neg-2"}),
-        ])
+        client = _client_with_responses(
+            [
+                httpx.Response(409, json={"error": "already_applied", "negotiation_id": "neg-2"}),
+            ]
+        )
         result = await apply_once(
             ApplyRequest(vacancy_id="v1", resume_id="r1", message="hi"),
             client=client,
@@ -76,14 +82,17 @@ class TestApplyOnceStatusMapping:
     async def test_429_rate_limited_after_retry_exhaustion(self) -> None:
         # Configure tight backoff so retries do not stall the test
         rapid = RetryPolicy(request_delay_ms=0, jitter_ms=0)
-        client = _client_with_responses([
-            httpx.Response(429, text="throttled"),
-            httpx.Response(429, text="throttled"),
-            httpx.Response(429, text="throttled"),
-        ])
+        client = _client_with_responses(
+            [
+                httpx.Response(429, text="throttled"),
+                httpx.Response(429, text="throttled"),
+                httpx.Response(429, text="throttled"),
+            ]
+        )
         result = await apply_once(
             ApplyRequest(vacancy_id="v1", resume_id="r1", message="hi"),
-            client=client, retry_policy=rapid,
+            client=client,
+            retry_policy=rapid,
         )
         assert result.status == ApplyStatus.rate_limited
         assert result.attempt_count == 3
@@ -91,14 +100,17 @@ class TestApplyOnceStatusMapping:
     @pytest.mark.asyncio
     async def test_5xx_upstream_error_after_retry_exhaustion(self) -> None:
         rapid = RetryPolicy(request_delay_ms=0, jitter_ms=0)
-        client = _client_with_responses([
-            httpx.Response(500, text="server kaboom"),
-            httpx.Response(503, text="server kaboom"),
-            httpx.Response(500, text="server kaboom"),
-        ])
+        client = _client_with_responses(
+            [
+                httpx.Response(500, text="server kaboom"),
+                httpx.Response(503, text="server kaboom"),
+                httpx.Response(500, text="server kaboom"),
+            ]
+        )
         result = await apply_once(
             ApplyRequest(vacancy_id="v1", resume_id="r1", message="hi"),
-            client=client, retry_policy=rapid,
+            client=client,
+            retry_policy=rapid,
         )
         assert result.status == ApplyStatus.upstream_error
         assert result.attempt_count == 3
@@ -117,8 +129,11 @@ class TestApplyOncePayload:
         client = HHApplyClient(transport=transport)
         await apply_once(
             ApplyRequest(
-                vacancy_id="v1", resume_id="r1", message="hello",
-                lux=True, force=True,
+                vacancy_id="v1",
+                resume_id="r1",
+                message="hello",
+                lux=True,
+                force=True,
             ),
             client=client,
         )

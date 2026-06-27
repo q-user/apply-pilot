@@ -1,4 +1,5 @@
 """ApplyStatus enum + ApplyRequest (frozen) + ApplyResult + ApplyError + HHApplyError."""
+
 from __future__ import annotations
 
 import pytest
@@ -41,8 +42,11 @@ class TestApplyRequest:
 
     def test_lux_and_force_can_be_set(self) -> None:
         r = ApplyRequest(
-            vacancy_id="v1", resume_id="r1", message="hello",
-            lux=True, force=True,
+            vacancy_id="v1",
+            resume_id="r1",
+            message="hello",
+            lux=True,
+            force=True,
         )
         assert r.lux is True
         assert r.force is True

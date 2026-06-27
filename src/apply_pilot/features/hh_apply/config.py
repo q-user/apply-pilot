@@ -6,9 +6,8 @@ HHApplyClient + RetryPolicy.
 
 Source-of-truth contract: docs/integrations/hh_apply.md §3 + §5.
 """
-from __future__ import annotations
 
-from typing import Optional
+from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
@@ -16,8 +15,8 @@ try:  # Pydantic v2 split: BaseSettings is its own package.
     from pydantic_settings import BaseSettings, SettingsConfigDict
 except ImportError as _exc:  # pragma: no cover — surfaced in PR body
     raise ImportError(
-        'pydantic-settings is required for src/apply_pilot/features/hh_apply/config.py. '
-        'Add pydantic-settings>=2.6.0 to pyproject.toml [project.dependencies].'
+        "pydantic-settings is required for src/apply_pilot/features/hh_apply/config.py. "
+        "Add pydantic-settings>=2.6.0 to pyproject.toml [project.dependencies]."
     ) from _exc
 
 from .client import DEFAULT_BASE_URL, DEFAULT_USER_AGENT
@@ -33,7 +32,7 @@ class TenantCredentials(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     resume_id: str
-    user_agent: Optional[str] = None  # if None, falls back to HHApplySettings.user_agent
+    user_agent: str | None = None  # if None, falls back to HHApplySettings.user_agent
 
 
 class HHApplySettings(BaseSettings):
@@ -60,7 +59,7 @@ class HHApplySettings(BaseSettings):
             "T3 lock-in: T2 finalizes the literal value before PR merge."
         ),
     )
-    xsrf_init_url: HttpUrl = Field(
+    xsrf_init_url: HttpUrl = Field(  # type: ignore[invalid-assignment]
         default=DEFAULT_BASE_URL + "/",
         description="URL the XSRF bootstrap GET hits — must be on a hh.* domain.",
     )
@@ -76,7 +75,7 @@ class HHApplySettings(BaseSettings):
     # In OSS single-user mode this is None. In SaaS-multi-tenant mode (post-M11),
     # T6 surfaces a TenantCredentialProvider abstraction; this dict remains the
     # static env-var-driven fallback that the SaaS provider replaces.
-    tenant_credentials: Optional[dict[str, TenantCredentials]] = Field(
+    tenant_credentials: dict[str, TenantCredentials] | None = Field(
         default=None,
         description=(
             "Per-tenant credential override map — key is tenant_id, value is "

@@ -1,0 +1,32 @@
+src/apply_pilot/features/apply_worker/notifications.py:101:16: warning[unresolved-attribute] Object of type `object` has no attribute `send_message`
+src/apply_pilot/features/careers/config.py:39:1: error[invalid-syntax] __future__ imports must be at the top of the file
+src/apply_pilot/features/careers/config.py:167:36: warning[invalid-argument-type] Method `__getitem__` of type `bound method Top[dict[Unknown, Unknown]].__getitem__(key: Never, /) -> object` cannot be called with key of type `Literal["kind"]` on object of type `Top[dict[Unknown, Unknown]]`
+src/apply_pilot/features/cover_letter/service.py:342:20: warning[invalid-return-type] Return type does not match returned value: expected `CoverLetterDraft`, found `CoverLetterDraft | None`
+src/apply_pilot/features/dashboard/service.py:116:36: error[unresolved-reference] Name `Any` used when not defined
+src/apply_pilot/features/dashboard/service.py:123:36: error[unresolved-reference] Name `Any` used when not defined
+src/apply_pilot/features/dashboard/service.py:131:60: error[unresolved-reference] Name `Any` used when not defined
+src/apply_pilot/features/dashboard/service.py:140:20: error[unresolved-reference] Name `Any` used when not defined
+src/apply_pilot/features/dashboard/service.py:284:43: warning[unresolved-attribute] Object of type `object` has no attribute `status`
+src/apply_pilot/features/dashboard/service.py:288:34: warning[unresolved-attribute] Object of type `object` has no attribute `status`
+src/apply_pilot/features/dashboard/service.py:610:47: warning[unused-type-ignore-comment] Unused blanket `type: ignore` directive
+src/apply_pilot/features/dashboard/service.py:611:69: warning[unused-type-ignore-comment] Unused blanket `type: ignore` directive
+src/apply_pilot/features/dashboard/service.py:612:17: warning[invalid-argument-type] Argument to `StatsService.__init__` is incorrect: Expected `apply_pilot.features.telegram.digest.service._UserRepo`, found `apply_pilot.features.dashboard.service._UserRepo`
+src/apply_pilot/features/hh_apply/config.py:63:30: warning[invalid-assignment] Object of type `dataclasses.Field[str]` is not assignable to `HttpUrl`
+src/apply_pilot/features/learning/repository.py:113:9: warning[invalid-argument-type] Argument is incorrect: Expected `Literal["rejection", "dismissal", "low_score"]`, found `str`
+src/apply_pilot/features/max/digest/api.py:45:40: error[unresolved-reference] Name `AcceptActionHandler` used when not defined
+src/apply_pilot/features/max/digest/api.py:45:61: error[unresolved-reference] Name `DeferActionHandler` used when not defined
+src/apply_pilot/features/max/digest/api.py:45:81: error[unresolved-reference] Name `RejectActionHandler` used when not defined
+src/apply_pilot/features/max/digest/api.py:45:102: error[unresolved-reference] Name `ReviewActionHandler` used when not defined
+src/apply_pilot/features/max/digest/api.py:45:123: error[unresolved-reference] Name `RegenerateActionHandler` used when not defined
+src/apply_pilot/features/max/digest/api.py:116:9: warning[invalid-argument-type] Argument to `MaxDigestSender.__init__` is incorrect: Expected `_MaxAccountRepo`, found `SqlAlchemyMaxAccountRepository`
+src/apply_pilot/features/max/digest/service.py:55:60: error[unresolved-reference] Name `SearchProfile` used when not defined
+src/apply_pilot/features/max/digest/service.py:196:46: warning[unresolved-attribute] Object of type `object` has no attribute `user_id`
+src/apply_pilot/features/messaging/actions/accept.py:385:13: warning[unresolved-attribute] Attribute `record_accepted_letter` is not defined on `None` in union `StyleMemoryService | None`
+src/apply_pilot/features/scoring/service.py:98:15: warning[unresolved-attribute] Object of type `VacancyMatch` has no attribute `vacancy`
+src/apply_pilot/features/scoring/service.py:99:15: warning[unresolved-attribute] Object of type `VacancyMatch` has no attribute `search_profile`
+src/apply_pilot/features/scoring/service.py:115:15: warning[unresolved-attribute] Object of type `VacancyMatch` has no attribute `search_profile`
+src/apply_pilot/features/scoring_review/repository.py:128:37: warning[invalid-assignment] Object of type `list[object]` is not assignable to `list[VacancyMatch]`
+src/apply_pilot/features/screening/repository.py:45:38: error[unresolved-import] Module `sqlalchemy.engine.result` has no member `CursorResult`
+src/apply_pilot/features/sources/adapter.py:182:23: warning[invalid-type-form] Invalid subscript of object of type `def list(self) -> Unknown` in a return type annotation
+src/apply_pilot/features/telegram/digest/api.py:66:9: warning[invalid-argument-type] Argument to `DigestSender.__init__` is incorrect: Expected `_TelegramAccountRepo`, found `SqlAlchemyTelegramAccountRepository`
+Found 31 diagnostics

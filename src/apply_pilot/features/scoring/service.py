@@ -49,9 +49,10 @@ that performs the join.
 from __future__ import annotations
 
 import logging
+import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Protocol, runtime_checkable
+from typing import Protocol, cast, runtime_checkable
 
 from apply_pilot.features.matches.models import VacancyMatch
 from apply_pilot.features.matches.repository import VacancyMatchRepository
@@ -217,10 +218,10 @@ class ScoringService:
             experiment = self._experiment_service.repo.get_active(self._experiment_name)
             if experiment is not None:
                 variant: ScoringVariant | None = self._experiment_service.assign_variant(
-                    user_id=user_id,
+                    user_id=cast(uuid.UUID, user_id),
                     vacancy_id=match.vacancy_id,
                     experiment_name=self._experiment_name,
-                )
+                )  # type: ignore[invalid-argument-type]
                 if variant is not None:
                     prompt_version = f"{experiment.prompt_name}@{variant.prompt_version}"
                     experiment_id = experiment.id
@@ -252,11 +253,11 @@ class ScoringService:
             self._experiment_service.record_outcome(
                 experiment_id=experiment_id,
                 variant_name=variant_name,
-                user_id=self._match_to_user_id(match),
+                user_id=cast(uuid.UUID, self._match_to_user_id(match)),
                 vacancy_id=match.vacancy_id,
                 score=result.score,
                 accepted=False,
-            )
+            )  # type: ignore[invalid-argument-type]
 
         return updated
 

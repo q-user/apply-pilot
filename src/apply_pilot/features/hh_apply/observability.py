@@ -13,19 +13,19 @@ Usage pattern (T5 wires):
     metrics.record(tenant_id=tenant_id, success=result.status == success, duration_ms=duration_ms,
                   retries=max(0, result.attempt_count - 1))
 """
+
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from enum import Enum
-from typing import List, Optional
+from enum import StrEnum
 
 from .models import ApplyStatus
 
 logger = logging.getLogger(__name__)
 
 
-class EventType(str, Enum):
+class EventType(StrEnum):
     """Structured event types emitted by hh_apply — see docs/integrations/hh_apply.md section 6."""
 
     ATTEMPT_STARTED = "apply_attempt_started"
@@ -42,18 +42,18 @@ class ApplyEvent:
     """
 
     event_type: EventType
-    tenant_id: Optional[str]
+    tenant_id: str | None
     vacancy_id: str
     resume_id: str
-    status: Optional[ApplyStatus] = None
-    http_status: Optional[int] = None
+    status: ApplyStatus | None = None
+    http_status: int | None = None
     attempt_count: int = 1
-    duration_ms: Optional[float] = None
-    error_code: Optional[str] = None
-    negotiation_id: Optional[str] = None
+    duration_ms: float | None = None
+    error_code: str | None = None
+    negotiation_id: str | None = None
 
 
-from typing import List, Optional, Protocol  # noqa: E402
+from typing import Protocol  # noqa: E402
 
 
 class EventListener(Protocol):
@@ -62,9 +62,7 @@ class EventListener(Protocol):
     is an operator's nightmare).
     """
 
-    def on_event(self, event: ApplyEvent) -> None:
-        ...
-
+    def on_event(self, event: ApplyEvent) -> None: ...
 
 
 class EventDispatcher:
@@ -75,10 +73,10 @@ class EventDispatcher:
     every `apply_once` lifecycle boundary.
     """
 
-    def __init__(self, listeners: Optional[List["EventListener"]] = None) -> None:
-        self._listeners: List["EventListener"] = list(listeners) if listeners else []
+    def __init__(self, listeners: list[EventListener] | None = None) -> None:
+        self._listeners: list[EventListener] = list(listeners) if listeners else []
 
-    def attach(self, listener: "EventListener") -> None:
+    def attach(self, listener: EventListener) -> None:
         self._listeners.append(listener)
 
     def emit(self, event: ApplyEvent) -> None:
@@ -86,10 +84,16 @@ class EventDispatcher:
         logger.debug(
             "hh_apply.event: %s tenant=%s vacancy=%s resume=%s status=%s http=%s "
             "attempts=%s duration_ms=%s error=%s neg_id=%s",
-            event.event_type.value, event.tenant_id, event.vacancy_id, event.resume_id,
+            event.event_type.value,
+            event.tenant_id,
+            event.vacancy_id,
+            event.resume_id,
             event.status.value if event.status is not None else None,
-            event.http_status, event.attempt_count, event.duration_ms,
-            event.error_code, event.negotiation_id,
+            event.http_status,
+            event.attempt_count,
+            event.duration_ms,
+            event.error_code,
+            event.negotiation_id,
         )
         for listener in list(self._listeners):  # defensive copy; tolerate attach() during emit
             try:
@@ -126,12 +130,12 @@ class MetricsAccumulator:
     """
 
     def __init__(self) -> None:
-        self._by_tenant: dict[Optional[str], MetricsSnapshot] = {}
+        self._by_tenant: dict[str | None, MetricsSnapshot] = {}
 
     def record(
         self,
         *,
-        tenant_id: Optional[str],
+        tenant_id: str | None,
         success: bool,
         duration_ms: float,
         retries: int = 0,
@@ -157,14 +161,17 @@ class MetricsAccumulator:
         """Return read-only view (MappingProxyType) of per-tenant metrics — callers
         cannot mutate our state nor the snapshot it returns."""
         from types import MappingProxyType
-        return MappingProxyType({
-            tenant_id: MetricsSnapshot(
-                attempts=s.attempts,
-                successes=s.successes,
-                failures=s.failures,
-                latency_ms_sum=s.latency_ms_sum,
-                latency_ms_count=s.latency_ms_count,
-                retries_total=s.retries_total,
-            )
-            for tenant_id, s in self._by_tenant.items()
-        })
+
+        return MappingProxyType(
+            {
+                tenant_id: MetricsSnapshot(
+                    attempts=s.attempts,
+                    successes=s.successes,
+                    failures=s.failures,
+                    latency_ms_sum=s.latency_ms_sum,
+                    latency_ms_count=s.latency_ms_count,
+                    retries_total=s.retries_total,
+                )
+                for tenant_id, s in self._by_tenant.items()
+            }
+        )

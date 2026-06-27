@@ -8,9 +8,10 @@ post-M11 SaaS epic). This module exposes:
 
 Source-of-truth contract: docs/integrations/hh_apply.md section 6 + T6 #247.
 """
+
 from __future__ import annotations
 
-from typing import Optional
+from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict
 
@@ -25,8 +26,8 @@ class TenantResolution(BaseModel):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    tenant_id: Optional[str] = None
-    credentials: Optional[TenantCredentials] = None
+    tenant_id: str | None = None
+    credentials: TenantCredentials | None = None
     resume_id: str = "oss-default"
     client: HHApplyClient  # ready-to-use; UA configured
     retry_policy: RetryPolicy
@@ -41,11 +42,11 @@ class TenantCredentialProvider:
     a TenantResolution.
     """
 
-    def resolve(self, tenant_id: Optional[str]) -> TenantResolution:  # pragma: no cover
-        ...
+    def resolve(self, tenant_id: str | None) -> TenantResolution:  # pragma: no cover
+        raise NotImplementedError
 
 
-class EnvTenantCredentialProvider:
+class EnvTenantCredentialProvider(TenantCredentialProvider):
     """Default provider — OSS single-user mode + env-driven multi-tenant fallback.
 
     Resolution rules (governed by `settings.tenant_credentials`):
@@ -63,11 +64,10 @@ class EnvTenantCredentialProvider:
     def __init__(self, settings: HHApplySettings) -> None:
         self._settings = settings
 
-    def resolve(self, tenant_id: Optional[str]) -> TenantResolution:
-        from typing import ClassVar  # noqa: F401  (kept inline for forward-decl in py3.9+)
+    def resolve(self, tenant_id: str | None) -> TenantResolution:
         settings = self._settings
         ua: str = settings.user_agent
-        credentials: Optional[TenantCredentials] = None
+        credentials: TenantCredentials | None = None
         resume_id: str = "oss-default-resume"
 
         creds_map = settings.tenant_credentials
@@ -112,9 +112,7 @@ class MultiTenantProvider:
     Implementation belongs to the post-M11 SaaS epic (billing + quota + tenant-secret-vault).
     """
 
-    def resolve(
-        self, tenant_id: Optional[str], settings: HHApplySettings
-    ) -> TenantResolution:
+    def resolve(self, tenant_id: str | None, settings: HHApplySettings) -> TenantResolution:
         raise NotImplementedError(
             "MultiTenantProvider is reserved for the post-M11 SaaS epic. "
             "For OSS single-user mode or env-driven multi-tenant, use "

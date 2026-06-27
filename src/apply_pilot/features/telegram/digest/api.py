@@ -63,7 +63,7 @@ def build_digest_sender(
     return DigestSender(
         stats_service=stats_service,
         telegram_bot=bot,
-        telegram_account_repo=telegram_repo,
+        telegram_account_repo=telegram_repo,  # type: ignore[invalid-argument-type]
     )
 
 

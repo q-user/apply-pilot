@@ -39,9 +39,10 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, cast, runtime_checkable
 
 from sqlalchemy import delete, select
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
 from apply_pilot.features.screening.models import (
@@ -211,7 +212,7 @@ class SqlScreeningQuestionRepository:
             # ``rowcount`` is the number of rows matched by the DELETE
             # statement; on sqlite this is the number of rows actually
             # removed.
-            return int(result.rowcount or 0)
+            return int(cast("CursorResult[Any]", result).rowcount or 0)
         except Exception:
             session.rollback()
             raise

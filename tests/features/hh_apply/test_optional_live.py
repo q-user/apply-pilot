@@ -7,6 +7,7 @@ This file IS skipped in CI. Run manually with::
 It exists so the developer has a reproducible smoke harness, but is intentionally
 out-of-band for automated testing — hh.ru rates bots.
 """
+
 from __future__ import annotations
 
 import pytest

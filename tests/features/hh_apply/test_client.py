@@ -1,12 +1,10 @@
 """HHApplyClient — Android UA defaults, allowlist filter, XSRF refresh on 401."""
+
 from __future__ import annotations
 
-import httpx
 import pytest
 
 from apply_pilot.features.hh_apply.client import (
-    DEFAULT_BASE_URL,
-    DEFAULT_USER_AGENT,
     HHApplyClient,
 )
 
@@ -58,7 +56,8 @@ class TestCookieDomainAllowlist:
     )
     def test_domain_classifier(self, domain: str, allowed: bool) -> None:
         from tests.features.hh_apply.conftest import InMemoryCookieJar
-        jar = InMemoryCookieJar(InMemoryCookieJar._domain_allowed(domain, ("hh.ru", "hh.kz", "hh.uz")))
+
+        InMemoryCookieJar(InMemoryCookieJar._domain_allowed(domain, ("hh.ru", "hh.kz", "hh.uz")))
         # The classifier is a static method we exposed for testing in conftest:
         # use the public constant ALLOWED_DOMAINS for cross-check.
         d = domain.lstrip(".")

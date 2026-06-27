@@ -110,7 +110,7 @@ def _row_to_signal(row: LearningSignalRow) -> LearningSignal:
         rejection_reason=row.rejection_reason,
         prompt_version=row.prompt_version,
         score=row.score,
-        signal_type=row.signal_type,  # type: ignore[arg-type]
+        signal_type=row.signal_type,  # type: ignore[invalid-argument-type]
         created_at=row.created_at,
     )
 
