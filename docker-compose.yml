@@ -50,9 +50,8 @@ services:
     image: apply-pilot:local
     container_name: apply-pilot-api
     environment:
-      # asyncpg driver is preferred inside the container, but the SQLAlchemy
-      # URL itself is left to the application to compose from individual vars.
-      APP_DATABASE_URL: postgresql+asyncpg://apply_pilot:apply_pilot@db:5432/apply_pilot
+      # psycopg2 sync driver — matches Alembic chain + the sync engine in src/apply_pilot/db.py.
+      DATABASE_URL: postgresql+psycopg2://apply_pilot:apply_pilot@db:5432/apply_pilot
       APP_REDIS_URL: redis://redis:6379/0
       APP_ENV: development
     ports:
@@ -99,7 +98,7 @@ services:
       redis:
         condition: service_healthy
     environment:
-      APP_DATABASE_URL: ${APP_DATABASE_URL:-sqlite+pysqlite:////data/app.db}
+      DATABASE_URL: ${DATABASE_URL:-sqlite+pysqlite:////data/app.db}
       REDIS_URL: redis://redis:6379/0
       MAX_BOT_TOKEN: ${MAX_BOT_TOKEN:?set MAX_BOT_TOKEN in .env}
       MAX_POLLING_TIMEOUT: ${MAX_POLLING_TIMEOUT:-30}
