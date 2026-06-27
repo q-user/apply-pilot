@@ -9,12 +9,12 @@ help:                           ## show available targets
 cleanup-worktrees:              ## remove .worktrees/* whose branch is merged into main (prompts via --dry-run first if stdout is tty)
 	@bash scripts/worktree-cleanup.sh
 
-cleanup-worktrees-dry-run:      ## show what `make cleanup-worktrees` would do, without removing anything
+cleanup-worktrees-dry-run:      ## show what \`make cleanup-worktrees\` would do, without removing anything
 	@bash scripts/worktree-cleanup.sh --dry-run
 
 # Bundle the codebase for AI analysis. Excludes VCS metadata, virtualenvs,
 # tooling caches, local runtime data, worktrees and agent state so the
-# resulting archive contains only code + config the model should see.
+# resulting archive contains only code + config + docs the model should see.
 ANALYSIS_ARCHIVE ?= /tmp/analysis.zip
 
 ai-archive:                    ## build a zip of the codebase for AI analysis at $(ANALYSIS_ARCHIVE)
