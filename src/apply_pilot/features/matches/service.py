@@ -104,6 +104,27 @@ class MatchService:
         self._match_repo = match_repo
         self._profile_repo = profile_repo
 
+    def _get_owned(self, match_id: uuid.UUID, user_id: uuid.UUID) -> VacancyMatch:
+        """Resolve a match for ``user_id`` and verify ownership in one trip (Fix #263).
+
+        Resolves user profiles via ``SearchProfileRepository.list_by_user``
+        and queries ``VacancyMatchRepository.get_with_owner`` once per profile.
+        For users with one profile (the common case) this is a single SELECT
+        round-trip; multi-profile users iterate (rare).
+        """
+        from apply_pilot.features.matches.exceptions import MatchNotFoundOrForbiddenError
+
+        profiles = list(self._profile_repo.list_by_user(user_id))
+        if not profiles:
+            raise MatchNotFoundOrForbiddenError(f"user {user_id} has no associated search profile")
+        for profile in profiles:
+            match = self._match_repo.get_with_owner(match_id, profile.id)
+            if match is not None:
+                return match
+        raise MatchNotFoundOrForbiddenError(
+            f"vacancy match {match_id} not found or not owned by {user_id}"
+        )
+
     @property
     def repo(self) -> VacancyMatchRepository:
         """Expose the repository for tests that need to assert state."""
@@ -134,11 +155,8 @@ class MatchService:
         return _match_to_dto(created)
 
     def get(self, match_id: uuid.UUID, *, user_id: uuid.UUID) -> VacancyMatchRead:
-        """Return a single match, enforcing ownership."""
-        match = self._match_repo.get_by_id(match_id)
-        if match is None:
-            raise MatchNotFoundError(f"vacancy match {match_id} not found")
-        self._assert_ownership(match, user_id)
+        """Return a single match owned by ``user_id``; raise 404-equivalent otherwise (Fix #263)."""
+        match = self._get_owned(match_id, user_id)
         return _match_to_dto(match)
 
     def list_matches(
@@ -160,26 +178,12 @@ class MatchService:
         *,
         user_id: uuid.UUID | None = None,
     ) -> VacancyMatchRead:
-        """Update a match's status (and optionally its score).
-
-        When ``user_id`` is supplied the service enforces ownership
-        before mutating state. The HTTP layer always supplies it; unit
-        tests that exercise the repository wiring can pass ``None`` to
-        skip the check.
-        """
+        """Update match status after verifying ownership (Fix #263: single round-trip)."""
+        match = self._get_owned(match_id, user_id)
         _validate_status(status)
-        match = self._match_repo.get_by_id(match_id)
-        if match is None:
-            raise MatchNotFoundError(f"vacancy match {match_id} not found")
-        if user_id is not None:
-            self._assert_ownership(match, user_id)
-        try:
-            updated = self._match_repo.update_status(match_id, status, score=score)
-        except NotFoundError as exc:
-            # Surface the repository's not-found as a domain error too,
-            # in case the row was removed between the get and the update.
-            raise MatchNotFoundError(f"vacancy match {match_id} not found") from exc
-        return _match_to_dto(updated)
+        match.status = MatchStatus(status)
+        self._match_repo.update_status(match)
+        return _match_to_dto(match)
 
     # -- bulk writers ----------------------------------------------------
 

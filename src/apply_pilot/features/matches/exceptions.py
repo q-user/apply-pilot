@@ -1,13 +1,6 @@
 """Domain exceptions for the matches slice (Fix #263)."""
+
 from __future__ import annotations
-
-from apply_pilot.shared.errors import NotFoundError
-
-
-class MatchNotFoundError(NotFoundError):
-    """The requested vacancy match does not exist."""
-
-    code: str = "vacancy_match_not_found"
 
 
 class MatchNotFoundOrForbiddenError(LookupError):
