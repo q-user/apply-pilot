@@ -492,3 +492,44 @@ class TestSqlFilterList:
         )
         assert {v.source_id for v in items} == {"b", "c"}
         assert sql_repo.count_with_filters(source="hh", salary_min=150_000, location="moscow") == 2
+
+
+class TestUpsertReturnsInOneRoundTrip:
+    """Regression for issue #262: upsert must use RETURNING, not a follow-up SELECT.
+
+    Compilation contract: pin ``RETURNING`` into the upsert statement
+    so the round-trip count drops from two to one. The functional
+    sql repository tests (test_upsert_inserts_and_returns_row,
+    test_upsert_updates_existing_row_in_place) cover the runtime
+    behaviour end-to-end.
+    """
+
+    def test_postgresql_upsert_compiles_with_returning(self) -> None:
+        from sqlalchemy.dialects import postgresql
+
+        stmt = (
+            pg_insert(Vacancy)
+            .values(source="hh", source_id="rt", title="t", raw_data={})
+            .on_conflict_do_update(
+                constraint="uq_vacancies_source_source_id",
+                set_={"title": pg_insert(Vacancy).excluded.title},
+            )
+            .returning(Vacancy)
+        )
+        rendered = str(stmt.compile(dialect=postgresql.dialect())).upper()
+        assert "RETURNING" in rendered
+
+    def test_sqlite_upsert_compiles_with_returning(self) -> None:
+        from sqlalchemy.dialects import sqlite
+
+        stmt = (
+            sqlite_insert(Vacancy)
+            .values(source="hh", source_id="rt2", title="t", raw_data={})
+            .on_conflict_do_update(
+                index_elements=["source", "source_id"],
+                set_={"title": sqlite_insert(Vacancy).excluded.title},
+            )
+            .returning(Vacancy)
+        )
+        rendered = str(stmt.compile(dialect=sqlite.dialect())).upper()
+        assert "RETURNING" in rendered

@@ -385,11 +385,12 @@ class SqlVacancyRepository:
                 insert_stmt = insert_stmt.on_conflict_do_update(
                     constraint="uq_vacancies_source_source_id",
                     set_=update_cols,
-                )
+                ).returning(Vacancy)
             else:
                 # SQLite (and the generic dialect) — ``prefix_with("OR REPLACE")``
                 # would clobber the row, so we use the ``INSERT ... ON CONFLICT``
-                # form supported by sqlite ≥ 3.24.
+                # form supported by sqlite ≥ 3.24. Modern SQLite (≥3.35) also
+                # ships ``RETURNING`` so the round-trip count stays at one.
                 insert_stmt = sqlite_insert(Vacancy).values(**row_values)
                 update_cols = {
                     col: getattr(insert_stmt.excluded, col) for col in _upsert_columns(vacancy)
@@ -397,19 +398,13 @@ class SqlVacancyRepository:
                 insert_stmt = insert_stmt.on_conflict_do_update(
                     index_elements=["source", "source_id"],
                     set_=update_cols,
-                )
+                ).returning(Vacancy)
 
-            session.execute(insert_stmt)
+            # ``RETURNING`` hands the canonical row back in the same trip,
+            # so we no longer re-``SELECT`` the same ``(source, source_id)``
+            # pair after the upsert.
+            refreshed = session.execute(insert_stmt).scalar_one()
             session.commit()
-
-            # Re-fetch the canonical row so the caller observes the
-            # database-assigned id and the (server-side) created_at.
-            refreshed = session.execute(
-                select(Vacancy).where(
-                    Vacancy.source == vacancy.source,
-                    Vacancy.source_id == vacancy.source_id,
-                )
-            ).scalar_one()
             return refreshed
         except Exception:
             session.rollback()
