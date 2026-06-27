@@ -72,10 +72,10 @@ def _bypass_action_handlers() -> tuple[
             account_repo=noop,
         ),
         RegenerateActionHandler(
-            match_service=noop,
-            vacancy_repo=noop,
-            cover_letter_repo=noop,
+            cover_letter_service=noop,
             account_repo=noop,
+            audit_service=noop,
+            profile_repo=noop,
         ),
     )
 
