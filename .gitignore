@@ -1,5 +1,14 @@
 .worktrees/
 
+# CI scratch dumps (logs redirected to repo root during local checks)
+pytest.txt
+ruff.txt
+ty.txt
+ty_final.txt
+
+# Local planning scratch (skill: agentic-vsa-workflow forbids .md plans in repo)
+_plans/
+
 # Python
 __pycache__/
 *.py[cod]
