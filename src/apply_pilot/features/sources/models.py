@@ -21,6 +21,7 @@ from sqlalchemy import (
     JSON,
     Boolean,
     DateTime,
+    Index,
     Integer,
     String,
     Text,
@@ -40,6 +41,14 @@ class Vacancy(Base):
     __table_args__ = (
         # The natural key: one canonical row per (source, external id).
         UniqueConstraint("source", "source_id", name="uq_vacancies_source_source_id"),
+        # Issue #259: every listing/sort path on this table is
+        # ``ORDER BY created_at DESC``. Backing that with a real index turns
+        # the seq-scan + in-DB sort into an index range scan as the table
+        # grows. ``source`` is the leading column of the composite so the
+        # planner can serve ``list_by_source`` (filter on source, order by
+        # created_at) with the same index in one pass.
+        Index("ix_vacancies_created_at", "created_at"),
+        Index("ix_vacancies_source_created_at", "source", "created_at"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
