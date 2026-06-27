@@ -18,6 +18,7 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from apply_pilot.features.audit.models import AuditEventType
 from apply_pilot.features.audit.service import AuditService
@@ -274,3 +275,7 @@ __all__ = [
     "RejectCommand",
     "parse_reject_command",
 ]
+
+
+if TYPE_CHECKING:  # pragma: no cover
+    from apply_pilot.features.matches.service import MatchService

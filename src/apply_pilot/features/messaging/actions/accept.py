@@ -19,7 +19,7 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from apply_pilot.features.audit.models import AuditEventType
 from apply_pilot.features.audit.service import AuditService
@@ -414,3 +414,7 @@ __all__ = [
     "ApplyJobEnqueuer",
     "parse_accept_command",
 ]
+
+
+if TYPE_CHECKING:  # pragma: no cover
+    from apply_pilot.features.matches.service import MatchService
