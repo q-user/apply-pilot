@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from apply_pilot.features.cover_letter.models import CoverLetterDraft
 from apply_pilot.features.cover_letter.repository import CoverLetterDraftRepository
@@ -383,7 +383,3 @@ __all__ = [
     "parse_review_command",
     "render_review_card",
 ]
-
-
-if TYPE_CHECKING:  # pragma: no cover
-    from apply_pilot.features.matches.service import MatchService
