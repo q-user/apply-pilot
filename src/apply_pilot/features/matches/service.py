@@ -187,34 +187,30 @@ class MatchService:
         self,
         profile: SearchProfile,
         vacancies: Sequence[Vacancy],
-    ) -> list[VacancyMatchRead]:
-        """Create matches for ``profile`` against each vacancy.
+    ) -> list[VacancyMatch]:
+        """Insert VacancyMatch rows for every ``vacancy`` in ``vacancies``.
 
-        Skips pairs that already have a match. Returns the newly
-        created matches; an empty list means every pair was a duplicate.
+        Skips pairs that already have a match for ``profile`` (Fix #261:
+        single round-trip ``VacancyMatchRepository.find_existing_in_batch``
+        replaces per-vacancy ``find_existing`` loops).
+
+        Returns the list of newly created ``VacancyMatch`` rows in input
+        order. Empty when ``vacancies`` is empty or every pair already
+        exists.
         """
         if not vacancies:
             return []
-        profile_id = profile.id
-        wanted: list[VacancyMatch] = []
-        for vacancy in vacancies:
-            vacancy_id = vacancy.id
-            if vacancy_id is None:
-                continue
-            existing = self._match_repo.find_existing(profile_id, vacancy_id)
-            if existing is not None:
-                continue
-            wanted.append(
-                VacancyMatch(
-                    search_profile_id=profile_id,
-                    vacancy_id=vacancy_id,
-                    status=MatchStatus.NEW.value,
-                )
-            )
-        if not wanted:
+        vacancy_ids = [v.id for v in vacancies]
+        existing_ids = self._match_repo.find_existing_in_batch(
+            profile.id,
+            vacancy_ids,
+        )
+        missing = [v for v in vacancies if v.id not in existing_ids]
+        if not missing:
             return []
-        self._bulk_insert(wanted)
-        return [_match_to_dto(m) for m in wanted]
+        matches = [VacancyMatch(search_profile_id=profile.id, vacancy_id=v.id) for v in missing]
+        self._bulk_insert(matches)
+        return matches
 
     def bulk_create_for_all_active_profiles(
         self,

@@ -75,6 +75,11 @@ class VacancyMatchRepository(Protocol):
         scored_at: datetime,
     ) -> VacancyMatch: ...
     def list_pending(self, *, limit: int = 50) -> Sequence[VacancyMatch]: ...
+    def find_existing_in_batch(
+        self,
+        profile_id: uuid.UUID,
+        vacancy_ids: Sequence[uuid.UUID],
+    ) -> set[uuid.UUID]: ...
 
 
 # ---------------------------------------------------------------------------
@@ -155,6 +160,21 @@ class InMemoryVacancyMatchRepository:
     def find_existing(self, profile_id: uuid.UUID, vacancy_id: uuid.UUID) -> VacancyMatch | None:
         match_id = self._by_pair.get((profile_id, vacancy_id))
         return self._by_id.get(match_id) if match_id is not None else None
+
+    def find_existing_in_batch(
+        self,
+        profile_id: uuid.UUID,
+        vacancy_ids: Sequence[uuid.UUID],
+    ) -> set[uuid.UUID]:
+        """Return the subset of ``vacancy_ids`` with an existing match (Fix #261)."""
+        return {
+            mid
+            for mid in vacancy_ids
+            if any(
+                m.vacancy_id == mid and m.search_profile_id == profile_id
+                for m in self._by_id.values()
+            )
+        }
 
     def update_status(
         self,
@@ -495,6 +515,22 @@ class SqlVacancyMatchRepository:
         finally:
             if self._session is None:
                 session.close()
+
+    def find_existing_in_batch(
+        self,
+        profile_id: uuid.UUID,
+        vacancy_ids: Sequence[uuid.UUID],
+    ) -> set[uuid.UUID]:
+        """Return the subset of ``vacancy_ids`` with an existing match (Fix #261)."""
+        if not vacancy_ids:
+            return set()
+        from sqlalchemy import select
+
+        stmt = select(VacancyMatch.vacancy_id).where(
+            VacancyMatch.search_profile_id == profile_id,
+            VacancyMatch.vacancy_id.in_(list(vacancy_ids)),
+        )
+        return {row[0] for row in self._session.execute(stmt).all()}
 
 
 __all__ = [
