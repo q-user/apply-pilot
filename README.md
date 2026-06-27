@@ -44,6 +44,18 @@ runs with `pytest-xdist` (`-n auto`) and a **5s per-test timeout** via
 ## Pre-commit hooks
 
 Install once with `uv run pre-commit install`. Hooks run **ruff** (`--fix` +
+
+## Pre-commit hygiene (team rule)
+
+Every push MUST pass local pre-commit hooks first. The CI workflow runs
+the same hooks, and a local failing hook is a guaranteed red CI run:
+
+git push
+
+Hooks installed: ruff (lint + format), ty (type-check), pytest
+ collection guard that catches circular imports and missing
+environment variables at commit time. Versions are pinned in
+ to exactly match the CI workflow.
 `ruff-format`) and **ty** on staged changes; CI runs the same checks
 independently. The hook set is defined in `.pre-commit-config.yaml`.
 
