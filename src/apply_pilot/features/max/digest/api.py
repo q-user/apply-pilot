@@ -27,6 +27,11 @@ from apply_pilot.features.max.repository import (
     InMemoryMaxAccountRepository,
     SqlAlchemyMaxAccountRepository,
 )
+from apply_pilot.features.messaging.actions.accept import AcceptActionHandler
+from apply_pilot.features.messaging.actions.defer import DeferActionHandler
+from apply_pilot.features.messaging.actions.regenerate import RegenerateActionHandler
+from apply_pilot.features.messaging.actions.reject import RejectActionHandler
+from apply_pilot.features.messaging.actions.review import ReviewActionHandler
 from apply_pilot.features.search_profiles.repository import SqlSearchProfileRepository
 from apply_pilot.features.users.repository import SqlAlchemyUsersRepository
 
@@ -42,33 +47,50 @@ class MaxDigestSendResponse(BaseModel):
     on_date: date = Field(..., description="The UTC date the digests cover.")
 
 
-def _bypass_action_handlers() -> tuple[object, object, object, object, object]:
-    """Build bare handler instances that bypass the real wiring.
+def _bypass_action_handlers() -> tuple[
+    AcceptActionHandler,
+    DeferActionHandler,
+    RejectActionHandler,
+    ReviewActionHandler,
+    RegenerateActionHandler,
+]:
+    """Build lightweight handler instances for the digest bot.
 
-    The MAX bot constructor requires all five action handlers, but the
-    digest sender only ever calls ``send_message`` on the bot. The
-    handler bodies are never invoked, so bypassing ``__init__`` via
-    ``__new__`` keeps the digest API free of the match service
-    dependency graph that the action handlers will eventually need.
-
-    Mirrors the trick already used by
-    :func:`apply_pilot.features.max.process.main` (issue #187).
+    Each handler is instantiated through its real ``__init__`` with
+    :class:`_NoopDependency` sentinels. The MAX digest only forwards
+    :meth:`MaxBot.send_message` and never invokes any action handler.
     """
-    from apply_pilot.features.messaging.actions.accept import AcceptActionHandler
-    from apply_pilot.features.messaging.actions.defer import DeferActionHandler
-    from apply_pilot.features.messaging.actions.regenerate import (
-        RegenerateActionHandler,
-    )
-    from apply_pilot.features.messaging.actions.reject import RejectActionHandler
-    from apply_pilot.features.messaging.actions.review import ReviewActionHandler
-
+    noop = _NoopDependency()
     return (
-        AcceptActionHandler.__new__(AcceptActionHandler),
-        DeferActionHandler.__new__(DeferActionHandler),
-        RejectActionHandler.__new__(RejectActionHandler),
-        ReviewActionHandler.__new__(ReviewActionHandler),
-        RegenerateActionHandler.__new__(RegenerateActionHandler),
+        AcceptActionHandler(match_service=noop, account_repo=noop, audit_service=noop),
+        DeferActionHandler(match_service=noop, account_repo=noop, audit_service=noop),
+        RejectActionHandler(match_service=noop, account_repo=noop, audit_service=noop),
+        ReviewActionHandler(
+            match_service=noop,
+            vacancy_repo=noop,
+            cover_letter_repo=noop,
+            account_repo=noop,
+        ),
+        RegenerateActionHandler(
+            cover_letter_service=noop,
+            account_repo=noop,
+            audit_service=noop,
+            profile_repo=noop,
+        ),
     )
+
+
+class _NoopDependency:
+    """Sentinel stub satisfying any Protocol via ``__getattr__``.
+
+    Returns its own instance from every attribute access, so accidental
+    invocation short-circuits without raising ``AttributeError`` on
+    ``None``-typed attributes. Safe under structural duck-typing: every
+    Protocol method call returns another ``_NoopDependency``.
+    """
+
+    def __getattr__(self, _attr: str) -> type[_NoopDependency]:
+        return _NoopDependency
 
 
 def build_max_digest_sender(
