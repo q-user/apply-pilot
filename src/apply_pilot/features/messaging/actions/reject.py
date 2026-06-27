@@ -193,7 +193,8 @@ class RejectActionHandler:
         # Lazy-imported: matches.service is reached transitively during pytest
         # collection (test fixtures re-import these handlers), so resolve these
         # symbols at call-time instead of at module load.
-        from apply_pilot.features.matches.service import MatchNotFoundError, MatchOwnershipError  # noqa: E501, PLC0415
+        from apply_pilot.features.matches.service import MatchNotFoundError, MatchOwnershipError  # noqa: E501, PLC0415, I001
+
         try:
             self._match_service.update_status(
                 match_id=command.match_id,
