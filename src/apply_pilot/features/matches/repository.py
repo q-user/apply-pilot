@@ -148,10 +148,18 @@ class InMemoryVacancyMatchRepository:
         *,
         status: str | None = None,
     ) -> Sequence[VacancyMatch]:
-        if self._list_user_profiles is None:
-            return []
-        profile_ids = {p.id for p in self._list_user_profiles(user_id)}
-        matches = [m for m in self._by_id.values() if m.search_profile_id in profile_ids]
+        """Return every VacancyMatch whose ``user_id`` equals ``user_id``.
+
+        Issue #263: drop the ``_list_user_profiles`` callback — the
+        owner is now stored on each row. The constructor still
+        accepts the callback for backward compatibility but the
+        field is no longer consulted.
+        """
+        # ``list_user_profiles`` is preserved for callers that wire
+        # the repo up; the new implementation never reads it.
+        _ = self._list_user_profiles  # noqa: B018
+        user_id_str = str(user_id)
+        matches = [m for m in self._by_id.values() if m.user_id == user_id_str]
         if status is not None:
             matches = [m for m in matches if m.status == status]
         matches.sort(key=lambda m: m.created_at, reverse=True)
@@ -391,6 +399,7 @@ class SqlVacancyMatchRepository:
                     "id": m.id if m.id is not None else uuid.uuid4(),
                     "search_profile_id": m.search_profile_id,
                     "vacancy_id": m.vacancy_id,
+                    "user_id": m.user_id,
                     "status": m.status or "new",
                     "score": m.score,
                     "match_reason": m.match_reason,
@@ -465,12 +474,18 @@ class SqlVacancyMatchRepository:
         *,
         status: str | None = None,
     ) -> Sequence[VacancyMatch]:
+        """Return every VacancyMatch whose denormalized ``user_id`` matches ``user_id``.
+
+        Issue #263: the previous shape joined ``search_profiles`` to
+        resolve the owner on every read, doubling the round-trip count
+        for the hot ``GET /matches`` path. The owner is now stored on
+        ``VacancyMatch.user_id`` so a plain WHERE is enough.
+        """
         session = self._scope()
         try:
             statement = (
                 select(VacancyMatch)
-                .join(SearchProfile, SearchProfile.id == VacancyMatch.search_profile_id)
-                .where(SearchProfile.user_id == user_id)
+                .where(VacancyMatch.user_id == str(user_id))
                 .order_by(VacancyMatch.created_at.desc())
             )
             if status is not None:

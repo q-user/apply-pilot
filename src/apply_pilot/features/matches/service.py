@@ -116,11 +116,24 @@ class MatchService:
 
     # -- single-row writers ----------------------------------------------
 
-    def create_match(self, profile_id: uuid.UUID, vacancy_id: uuid.UUID) -> VacancyMatchRead:
+    def create_match(
+        self,
+        profile_id: uuid.UUID,
+        vacancy_id: uuid.UUID,
+        *,
+        user_id: uuid.UUID,
+    ) -> VacancyMatchRead:
         """Insert a match, returning the existing row on conflict.
 
         Idempotent: re-running with the same ``(profile_id, vacancy_id)``
         pair yields the same match, not a duplicate.
+
+        Issue #263: the ``user_id`` argument denormalizes ownership
+        onto the row. We pass it explicitly so the SQL insert needs
+        no profile lookup. Callers that already know ``user_id``
+        (APIs that resolved it from the bearer token) keep paying
+        zero reads here; callers that only have ``profile_id`` can
+        call :meth:`create_match_for_profile` after a single fetch.
         """
         existing = self._match_repo.find_existing(profile_id, vacancy_id)
         if existing is not None:
@@ -128,10 +141,29 @@ class MatchService:
         match = VacancyMatch(
             search_profile_id=profile_id,
             vacancy_id=vacancy_id,
+            user_id=str(user_id),
             status=MatchStatus.NEW.value,
         )
         created = self._match_repo.create(match)
         return _match_to_dto(created)
+
+    def create_match_for_profile(
+        self,
+        profile: SearchProfile,
+        vacancy_id: uuid.UUID,
+    ) -> VacancyMatchRead:
+        """Insert a match, pulling ``user_id`` from the passed profile.
+
+        Convenience wrapper around :meth:`create_match` for callers
+        that already have a :class:`SearchProfile` in hand (e.g. the
+        bulk-ingest pipeline). Performs no extra reads beyond the
+        :meth:`find_existing` call.
+        """
+        return self.create_match(
+            profile_id=profile.id,
+            vacancy_id=vacancy_id,
+            user_id=profile.user_id,
+        )
 
     def get(self, match_id: uuid.UUID, *, user_id: uuid.UUID) -> VacancyMatchRead:
         """Return a single match, enforcing ownership."""
@@ -208,7 +240,16 @@ class MatchService:
         missing = [v for v in vacancies if v.id not in existing_ids]
         if not missing:
             return []
-        matches = [VacancyMatch(search_profile_id=profile.id, vacancy_id=v.id) for v in missing]
+        # Issue #263: embed ``profile.user_id`` so each new match can
+        # answer ownership checks without joining ``search_profiles``.
+        matches = [
+            VacancyMatch(
+                search_profile_id=profile.id,
+                vacancy_id=v.id,
+                user_id=profile.user_id,
+            )
+            for v in missing
+        ]
         self._bulk_insert(matches)
         return matches
 
@@ -230,8 +271,10 @@ class MatchService:
     # -- helpers ---------------------------------------------------------
 
     def _assert_ownership(self, match: VacancyMatch, user_id: uuid.UUID) -> None:
-        profile = self._profile_repo.get_by_id(match.search_profile_id)
-        if profile is None or profile.user_id != user_id:
+        # Issue #263: the previous shape joined through _profile_repo
+        # to resolve the owner. The denormalized ``match.user_id``
+        # column makes the check a pure local comparison — no SQL.
+        if match.user_id != str(user_id):
             raise MatchOwnershipError(f"vacancy match {match.id} does not belong to user {user_id}")
 
     def _bulk_insert(self, matches: Sequence[VacancyMatch]) -> None:

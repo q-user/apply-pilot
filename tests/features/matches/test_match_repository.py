@@ -74,7 +74,7 @@ class TestCreate:
     ) -> None:
         profile_id = uuid.uuid4()
         vacancy_id = uuid.uuid4()
-        match = VacancyMatch(search_profile_id=profile_id, vacancy_id=vacancy_id)
+        match = VacancyMatch(search_profile_id=profile_id, vacancy_id=vacancy_id, user_id=uuid.uuid4())
 
         created = match_repo.create(match)
 
@@ -111,18 +111,18 @@ class TestListByProfile:
     ) -> None:
         p1, p2 = uuid.uuid4(), uuid.uuid4()
         for _ in range(2):
-            match_repo.create(VacancyMatch(search_profile_id=p1, vacancy_id=uuid.uuid4()))
-        match_repo.create(VacancyMatch(search_profile_id=p2, vacancy_id=uuid.uuid4()))
+            match_repo.create(VacancyMatch(search_profile_id=p1, vacancy_id=uuid.uuid4(, user_id=uuid.uuid4())))
+        match_repo.create(VacancyMatch(search_profile_id=p2, vacancy_id=uuid.uuid4(, user_id=uuid.uuid4())))
 
         assert len(list(match_repo.list_by_profile(p1))) == 2
         assert len(list(match_repo.list_by_profile(p2))) == 1
 
     def test_filters_by_status(self, match_repo: InMemoryVacancyMatchRepository) -> None:
         profile_id = uuid.uuid4()
-        m1 = VacancyMatch(search_profile_id=profile_id, vacancy_id=uuid.uuid4())
+        m1 = VacancyMatch(search_profile_id=profile_id, vacancy_id=uuid.uuid4(, user_id=uuid.uuid4()))
         m1.status = MatchStatus.NEW.value
         match_repo.create(m1)
-        m2 = VacancyMatch(search_profile_id=profile_id, vacancy_id=uuid.uuid4())
+        m2 = VacancyMatch(search_profile_id=profile_id, vacancy_id=uuid.uuid4(, user_id=uuid.uuid4()))
         m2.status = MatchStatus.ACCEPTED.value
         match_repo.create(m2)
 
@@ -137,7 +137,7 @@ class TestListByProfile:
     def test_respects_limit(self, match_repo: InMemoryVacancyMatchRepository) -> None:
         profile_id = uuid.uuid4()
         for _ in range(5):
-            match_repo.create(VacancyMatch(search_profile_id=profile_id, vacancy_id=uuid.uuid4()))
+            match_repo.create(VacancyMatch(search_profile_id=profile_id, vacancy_id=uuid.uuid4(, user_id=uuid.uuid4())))
 
         assert len(list(match_repo.list_by_profile(profile_id, limit=3))) == 3
 
@@ -154,8 +154,8 @@ class TestListByUser:
         theirs = _profile(other_id)
         profile_repo.create(mine)
         profile_repo.create(theirs)
-        match_repo.create(VacancyMatch(search_profile_id=mine.id, vacancy_id=uuid.uuid4()))
-        match_repo.create(VacancyMatch(search_profile_id=theirs.id, vacancy_id=uuid.uuid4()))
+        match_repo.create(VacancyMatch(search_profile_id=mine.id, vacancy_id=uuid.uuid4(, user_id=uuid.uuid4())))
+        match_repo.create(VacancyMatch(search_profile_id=theirs.id, vacancy_id=uuid.uuid4(, user_id=uuid.uuid4())))
 
         mine_listed = list(match_repo.list_by_user(user_id))
         theirs_listed = list(match_repo.list_by_user(other_id))
@@ -173,9 +173,9 @@ class TestListByUser:
         user_id = uuid.uuid4()
         profile = _profile(user_id)
         profile_repo.create(profile)
-        m1 = VacancyMatch(search_profile_id=profile.id, vacancy_id=uuid.uuid4())
+        m1 = VacancyMatch(search_profile_id=profile.id, vacancy_id=uuid.uuid4(, user_id=uuid.uuid4()))
         m1.status = MatchStatus.NEW.value
-        m2 = VacancyMatch(search_profile_id=profile.id, vacancy_id=uuid.uuid4())
+        m2 = VacancyMatch(search_profile_id=profile.id, vacancy_id=uuid.uuid4(, user_id=uuid.uuid4()))
         m2.status = MatchStatus.ACCEPTED.value
         match_repo.create(m1)
         match_repo.create(m2)
@@ -195,7 +195,7 @@ class TestFindExisting:
     def test_returns_existing_match(self, match_repo: InMemoryVacancyMatchRepository) -> None:
         profile_id = uuid.uuid4()
         vacancy_id = uuid.uuid4()
-        match_repo.create(VacancyMatch(search_profile_id=profile_id, vacancy_id=vacancy_id))
+        match_repo.create(VacancyMatch(search_profile_id=profile_id, vacancy_id=vacancy_id, user_id=uuid.uuid4()))
 
         found = match_repo.find_existing(profile_id, vacancy_id)
 
@@ -314,7 +314,7 @@ class TestSqlRepository:
         finally:
             session.close()
 
-        created = sql_repo.create(VacancyMatch(search_profile_id=profile_id, vacancy_id=vacancy_id))
+        created = sql_repo.create(VacancyMatch(search_profile_id=profile_id, vacancy_id=vacancy_id, user_id=uuid.uuid4()))
 
         assert created.id is not None
         assert created.status == MatchStatus.NEW.value
@@ -343,7 +343,7 @@ class TestSqlRepository:
         finally:
             session.close()
 
-        sql_repo.create(VacancyMatch(search_profile_id=profile_id, vacancy_id=vacancy_id))
+        sql_repo.create(VacancyMatch(search_profile_id=profile_id, vacancy_id=vacancy_id, user_id=uuid.uuid4()))
 
         with pytest.raises(IntegrityError):
             session = session_factory()
@@ -382,9 +382,9 @@ class TestSqlRepository:
             session.flush()
             session.add_all(
                 [
-                    VacancyMatch(search_profile_id=p1, vacancy_id=v1.id),
-                    VacancyMatch(search_profile_id=p1, vacancy_id=v2.id),
-                    VacancyMatch(search_profile_id=p2, vacancy_id=v3.id),
+                    VacancyMatch(search_profile_id=p1, vacancy_id=v1.id, user_id=uuid.uuid4()),
+                    VacancyMatch(search_profile_id=p1, vacancy_id=v2.id, user_id=uuid.uuid4()),
+                    VacancyMatch(search_profile_id=p2, vacancy_id=v3.id, user_id=uuid.uuid4()),
                 ]
             )
             session.commit()
@@ -425,8 +425,8 @@ class TestSqlRepository:
             session.flush()
             session.add_all(
                 [
-                    VacancyMatch(search_profile_id=pa.id, vacancy_id=v.id),
-                    VacancyMatch(search_profile_id=pb.id, vacancy_id=v.id),
+                    VacancyMatch(search_profile_id=pa.id, vacancy_id=v.id, user_id=uuid.uuid4()),
+                    VacancyMatch(search_profile_id=pb.id, vacancy_id=v.id, user_id=uuid.uuid4()),
                 ]
             )
             session.commit()
@@ -449,7 +449,7 @@ class TestSqlRepository:
             session.add(SearchProfile(id=profile_id, user_id=user_id, title="t", is_active=True))
             session.add(Vacancy(id=vacancy_id, source="hh", source_id="fe", title="t", raw_data={}))
             session.flush()
-            session.add(VacancyMatch(search_profile_id=profile_id, vacancy_id=vacancy_id))
+            session.add(VacancyMatch(search_profile_id=profile_id, vacancy_id=vacancy_id, user_id=uuid.uuid4()))
             session.commit()
         finally:
             session.close()
@@ -476,7 +476,7 @@ class TestSqlRepository:
             v = Vacancy(id=uuid.uuid4(), source="hh", source_id="us", title="t", raw_data={})
             session.add_all([sp, v])
             session.flush()
-            m = VacancyMatch(search_profile_id=sp.id, vacancy_id=v.id)
+            m = VacancyMatch(search_profile_id=sp.id, vacancy_id=v.id, user_id=uuid.uuid4())
             session.add(m)
             session.commit()
             match_id = m.id
@@ -508,15 +508,15 @@ class TestSqlRepository:
             session.add_all([sp, v1, v2])
             session.flush()
             # Pre-seed a match for (sp, v1) so the bulk insert must skip it.
-            session.add(VacancyMatch(search_profile_id=sp.id, vacancy_id=v1.id))
+            session.add(VacancyMatch(search_profile_id=sp.id, vacancy_id=v1.id, user_id=uuid.uuid4()))
             session.commit()
             profile_id, v1_id, v2_id = sp.id, v1.id, v2.id
         finally:
             session.close()
 
         new, dup = (
-            VacancyMatch(search_profile_id=profile_id, vacancy_id=v1_id),
-            VacancyMatch(search_profile_id=profile_id, vacancy_id=v2_id),
+            VacancyMatch(search_profile_id=profile_id, vacancy_id=v1_id, user_id=uuid.uuid4()),
+            VacancyMatch(search_profile_id=profile_id, vacancy_id=v2_id, user_id=uuid.uuid4()),
         )
 
         sql_repo.bulk_create_ignore_conflicts([new, dup])
