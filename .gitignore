@@ -54,6 +54,12 @@ build/
 # Local data (Docker bind mount for SQLite)
 .data/
 
+# CI scratch dumps (logs redirected to repo root during local checks)
+pytest.txt
+ruff.txt
+ty.txt
+ty_final.txt
+
 # Local secrets (never commit)
 .env
 .env.local
