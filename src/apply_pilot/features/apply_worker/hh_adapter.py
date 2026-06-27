@@ -148,13 +148,22 @@ class HHApplyAdapter:
         self,
         job: ApplyJob,
         resolution: TenantResolution,
+        *,
+        cover_letter: str | None = None,
     ) -> str:
         """Derive a stable idempotency key for ``(tenant, vacancy, resume, message)``.
 
-        The cover-letter renderer is invoked TWICE -- once for the hash,
-        once for the :class:`ApplyRequest`. Renderers MUST be
-        deterministic for a given job (no timestamps, no randomness);
-        a non-deterministic renderer breaks the replay guarantee.
+        Issue #294: callers that already paid for a rendered cover
+        letter pass it in via ``cover_letter`` so the helper does not
+        invoke the renderer a second time. The renderer falls back to
+        ``self._cover_letter_renderer(job)`` when no pre-rendered text
+        is supplied, which keeps the public contract unchanged for
+        any caller (tests, scripts) that relied on the renderer being
+        invoked unconditionally here.
+
+        Renderers MUST be deterministic for a given job (no
+        timestamps, no randomness); a non-deterministic renderer
+        breaks the replay guarantee.
         """
         h = hashlib.sha256()
         h.update((resolution.tenant_id or "").encode("utf-8"))
@@ -163,14 +172,20 @@ class HHApplyAdapter:
         h.update(b"|")
         h.update(resolution.resume_id.encode("utf-8"))
         h.update(b"|")
-        h.update(self._cover_letter_renderer(job).encode("utf-8"))
+        rendered = cover_letter if cover_letter is not None else self._cover_letter_renderer(job)
+        h.update(rendered.encode("utf-8"))
         return f"hh:{h.hexdigest()[:16]}"
 
     async def submit(self, job: ApplyJob) -> ApplyResult:
         tenant_id: str | None = getattr(job, "tenant_id", None)
         resolution = self._tenant_provider.resolve(tenant_id)
 
-        idempotency_key = self._build_idempotency_key(job, resolution)
+        # Issue #294: render the cover letter ONCE and reuse the result
+        # for both the idempotency-key hash and the ApplyRequest.
+        # Previously the renderer was called twice (once for the
+        # key, once for the request) without caching its output.
+        cover_letter = self._cover_letter_renderer(job)
+        idempotency_key = self._build_idempotency_key(job, resolution, cover_letter=cover_letter)
         if await self._idempotency_tracker.has_successful(idempotency_key):
             logger.info(
                 "apply_worker.hh_adapter: idempotent replay key=%s job=%s -- skipping",
@@ -184,7 +199,6 @@ class HHApplyAdapter:
                 retryable=False,
             )
 
-        cover_letter = self._cover_letter_renderer(job)
         request = ApplyRequest(
             vacancy_id=str(job.vacancy_id),
             resume_id=resolution.resume_id,
