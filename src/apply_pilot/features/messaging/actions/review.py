@@ -21,11 +21,6 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from apply_pilot.features.cover_letter.models import CoverLetterDraft
 from apply_pilot.features.cover_letter.repository import CoverLetterDraftRepository
-from apply_pilot.features.matches.service import (
-    MatchNotFoundError,
-    MatchOwnershipError,
-    MatchService,
-)
 from apply_pilot.features.messaging.dto import SendMessageRequest
 from apply_pilot.features.messaging.protocols import MessagingAccountRepository
 from apply_pilot.features.sources.models import Vacancy
@@ -319,6 +314,10 @@ class ReviewActionHandler:
 
         # MatchService.get enforces ownership and raises a domain
         # error when the row is missing or belongs to another user.
+        # Lazy-imported: matches.service is reached transitively during pytest
+        # collection (test fixtures re-import these handlers), so resolve these
+        # symbols at call-time instead of at module load.
+        from apply_pilot.features.matches.service import MatchNotFoundError, MatchOwnershipError  # noqa: E501, PLC0415
         try:
             self._match_service.get(match_id, user_id=user_id)
         except MatchNotFoundError:

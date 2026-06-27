@@ -24,11 +24,6 @@ from typing import TYPE_CHECKING, Protocol
 from apply_pilot.features.audit.models import AuditEventType
 from apply_pilot.features.audit.service import AuditService
 from apply_pilot.features.matches.models import MatchStatus
-from apply_pilot.features.matches.service import (
-    MatchNotFoundError,
-    MatchOwnershipError,
-    MatchService,
-)
 from apply_pilot.features.messaging.dto import SendMessageRequest
 from apply_pilot.features.messaging.protocols import MessagingAccountRepository
 from apply_pilot.features.writing_style_memory.service import StyleMemoryService
@@ -257,6 +252,10 @@ class AcceptActionHandler:
                 ),
             )
 
+        # Lazy-imported: matches.service is reached transitively during pytest
+        # collection (test fixtures re-import these handlers), so resolve these
+        # symbols at call-time instead of at module load.
+        from apply_pilot.features.matches.service import MatchNotFoundError, MatchOwnershipError  # noqa: E501, PLC0415
         try:
             self._match_service.update_status(
                 match_id=command.match_id,
