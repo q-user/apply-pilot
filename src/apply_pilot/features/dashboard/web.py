@@ -584,11 +584,18 @@ def _get_dashboard_service(session: Session) -> DashboardService:
         SqlAlchemyTelegramAccountRepository,
     )
 
-    match_repo = SqlVacancyMatchRepository(session_factory=lambda: session)
-    apply_job_repo = SqlApplyJobRepository(session_factory=lambda: session)
+    # Issue #292: pass ``session`` directly. The ``session_factory``
+    # constructor opens a new ephemeral session that the repository
+    # closes in its ``finally`` block. With ``session_factory=lambda:
+    # session`` we captured the FastAPI-shared session and closed it
+    # mid-request, which broke subsequent endpoints reading from the
+    # same transaction. Inject the shared session directly so the
+    # repository's lifecycle matches the request lifecycle.
+    match_repo = SqlVacancyMatchRepository(session=session)
+    apply_job_repo = SqlApplyJobRepository(session=session)
     cover_letter_repo = SqlCoverLetterDraftRepository(session=session)
-    vacancy_repo = SqlVacancyRepository(session_factory=lambda: session)
-    profile_repo = SqlSearchProfileRepository(session_factory=lambda: session)
+    vacancy_repo = SqlVacancyRepository(session=session)
+    profile_repo = SqlSearchProfileRepository(session=session)
     telegram_repo = SqlAlchemyTelegramAccountRepository(session=session)
     user_repo = SqlAlchemyUsersRepository(session=session)
     return DashboardService(
@@ -613,7 +620,9 @@ def _vacancy_lookup(session: Session, jobs: Sequence[ApplyJob]) -> dict[uuid.UUI
     ids = {job.vacancy_id for job in jobs if job.vacancy_id is not None}
     if not ids:
         return {}
-    repo = SqlVacancyRepository(session_factory=lambda: session)
+    # See _get_dashboard_service for the rationale on session=
+    # vs session_factory=.
+    repo = SqlVacancyRepository(session=session)
     out: dict[uuid.UUID, Vacancy] = {}
     for vid in ids:
         row = repo.get_by_id(vid)

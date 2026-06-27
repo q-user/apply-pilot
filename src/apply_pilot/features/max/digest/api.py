@@ -110,10 +110,12 @@ def build_max_digest_sender(
     the constructor's other required arguments without dragging in
     the full action-handler dependency graph.
     """
-    match_repo = SqlVacancyMatchRepository(session_factory=lambda: session)
+    # Issue #292: pass ``session`` directly so the repository does not
+    # close the FastAPI-shared session it captured via session_factory.
+    match_repo = SqlVacancyMatchRepository(session=session)
     max_repo = SqlAlchemyMaxAccountRepository(session=session)
     user_repo = SqlAlchemyUsersRepository(session=session)
-    profile_repo = SqlSearchProfileRepository(session_factory=lambda: session)
+    profile_repo = SqlSearchProfileRepository(session=session)
     stats_service = MaxStatsService(
         match_repo=match_repo,
         max_account_repo=max_repo,
