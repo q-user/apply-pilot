@@ -66,8 +66,18 @@ class DatabaseSettings:
 
 
 def get_database_settings() -> DatabaseSettings:
-    """Build DatabaseSettings from the environment, honoring DATABASE_URL."""
-    return DatabaseSettings(database_url=os.getenv("DATABASE_URL", "sqlite:///./dev.db"))
+    """Build DatabaseSettings from the environment, requiring DATABASE_URL.
+
+    Raises RuntimeError if DATABASE_URL is unset. We deliberately do NOT
+    fall back to a SQLite default — a missing env var in production
+    should fail loud at startup, not silently demote to SQLite.
+    """
+    url = os.getenv("DATABASE_URL")
+    if not url:
+        raise RuntimeError(
+            "DATABASE_URL is not set. Refusing to start with an implicit SQLite default."
+        )
+    return DatabaseSettings(database_url=url)
 
 
 @dataclass(frozen=True)

@@ -147,7 +147,7 @@ docker compose down -v
 ### Configuration
 
 The compose file wires the api to the in-stack services via the
-`APP_DATABASE_URL` and `APP_REDIS_URL` environment variables. Override them
+`DATABASE_URL` and `APP_REDIS_URL` environment variables. Override them
 with an `.env` file at the project root or with `--env` / shell exports to
 point the api at external instances.
 
