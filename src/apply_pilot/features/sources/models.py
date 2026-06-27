@@ -21,6 +21,7 @@ from sqlalchemy import (
     JSON,
     Boolean,
     DateTime,
+    Index,
     Integer,
     String,
     Text,
@@ -40,6 +41,13 @@ class Vacancy(Base):
     __table_args__ = (
         # The natural key: one canonical row per (source, external id).
         UniqueConstraint("source", "source_id", name="uq_vacancies_source_source_id"),
+        # Backs ``ORDER BY created_at DESC`` on ``list_recent`` /
+        # ``list_with_filters`` (sort phase).
+        Index("ix_vacancies_created_at", "created_at"),
+        # Backs ``list_by_source`` and the source-filtered branch of
+        # ``list_with_filters``; the composite ordering lets PostgreSQL
+        # satisfy both the ``WHERE`` and ``ORDER BY`` from the index.
+        Index("ix_vacancies_source_created_at", "source", "created_at"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)

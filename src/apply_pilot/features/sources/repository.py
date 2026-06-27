@@ -20,7 +20,7 @@ from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
@@ -50,6 +50,8 @@ class VacancyRepository(Protocol):
     def list_recent(self, *, limit: int) -> Sequence[Vacancy]: ...
     def find_by_source(self, source: str, source_id: str) -> list[Vacancy]: ...
     def find_by_content_hash(self, content_hash: str) -> list[Vacancy]: ...
+    def find_existing_by_pairs(self, pairs: Sequence[tuple[str, str]]) -> set[tuple[str, str]]: ...
+    def find_by_content_hashes(self, hashes: Sequence[str]) -> dict[str, list[Vacancy]]: ...
     def list_with_filters(
         self,
         *,
@@ -135,25 +137,13 @@ class InMemoryVacancyRepository:
             vacancy.id = existing.id
             vacancy.created_at = existing.created_at
             vacancy.updated_at = now
-            for attr in (
-                "title",
-                "description",
-                "url",
-                "salary_from",
-                "salary_to",
-                "salary_currency",
-                "salary_gross",
-                "employer_name",
-                "location",
-                "schedule",
-                "experience",
-                "skills",
-                "published_at",
-                "source_updated_at",
-                "raw_data",
-                "content_hash",
-            ):
-                setattr(existing, attr, getattr(vacancy, attr))
+            # Reuse the SQL upsert's column list so the in-memory and SQL
+            # implementations cannot drift when a new column is added to
+            # ``Vacancy``. ``_upsert_columns`` excludes the natural key
+            # columns and the audit timestamps, which is exactly the
+            # set we want to overwrite here.
+            for column, value in _upsert_columns(vacancy).items():
+                setattr(existing, column, value)
             return existing
 
         # Insert: assign id and timestamps.
@@ -202,6 +192,30 @@ class InMemoryVacancyRepository:
         rows from different sources.
         """
         return [v for v in self._by_id.values() if v.content_hash == content_hash]
+
+    def find_existing_by_pairs(self, pairs: Sequence[tuple[str, str]]) -> set[tuple[str, str]]:
+        """Return the subset of ``pairs`` already present in the repo.
+
+        Backs the batch deduplicator: one ``O(len(pairs))`` call
+        replaces ``len(pairs)`` individual :meth:`find_by_source`
+        lookups.
+        """
+        return {pair for pair in pairs if pair in self._by_source_id}
+
+    def find_by_content_hashes(self, hashes: Sequence[str]) -> dict[str, list[Vacancy]]:
+        """Return ``hash → rows`` for every ``hash`` that has matches.
+
+        Only hashes with at least one match appear in the result, so the
+        caller can test membership with ``hash in result`` and skip the
+        hot loop when no cross-source collision exists.
+        """
+        unique_hashes = {h for h in hashes if h is not None}
+        result: dict[str, list[Vacancy]] = {}
+        for vacancy in self._by_id.values():
+            h = vacancy.content_hash
+            if h is not None and h in unique_hashes:
+                result.setdefault(h, []).append(vacancy)
+        return result
 
     def list_with_filters(
         self,
@@ -359,34 +373,26 @@ class SqlVacancyRepository:
                 update_cols = {
                     col: getattr(insert_stmt.excluded, col) for col in _upsert_columns(vacancy)
                 }
-                insert_stmt = insert_stmt.on_conflict_do_update(
+                upsert_stmt = insert_stmt.on_conflict_do_update(
                     constraint="uq_vacancies_source_source_id",
                     set_=update_cols,
-                )
+                ).returning(Vacancy)
             else:
                 # SQLite (and the generic dialect) — ``prefix_with("OR REPLACE")``
                 # would clobber the row, so we use the ``INSERT ... ON CONFLICT``
-                # form supported by sqlite ≥ 3.24.
+                # form supported by sqlite ≥ 3.24. ``RETURNING`` requires
+                # sqlite ≥ 3.35; the project pins a newer version in compose.
                 insert_stmt = sqlite_insert(Vacancy).values(**row_values)
                 update_cols = {
                     col: getattr(insert_stmt.excluded, col) for col in _upsert_columns(vacancy)
                 }
-                insert_stmt = insert_stmt.on_conflict_do_update(
+                upsert_stmt = insert_stmt.on_conflict_do_update(
                     index_elements=["source", "source_id"],
                     set_=update_cols,
-                )
+                ).returning(Vacancy)
 
-            session.execute(insert_stmt)
+            refreshed = session.execute(upsert_stmt).scalar_one()
             session.commit()
-
-            # Re-fetch the canonical row so the caller observes the
-            # database-assigned id and the (server-side) created_at.
-            refreshed = session.execute(
-                select(Vacancy).where(
-                    Vacancy.source == vacancy.source,
-                    Vacancy.source_id == vacancy.source_id,
-                )
-            ).scalar_one()
             return refreshed
         except Exception:
             session.rollback()
@@ -452,6 +458,51 @@ class SqlVacancyRepository:
         try:
             statement = select(Vacancy).where(Vacancy.content_hash == content_hash)
             return list(session.execute(statement).scalars().all())
+        finally:
+            if self._session is None:
+                session.close()
+
+    def find_existing_by_pairs(self, pairs: Sequence[tuple[str, str]]) -> set[tuple[str, str]]:
+        """Return the subset of ``(source, source_id)`` pairs that exist.
+
+        Single ``WHERE (source, source_id) IN (...)`` lookup replacing
+        ``len(pairs)`` individual reads. The natural key has a unique
+        constraint, so a single pair can match at most one row.
+        """
+        if not pairs:
+            return set()
+        session = self._scope()
+        try:
+            statement = select(Vacancy.source, Vacancy.source_id).where(
+                tuple_(Vacancy.source, Vacancy.source_id).in_(pairs)
+            )
+            return {tuple(row) for row in session.execute(statement).all()}
+        finally:
+            if self._session is None:
+                session.close()
+
+    def find_by_content_hashes(self, hashes: Sequence[str]) -> dict[str, list[Vacancy]]:
+        """Return ``hash → rows`` for every ``hash`` with at least one match.
+
+        Single ``WHERE content_hash IN (...)`` lookup that buckets the
+        result by hash so the caller can check for cross-source
+        collisions without a second round-trip.
+        """
+        if not hashes:
+            return {}
+        unique_hashes = {h for h in hashes if h is not None}
+        if not unique_hashes:
+            return {}
+        session = self._scope()
+        try:
+            statement = select(Vacancy).where(Vacancy.content_hash.in_(unique_hashes))
+            bucketed: dict[str, list[Vacancy]] = {}
+            for vacancy in session.execute(statement).scalars().all():
+                h = vacancy.content_hash
+                if h is None:
+                    continue
+                bucketed.setdefault(h, []).append(vacancy)
+            return bucketed
         finally:
             if self._session is None:
                 session.close()

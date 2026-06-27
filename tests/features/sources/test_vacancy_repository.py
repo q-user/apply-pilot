@@ -202,7 +202,7 @@ def sql_session_factory() -> Iterator:
     # Importing the modules here ensures the metadata is fully populated
     # before ``create_all`` runs (avoids the FK resolution order problem).
     Base.metadata.create_all(engine)
-    Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Session = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
     try:
         yield Session
     finally:
@@ -326,6 +326,70 @@ class TestSqlRepository:
         result = list(sql_repo.get_by_ids([v1.id, v1.id]))
         assert len(result) == 1
         assert result[0].id == v1.id
+
+    def test_find_existing_by_pairs_returns_only_matches(
+        self, sql_repo: SqlVacancyRepository
+    ) -> None:
+        sql_repo.upsert(_vacancy(source_id="1"))
+        habr = _vacancy(source_id="2", title="H")
+        habr.source = "habr"
+        sql_repo.upsert(habr)
+
+        result = sql_repo.find_existing_by_pairs(
+            [("hh", "1"), ("hh", "missing"), ("habr", "2"), ("habr", "missing")]
+        )
+
+        assert result == {("hh", "1"), ("habr", "2")}
+
+    def test_find_existing_by_pairs_empty_input_returns_empty(
+        self, sql_repo: SqlVacancyRepository
+    ) -> None:
+        assert sql_repo.find_existing_by_pairs([]) == set()
+
+    def test_find_by_content_hashes_buckets_by_hash(self, sql_repo: SqlVacancyRepository) -> None:
+        sql_repo.upsert(_vacancy(source_id="hh-1", content_hash="shared"))
+        habr = _vacancy(source_id="habr-1", title="H", content_hash="shared")
+        habr.source = "habr"
+        sql_repo.upsert(habr)
+        sql_repo.upsert(_vacancy(source_id="hh-2", content_hash="solo"))
+
+        result = sql_repo.find_by_content_hashes(["shared", "solo", "absent"])
+
+        assert set(result) == {"shared", "solo"}
+        assert {v.source for v in result["shared"]} == {"hh", "habr"}
+        assert result["solo"][0].source == "hh"
+
+    def test_find_by_content_hashes_empty_input_returns_empty(
+        self, sql_repo: SqlVacancyRepository
+    ) -> None:
+        assert sql_repo.find_by_content_hashes([]) == {}
+
+
+class TestBatchDedupHelpers:
+    def test_find_existing_by_pairs_matches_in_memory(
+        self, repo: InMemoryVacancyRepository
+    ) -> None:
+        repo.upsert(_vacancy(source_id="1"))
+        habr = _vacancy(source_id="2", title="H")
+        habr.source = "habr"
+        repo.upsert(habr)
+
+        result = repo.find_existing_by_pairs([("hh", "1"), ("hh", "missing"), ("habr", "2")])
+
+        assert result == {("hh", "1"), ("habr", "2")}
+
+    def test_find_by_content_hashes_matches_in_memory(
+        self, repo: InMemoryVacancyRepository
+    ) -> None:
+        repo.upsert(_vacancy(source_id="hh-1", content_hash="h"))
+        habr = _vacancy(source_id="habr-1", title="H", content_hash="h")
+        habr.source = "habr"
+        repo.upsert(habr)
+
+        result = repo.find_by_content_hashes(["h", "absent"])
+
+        assert set(result) == {"h"}
+        assert len(result["h"]) == 2
 
 
 # ---------------------------------------------------------------------------

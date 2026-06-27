@@ -135,11 +135,16 @@ class MatchService:
 
     def get(self, match_id: uuid.UUID, *, user_id: uuid.UUID) -> VacancyMatchRead:
         """Return a single match, enforcing ownership."""
-        match = self._match_repo.get_by_id(match_id)
-        if match is None:
+        # Single round-trip: ``get_by_id_for_user`` joins to
+        # ``search_profiles`` so the ownership check piggybacks on the
+        # lookup. Falls back to a second query only to disambiguate
+        # "not found" from "owned by someone else".
+        match = self._match_repo.get_by_id_for_user(match_id, user_id)
+        if match is not None:
+            return _match_to_dto(match)
+        if self._match_repo.get_by_id(match_id) is None:
             raise MatchNotFoundError(f"vacancy match {match_id} not found")
-        self._assert_ownership(match, user_id)
-        return _match_to_dto(match)
+        raise MatchOwnershipError(f"vacancy match {match_id} does not belong to user {user_id}")
 
     def list_matches(
         self,
@@ -168,11 +173,21 @@ class MatchService:
         skip the check.
         """
         _validate_status(status)
-        match = self._match_repo.get_by_id(match_id)
-        if match is None:
-            raise MatchNotFoundError(f"vacancy match {match_id} not found")
         if user_id is not None:
-            self._assert_ownership(match, user_id)
+            owned = self._match_repo.get_by_id_for_user(match_id, user_id)
+            if owned is None:
+                # Same fallback as :meth:`get` — distinguish 404 from
+                # 403 by checking the row's existence directly.
+                if self._match_repo.get_by_id(match_id) is None:
+                    raise MatchNotFoundError(f"vacancy match {match_id} not found")
+                raise MatchOwnershipError(
+                    f"vacancy match {match_id} does not belong to user {user_id}"
+                )
+        else:
+            # Tests that exercise the repository wiring without an
+            # owner: still need the row to exist before we update it.
+            if self._match_repo.get_by_id(match_id) is None:
+                raise MatchNotFoundError(f"vacancy match {match_id} not found")
         try:
             updated = self._match_repo.update_status(match_id, status, score=score)
         except NotFoundError as exc:

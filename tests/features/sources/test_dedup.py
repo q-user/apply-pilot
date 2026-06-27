@@ -266,6 +266,42 @@ class TestDeduplicateBatch:
         assert new == []
         assert len(duplicates) == 2
 
+    @pytest.mark.asyncio
+    async def test_uses_batched_repo_lookups(
+        self, repo: InMemoryVacancyRepository, deduplicator: VacancyDeduplicator
+    ) -> None:
+        """Batch dedup must issue at most one ``find_*`` call per dimension.
+
+        Regression test for the N+1 pattern: previously the loop called
+        ``find_by_source`` and (optionally) ``find_by_content_hash`` for
+        every vacancy in the batch.
+        """
+        batch = [_make(source="hh", source_id=f"v-{i}", content_hash=f"h-{i}") for i in range(50)]
+
+        pair_calls: list[int] = []
+        hash_calls: list[int] = []
+        real_find_existing = repo.find_existing_by_pairs
+        real_find_hashes = repo.find_by_content_hashes
+
+        def counted_pairs(pairs):  # type: ignore[no-untyped-def]
+            pair_calls.append(len(pairs))
+            return real_find_existing(pairs)
+
+        def counted_hashes(hashes):  # type: ignore[no-untyped-def]
+            hash_calls.append(len(hashes))
+            return real_find_hashes(hashes)
+
+        repo.find_existing_by_pairs = counted_pairs  # type: ignore[method-assign]
+        repo.find_by_content_hashes = counted_hashes  # type: ignore[method-assign]
+
+        new, duplicates = await deduplicator.deduplicate_batch(batch)
+
+        assert len(new) == 50
+        assert duplicates == []
+        # Exactly one call per dimension, no matter the batch size.
+        assert pair_calls == [50]
+        assert hash_calls == [50]
+
 
 # ---------------------------------------------------------------------------
 # SourceService.ingest_batch integration

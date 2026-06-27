@@ -71,32 +71,48 @@ class VacancyDeduplicator:
         **or** the repository by either ``(source, source_id)`` or
         ``content_hash``. ``content_hash`` is only consulted when set;
         ``None`` falls back to source-identity checks only.
+
+        Repository lookups are issued in a single batched call per
+        dimension, so the dedup pass is ``O(N)`` Python work plus two
+        round-trips regardless of the batch size — previously it was
+        ``O(N)`` round-trips, the dominant cost on large Telegram
+        channel ingests.
         """
+        if not vacancies:
+            return [], []
+
         new: list[Vacancy] = []
         duplicates: list[Vacancy] = []
         seen_source_ids: set[tuple[str, str]] = set()
         seen_hashes: set[str] = set()
 
+        # Pre-compute the lookup keys for the batch so we can answer
+        # "which of these already exist in the repo?" in a single
+        # query per dimension.
+        pair_keys = [(v.source, v.source_id) for v in vacancies]
+        candidate_hashes = [v.content_hash for v in vacancies if v.content_hash is not None]
+
+        existing_pairs = self._repo.find_existing_by_pairs(pair_keys)
+        existing_hash_buckets = self._repo.find_by_content_hashes(candidate_hashes)
+
         for vacancy in vacancies:
             key = (vacancy.source, vacancy.source_id)
 
             # In-batch dedup by (source, source_id) — also catches repo matches.
-            if key in seen_source_ids or self._repo.find_by_source(*key):
+            if key in seen_source_ids or key in existing_pairs:
                 duplicates.append(vacancy)
                 continue
 
             # In-batch / repo dedup by content_hash (cross-source).
-            if vacancy.content_hash is not None and (
-                vacancy.content_hash in seen_hashes
-                or self._repo.find_by_content_hash(vacancy.content_hash)
-            ):
+            h = vacancy.content_hash
+            if h is not None and (h in seen_hashes or h in existing_hash_buckets):
                 duplicates.append(vacancy)
                 continue
 
             new.append(vacancy)
             seen_source_ids.add(key)
-            if vacancy.content_hash is not None:
-                seen_hashes.add(vacancy.content_hash)
+            if h is not None:
+                seen_hashes.add(h)
 
         return new, duplicates
 

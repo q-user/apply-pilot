@@ -57,6 +57,14 @@ class VacancyMatchRepository(Protocol):
     def find_existing(
         self, profile_id: uuid.UUID, vacancy_id: uuid.UUID
     ) -> VacancyMatch | None: ...
+    def find_existing_pairs(
+        self,
+        profile_id: uuid.UUID,
+        vacancy_ids: Sequence[uuid.UUID],
+    ) -> set[uuid.UUID]: ...
+    def get_by_id_for_user(
+        self, match_id: uuid.UUID, user_id: uuid.UUID
+    ) -> VacancyMatch | None: ...
     def update_status(
         self,
         match_id: uuid.UUID,
@@ -155,6 +163,44 @@ class InMemoryVacancyMatchRepository:
     def find_existing(self, profile_id: uuid.UUID, vacancy_id: uuid.UUID) -> VacancyMatch | None:
         match_id = self._by_pair.get((profile_id, vacancy_id))
         return self._by_id.get(match_id) if match_id is not None else None
+
+    def find_existing_pairs(
+        self,
+        profile_id: uuid.UUID,
+        vacancy_ids: Sequence[uuid.UUID],
+    ) -> set[uuid.UUID]:
+        """Return the subset of ``vacancy_ids`` that already have a match for ``profile_id``.
+
+        Backs :meth:`MatchService.bulk_create_for_profile` — one query
+        replaces the per-pair ``find_existing`` loop. The natural key
+        ``(search_profile_id, vacancy_id)`` is unique, so each vacancy
+        id can match at most one match.
+        """
+        if not vacancy_ids:
+            return set()
+        return {
+            vacancy_id for vacancy_id in vacancy_ids if (profile_id, vacancy_id) in self._by_pair
+        }
+
+    def get_by_id_for_user(self, match_id: uuid.UUID, user_id: uuid.UUID) -> VacancyMatch | None:
+        """Return the match only when its profile belongs to ``user_id``.
+
+        Combines the lookup and the ownership check in a single call,
+        so the service layer does not need a separate round-trip to
+        resolve the profile's owner. Returns ``None`` for both
+        "no such match" and "match exists but owned by someone else" —
+        the caller disambiguates the two by re-checking with
+        :meth:`get_by_id` if it needs to raise a different error.
+        """
+        match = self._by_id.get(match_id)
+        if match is None:
+            return None
+        if self._list_user_profiles is None:
+            return match
+        owner_match = any(
+            profile.id == match.search_profile_id for profile in self._list_user_profiles(user_id)
+        )
+        return match if owner_match else None
 
     def update_status(
         self,
@@ -456,6 +502,56 @@ class SqlVacancyMatchRepository:
             if status is not None:
                 statement = statement.where(VacancyMatch.status == status)
             return list(session.execute(statement).scalars().all())
+        finally:
+            if self._session is None:
+                session.close()
+
+    def find_existing_pairs(
+        self,
+        profile_id: uuid.UUID,
+        vacancy_ids: Sequence[uuid.UUID],
+    ) -> set[uuid.UUID]:
+        """Return the subset of ``vacancy_ids`` that already have a match for ``profile_id``.
+
+        Single ``WHERE search_profile_id = :p AND vacancy_id IN (...)``
+        lookup replacing ``len(vacancy_ids)`` individual reads.
+        """
+        if not vacancy_ids:
+            return set()
+        session = self._scope()
+        try:
+            statement = select(VacancyMatch.vacancy_id).where(
+                VacancyMatch.search_profile_id == profile_id,
+                VacancyMatch.vacancy_id.in_(vacancy_ids),
+            )
+            return set(session.execute(statement).scalars().all())
+        finally:
+            if self._session is None:
+                session.close()
+
+    def get_by_id_for_user(self, match_id: uuid.UUID, user_id: uuid.UUID) -> VacancyMatch | None:
+        """Return the match only when its profile belongs to ``user_id``.
+
+        Joins ``vacancy_matches`` to ``search_profiles`` so the lookup
+        and the ownership check land in a single round-trip; previously
+        :meth:`MatchService._assert_ownership` issued a follow-up
+        ``profile_repo.get_by_id`` for every read.
+
+        Returns ``None`` for both "no such match" and "match exists but
+        owned by someone else"; callers that need to disambiguate the
+        two cases can fall back to :meth:`get_by_id`.
+        """
+        session = self._scope()
+        try:
+            statement = (
+                select(VacancyMatch)
+                .join(SearchProfile, SearchProfile.id == VacancyMatch.search_profile_id)
+                .where(
+                    VacancyMatch.id == match_id,
+                    SearchProfile.user_id == user_id,
+                )
+            )
+            return session.execute(statement).scalar_one_or_none()
         finally:
             if self._session is None:
                 session.close()

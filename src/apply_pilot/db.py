@@ -59,19 +59,32 @@ def get_engine(settings: DatabaseSettings | None = None) -> Engine:
 
 
 def get_sessionmaker(settings: DatabaseSettings | None = None) -> sessionmaker[Session]:
-    """Return a sessionmaker bound to an engine built from the given settings."""
+    """Return a sessionmaker bound to an engine built from the given settings.
+
+    ``expire_on_commit`` is disabled so that callers can return ORM
+    instances to API / service layers *after* the transaction has been
+    committed. The default ``True`` would expire every attribute and
+    trigger a lazy-refresh that, on a closed session, raises
+    :class:`DetachedInstanceError` — which is exactly the failure mode
+    the new ``RETURNING``-based upsert is designed to avoid.
+    """
     return sessionmaker(
         bind=get_engine(settings),
         class_=Session,
         autocommit=False,
         autoflush=False,
+        expire_on_commit=False,
     )
 
 
 # Module-level singletons (for scripts and existing call sites that import them).
 engine: Engine = get_engine()
 SessionLocal: sessionmaker[Session] = sessionmaker(
-    bind=engine, class_=Session, autocommit=False, autoflush=False
+    bind=engine,
+    class_=Session,
+    autocommit=False,
+    autoflush=False,
+    expire_on_commit=False,
 )
 
 
