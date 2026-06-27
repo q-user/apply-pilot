@@ -51,7 +51,7 @@ services:
     container_name: apply-pilot-api
     environment:
       # psycopg2 sync driver — matches Alembic chain + the sync engine in src/apply_pilot/db.py.
-      DATABASE_URL: postgresql+psycopg2://apply_pilot:apply_pilot@db:5432/apply_pilot
+      DATABASE_URL: postgresql+psycopg://apply_pilot:apply_pilot@db:5432/apply_pilot
       APP_REDIS_URL: redis://redis:6379/0
       APP_ENV: development
     ports:

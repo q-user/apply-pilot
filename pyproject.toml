@@ -82,7 +82,7 @@ prepend_sys_path = ["src"]
 # for the schema; ty is already scoped to ``src/`` by the CI command
 [dependency-groups]
 dev = [
-    "psycopg2-binary>=2.9.12",
+    "psycopg[binary]>=3.2",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",
     "pytest-timeout>=2.4.0",
