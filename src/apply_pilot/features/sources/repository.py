@@ -131,28 +131,14 @@ class InMemoryVacancyRepository:
         now = datetime.now(UTC)
         if existing_id is not None:
             # Update: keep the original id and created_at; bump updated_at.
+            # Copy every writable column (driven by the Vacancy model) from
+            # the incoming record so adding a new column does not require
+            # editing this method.
             existing = self._by_id[existing_id]
             vacancy.id = existing.id
             vacancy.created_at = existing.created_at
             vacancy.updated_at = now
-            for attr in (
-                "title",
-                "description",
-                "url",
-                "salary_from",
-                "salary_to",
-                "salary_currency",
-                "salary_gross",
-                "employer_name",
-                "location",
-                "schedule",
-                "experience",
-                "skills",
-                "published_at",
-                "source_updated_at",
-                "raw_data",
-                "content_hash",
-            ):
+            for attr in _upsert_field_names(Vacancy):
                 setattr(existing, attr, getattr(vacancy, attr))
             return existing
 
@@ -281,30 +267,41 @@ _NOT_NULL_COLUMN_DEFAULTS: dict[str, Any] = {
 }
 
 
+# Columns managed outside the upsert payload:
+#   - ``id``: primary key, either caller-supplied or generated.
+#   - ``source`` / ``source_id``: natural key, used in the conflict target.
+#   - ``created_at`` / ``updated_at``: server-side audit timestamps.
+_UPSERT_EXCLUDED_COLUMNS: frozenset[str] = frozenset(
+    {"id", "source", "source_id", "created_at", "updated_at"}
+)
+
+
+def _upsert_field_names(
+    model: type[Vacancy] = Vacancy,
+) -> tuple[str, ...]:
+    """Return the column names updated by an upsert, driven by the model.
+
+    Reading from ``__table__.columns`` ensures both the SQL and the
+    in-memory repositories stay in sync with the ``Vacancy`` model:
+    adding a new column to the model propagates here automatically, so
+    there is no hidden field list to forget.
+    """
+    return tuple(
+        column.name
+        for column in model.__table__.columns
+        if column.name not in _UPSERT_EXCLUDED_COLUMNS
+    )
+
+
 def _upsert_columns(vacancy: Vacancy) -> dict[str, Any]:
     """Return the column→value mapping for the upsert statement.
 
     Excludes the natural key columns and the audit timestamps, which
-    SQLAlchemy/the database manage on their own.
+    SQLAlchemy/the database manage on their own. The set of fields is
+    derived from the :class:`Vacancy` model so it cannot drift from
+    the schema.
     """
-    return {
-        "title": vacancy.title,
-        "description": vacancy.description,
-        "url": vacancy.url,
-        "salary_from": vacancy.salary_from,
-        "salary_to": vacancy.salary_to,
-        "salary_currency": vacancy.salary_currency,
-        "salary_gross": vacancy.salary_gross,
-        "employer_name": vacancy.employer_name,
-        "location": vacancy.location,
-        "schedule": vacancy.schedule,
-        "experience": vacancy.experience,
-        "skills": vacancy.skills,
-        "published_at": vacancy.published_at,
-        "source_updated_at": vacancy.source_updated_at,
-        "raw_data": vacancy.raw_data,
-        "content_hash": vacancy.content_hash,
-    }
+    return {name: getattr(vacancy, name) for name in _upsert_field_names()}
 
 
 class SqlVacancyRepository:
