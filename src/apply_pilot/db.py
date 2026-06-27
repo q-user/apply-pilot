@@ -62,19 +62,31 @@ def get_engine(settings: DatabaseSettings | None = None) -> Engine:
 
 
 def get_sessionmaker(settings: DatabaseSettings | None = None) -> sessionmaker[Session]:
-    """Return a sessionmaker bound to an engine built from the given settings."""
+    """Return a sessionmaker bound to an engine built from the given settings.
+
+    Issue #292: ``expire_on_commit=False`` keeps ORM attributes
+    readable after the FastAPI request ends so Pydantic response
+    serialization does not trigger a lazy-load against a closed
+    session. The default mirrors the test-fixture sessionmaker so
+    there is no asymmetry between dev and CI.
+    """
     return sessionmaker(
         bind=get_engine(settings),
         class_=Session,
         autocommit=False,
         autoflush=False,
+        expire_on_commit=False,
     )
 
 
 # Module-level singletons (for scripts and existing call sites that import them).
 engine: Engine = get_engine()
 SessionLocal: sessionmaker[Session] = sessionmaker(
-    bind=engine, class_=Session, autocommit=False, autoflush=False
+    bind=engine,
+    class_=Session,
+    autocommit=False,
+    autoflush=False,
+    expire_on_commit=False,
 )
 
 
