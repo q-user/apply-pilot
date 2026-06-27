@@ -66,12 +66,16 @@ def _bypass_action_handlers() -> tuple[
         DeferActionHandler(match_service=noop, account_repo=noop, audit_service=noop),
         RejectActionHandler(match_service=noop, account_repo=noop, audit_service=noop),
         ReviewActionHandler(
-            match_service=noop, vacancy_repo=noop,
-            cover_letter_repo=noop, account_repo=noop,
+            match_service=noop,
+            vacancy_repo=noop,
+            cover_letter_repo=noop,
+            account_repo=noop,
         ),
         RegenerateActionHandler(
-            match_service=noop, vacancy_repo=noop,
-            cover_letter_repo=noop, account_repo=noop,
+            match_service=noop,
+            vacancy_repo=noop,
+            cover_letter_repo=noop,
+            account_repo=noop,
         ),
     )
 
