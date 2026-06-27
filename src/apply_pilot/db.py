@@ -43,9 +43,12 @@ def _build_engine(settings: DatabaseSettings) -> Engine:
         "future": True,
         "echo": settings.echo,
         "pool_pre_ping": settings.pool_pre_ping,
-        "pool_size": settings.pool_size,
-        "max_overflow": settings.max_overflow,
     }
+
+    # SQLite has no connection pool; pool_size/max_overflow are Postgres-only tuning.
+    if str(url).startswith("sqlite"):
+        kwargs.pop("pool_size", None)
+        kwargs.pop("max_overflow", None)
     if url.startswith("sqlite"):
         if ":memory:" in url:
             kwargs["poolclass"] = StaticPool
