@@ -1,13 +1,4 @@
-# Local development stack for apply-pilot.
-#
-# The api service is the FastAPI monolith. bot, scheduler and worker are
-# placeholder services that will be wired up by their respective vertical
-# slices — they are commented out for now and tracked as TODO. db and redis
-# are first-class services with healthchecks so the api can wait for them
-# to be ready via `condition: service_healthy`.
-
 name: apply-pilot
-
 services:
   db:
     image: postgres:16-alpine
@@ -17,32 +8,33 @@ services:
       POSTGRES_PASSWORD: apply_pilot
       POSTGRES_DB: apply_pilot
     ports:
-      - "5432:5432"
+    - 5432:5432
     volumes:
-      - db-data:/var/lib/postgresql/data
+    - db-data:/var/lib/postgresql/data
     healthcheck:
       test:
-        - CMD-SHELL
-        - pg_isready -U apply_pilot -d apply_pilot
+      - CMD-SHELL
+      - pg_isready -U apply_pilot -d apply_pilot
       interval: 5s
       timeout: 5s
       retries: 10
       start_period: 5s
-
   redis:
     image: redis:7-alpine
     container_name: apply-pilot-redis
     ports:
-      - "6379:6379"
+    - 6379:6379
     volumes:
-      - redis-data:/data
+    - redis-data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test:
+      - CMD
+      - redis-cli
+      - ping
       interval: 5s
       timeout: 3s
       retries: 10
       start_period: 3s
-
   api:
     build:
       context: .
@@ -50,55 +42,20 @@ services:
     image: apply-pilot:local
     container_name: apply-pilot-api
     environment:
-      # The api reads DATABASE_URL (not APP_DATABASE_URL) in
-      # src/apply_pilot/db.py. Mirror APP_DATABASE_URL here so the
-      # SQLAlchemy engine inside the container connects to Postgres;
-      # without this the env-var is empty and the engine silently
-      # falls back to sqlite:///./dev.db under a non-writable /app
-      # directory, surfacing as 'unable to open database file' on
-      # the first request that hits an ORM session. Driver is
-      # psycopg2 (sync) because db.py uses sync create_engine; the
-      # runtime image also installs this driver via [project]
-      # dependencies in pyproject.toml so the connection actually
-      # works instead of surfacing MissingGreenlet.
       APP_DATABASE_URL: postgresql+psycopg2://apply_pilot:apply_pilot@db:5432/apply_pilot
       DATABASE_URL: postgresql+psycopg2://apply_pilot:apply_pilot@db:5432/apply_pilot
       APP_REDIS_URL: redis://redis:6379/0
       APP_ENV: development
+      REDIS_URL: redis://redis:6379/0
     ports:
-      - "8000:8000"
+    - 8000:8000
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
-    # TODO: bot / scheduler / worker entry points land in later vertical
-    # slices. Once `apply_pilot.runtime.process` exposes a `<role>` entry
-    # point, add services here that share the same image and depend on
-    # db/redis:
-    #
-    #   bot:
-    #     image: apply-pilot:local
-    #     command: ["python", "-m", "apply_pilot.runtime.process", "bot"]
-    #     depends_on:
-    #       api: { condition: service_started }
-    #       redis: { condition: service_healthy }
-    #
-    #   scheduler:
-    #     image: apply-pilot:local
-    #     command: ["python", "-m", "apply_pilot.runtime.process", "scheduler"]
-    #     depends_on:
-    #       api: { condition: service_started }
-    #       redis: { condition: service_healthy }
-    #
-    #   worker:
-    #     image: apply-pilot:local
-    #     command: ["python", "-m", "apply_pilot.runtime.process", "worker"]
-    #     depends_on:
-    #       api: { condition: service_started }
-    #       db: { condition: service_healthy }
-    #       redis: { condition: service_healthy }
-
+      migrate:
+        condition: service_completed_successfully
   apply-pilot-max-bot:
     build: .
     image: apply-pilot:dev
@@ -113,17 +70,31 @@ services:
       REDIS_URL: redis://redis:6379/0
       MAX_BOT_TOKEN: ${MAX_BOT_TOKEN:?set MAX_BOT_TOKEN in .env}
       MAX_POLLING_TIMEOUT: ${MAX_POLLING_TIMEOUT:-30}
-    command: ["/app/.venv/bin/apply-pilot-max-bot"]
+    command:
+    - /app/.venv/bin/apply-pilot-max-bot
     volumes:
-      - ./.data:/data
+    - ./.data:/data
     restart: unless-stopped
     mem_limit: 128m
-    cpus: "0.5"
+    cpus: '0.5'
     networks:
-      - default
+    - default
     extra_hosts:
-      - "host.docker.internal:host-gateway"
-
+    - host.docker.internal:host-gateway
+  migrate:
+    image: apply-pilot:local
+    container_name: apply-pilot-migrate
+    environment:
+      DATABASE_URL: postgresql+psycopg2://apply_pilot:apply_pilot@db:5432/apply_pilot
+      APP_ENV: development
+    depends_on:
+      db:
+        condition: service_healthy
+    command:
+    - alembic
+    - upgrade
+    - head
+    restart: 'no'
 volumes:
-  db-data:
-  redis-data:
+  db-data: null
+  redis-data: null
