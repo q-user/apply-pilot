@@ -95,6 +95,18 @@ class VacancyMatch(Base):
         nullable=False,
     )
 
+    # Denormalized owner id (issue #263). Previously every match read
+    # joined ``search_profiles`` to resolve ``user_id`` for ownership
+    # checks; now ``_assert_ownership`` can read ``match.user_id``
+    # directly without a round-trip. Mirrors the pattern on
+    # ``ApplyJob.user_id`` — FK to ``users.id`` with ondelete=CASCADE.
+    user_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
     status: Mapped[str] = mapped_column(
         String(50),
         nullable=False,

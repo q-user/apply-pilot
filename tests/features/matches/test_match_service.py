@@ -88,7 +88,7 @@ def test_create_match_returns_new_row(
     profile_repo.create(profile)
     vacancy = _vacancy()
 
-    result = service.create_match(profile.id, vacancy.id)
+    result = service.create_match(profile.id, vacancy.id, user_id=user_id)
 
     assert result.search_profile_id == profile.id
     assert result.vacancy_id == vacancy.id
@@ -104,8 +104,8 @@ def test_create_match_is_idempotent(
     profile_repo.create(profile)
     vacancy = _vacancy()
 
-    first = service.create_match(profile.id, vacancy.id)
-    second = service.create_match(profile.id, vacancy.id)
+    first = service.create_match(profile.id, vacancy.id, user_id=user_id)
+    second = service.create_match(profile.id, vacancy.id, user_id=user_id)
 
     assert first.id == second.id
     # Repository only holds one row.
@@ -122,8 +122,8 @@ def test_create_match_does_not_collide_across_profiles(
     profile_repo.create(profile_b)
     vacancy = _vacancy()
 
-    match_a = service.create_match(profile_a.id, vacancy.id)
-    match_b = service.create_match(profile_b.id, vacancy.id)
+    match_a = service.create_match(profile_a.id, vacancy.id, user_id=user_id)
+    match_b = service.create_match(profile_b.id, vacancy.id, user_id=user_id)
 
     assert match_a.id != match_b.id
     assert match_a.vacancy_id == match_b.vacancy_id == vacancy.id
@@ -241,8 +241,8 @@ def test_list_matches_returns_only_own(
     profile_repo.create(theirs)
     vacancy = _vacancy()
 
-    service.create_match(mine.id, vacancy.id)
-    service.create_match(theirs.id, vacancy.id)
+    service.create_match(mine.id, vacancy.id, user_id=user_id)
+    service.create_match(theirs.id, vacancy.id, user_id=user_id)
 
     mine_listed = service.list_matches(user_id)
     theirs_listed = service.list_matches(other_user_id)

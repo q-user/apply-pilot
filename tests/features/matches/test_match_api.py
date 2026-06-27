@@ -470,7 +470,12 @@ def test_get_match_does_not_close_request_session_mid_request(
         # the foreign keys (and the endpoint's request session can see them).
         session.commit()
         SqlVacancyMatchRepository(session_factory=plain_session_factory).create(
-            VacancyMatch(id=match_id, search_profile_id=profile_id, vacancy_id=vacancy_id)
+            VacancyMatch(
+                id=match_id,
+                search_profile_id=profile_id,
+                vacancy_id=vacancy_id,
+                user_id=uuid.uuid4(),
+            )
         )
 
     # ---- Build a FastAPI app whose ``get_db`` returns the counting
