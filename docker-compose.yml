@@ -50,9 +50,19 @@ services:
     image: apply-pilot:local
     container_name: apply-pilot-api
     environment:
-      # asyncpg driver is preferred inside the container, but the SQLAlchemy
-      # URL itself is left to the application to compose from individual vars.
-      APP_DATABASE_URL: postgresql+asyncpg://apply_pilot:apply_pilot@db:5432/apply_pilot
+      # The api reads DATABASE_URL (not APP_DATABASE_URL) in
+      # src/apply_pilot/db.py. Mirror APP_DATABASE_URL here so the
+      # SQLAlchemy engine inside the container connects to Postgres;
+      # without this the env-var is empty and the engine silently
+      # falls back to sqlite:///./dev.db under a non-writable /app
+      # directory, surfacing as 'unable to open database file' on
+      # the first request that hits an ORM session. Driver is
+      # psycopg2 (sync) because db.py uses sync create_engine; the
+      # runtime image also installs this driver via [project]
+      # dependencies in pyproject.toml so the connection actually
+      # works instead of surfacing MissingGreenlet.
+      APP_DATABASE_URL: postgresql+psycopg2://apply_pilot:apply_pilot@db:5432/apply_pilot
+      DATABASE_URL: postgresql+psycopg2://apply_pilot:apply_pilot@db:5432/apply_pilot
       APP_REDIS_URL: redis://redis:6379/0
       APP_ENV: development
     ports:

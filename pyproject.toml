@@ -22,6 +22,7 @@ dependencies = [
     "cryptography>=46.0.0",
     "pypdf>=4.0.0",
     "python-docx>=1.0.0",
+    "psycopg2-binary>=2.9.12",
 ]
 
 [project.scripts]
@@ -82,7 +83,6 @@ prepend_sys_path = ["src"]
 # for the schema; ty is already scoped to ``src/`` by the CI command
 [dependency-groups]
 dev = [
-    "psycopg2-binary>=2.9.12",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",
     "pytest-timeout>=2.4.0",
