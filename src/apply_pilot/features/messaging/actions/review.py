@@ -317,7 +317,8 @@ class ReviewActionHandler:
         # Lazy-imported: matches.service is reached transitively during pytest
         # collection (test fixtures re-import these handlers), so resolve these
         # symbols at call-time instead of at module load.
-        from apply_pilot.features.matches.service import MatchNotFoundError, MatchOwnershipError  # noqa: E501, PLC0415
+        from apply_pilot.features.matches.service import MatchNotFoundError, MatchOwnershipError  # noqa: E501, PLC0415, I001
+
         try:
             self._match_service.get(match_id, user_id=user_id)
         except MatchNotFoundError:

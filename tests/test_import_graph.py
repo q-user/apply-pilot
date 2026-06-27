@@ -31,10 +31,12 @@ stays silent, and the failure only surfaces at the first
 Cycles covered
 --------------
 
-1. ``apply_worker.runtime`` ↔ ``matches.service`` (the cycle fixed by
-   #229). The runtime now defers :class:`MatchService` to the success
-   path; this test asserts the import is **not** present at module
-   level (see
+1. ``apply_worker.runtime`` ↔ ``matches.service``. PR #229 made the
+   runtime side lazy; PR #287 completed the fix by moving the
+   ``messaging.actions.*`` handler imports to text-anchored lazy
+   imports inside ``handle()``, fully breaking the cycle. This test
+   asserts :class:`MatchService` is **not** present at module level in
+   the runtime (see
    :func:`test_apply_worker_runtime_does_not_eagerly_import_match_service`).
 
 2. ``messaging.actions.accept`` ↔ ``max.process`` — the accept handler
@@ -61,22 +63,21 @@ resolvable through a *different* import path; the dedicated
 ``test_apply_worker_runtime_does_not_eagerly_import_match_service``
 test exists for that reason.
 
-Known limitation
-----------------
+Cycle resolved (PR #287)
+------------------------
 
-Importing :mod:`apply_pilot.features.matches.service` as the first
-entry point of a fresh interpreter still fails: the eager top-level
-imports of :mod:`messaging.actions.accept` re-enter the cycle before
-``MatchService`` is bound. The cycle is only survivable when the
-import chain enters through one of the *other* modules first
-(``apply_worker.runtime`` via its lazy import, ``max.process`` via the
-``accept`` handler, or the action handler itself). This test mirrors
-that real-world shape: it pre-loads
-:mod:`apply_pilot.features.apply_worker.runtime` before reaching for
-``matches.service``, and the pair test only exercises the directions
-that survive the existing cycle. A future PR that decouples
-``messaging`` from ``apply_worker`` (tracked as tech debt in the
-``messaging`` slice) would let us drop the pre-warm.
+PR #287 broke the ``apply_worker.runtime`` ↔ ``matches.service`` cycle
+by moving the ``messaging.actions.*`` handler imports of
+``MatchNotFoundError`` / ``MatchOwnershipError`` into text-anchored
+lazy imports inside each ``handle()`` method. Both import orders now
+succeed from a fresh interpreter, and
+:func:`test_pair_imports_in_both_orders` exercises both directions
+without special-casing.
+
+The lazy-import contract
+(:func:`test_apply_worker_runtime_does_not_eagerly_import_match_service`)
+remains in force: :class:`MatchService` must not appear as a
+module-level attribute of ``apply_worker.runtime``.
 
 Extending the guard
 -------------------
@@ -135,9 +136,9 @@ def _purge(*module_names: str) -> None:
 # messaging dispatcher loads the accept handler, and the worker
 # process loads :mod:`apply_worker.runtime` directly.
 #
-# ``matches.service`` is **not** in this list — see the module
-# docstring under "Known limitation" for why it cannot be imported in
-# a fresh interpreter.
+# ``matches.service`` is covered by the pair test below rather than
+# this smoke list; both import orders now succeed after #287 broke
+# the cycle.
 _SMOKE_MODULES: tuple[str, ...] = (
     "apply_pilot.features.max.process",
     "apply_pilot.features.messaging.actions.accept",
@@ -145,11 +146,9 @@ _SMOKE_MODULES: tuple[str, ...] = (
 )
 
 
-# Pairs of modules whose import must not raise. The cycle pair
-# ``(matches.service, apply_worker.runtime)`` only survives in one
-# direction; the test marks the failing direction with
-# ``pytest.raises`` so a future fix that breaks the cycle surfaces as
-# a clear, actionable test failure rather than a silent skip.
+# Pairs of modules whose import must not raise in either order.
+# PR #287 broke the ``matches.service`` ↔ ``apply_worker.runtime``
+# cycle, so both directions now succeed from a fresh interpreter.
 _CYCLE_PAIRS: tuple[tuple[str, str], ...] = (
     (
         "apply_pilot.features.messaging.actions.accept",
@@ -201,35 +200,11 @@ def test_smoke_imports_clean(module_name: str) -> None:
 def test_pair_imports_in_both_orders(first: str, second: str) -> None:
     """Importing each cycle pair in either order must not raise.
 
-    For the ``(messaging.actions.accept, max.process)`` pair both
-    directions work — the cycle does not involve the entry order.
-
-    For the ``(apply_worker.runtime, matches.service)`` pair only the
-    ``runtime → service`` direction survives the existing cycle; the
-    ``service → runtime`` direction is the order in which a
-    regression in :mod:`apply_worker.runtime` would surface. The test
-    asserts the exact failure shape (``partially initialised module``)
-    so a future fix that removes the cycle produces a clear,
-    actionable test failure rather than a silent skip.
+    PR #287 broke the ``apply_worker.runtime`` ↔ ``matches.service``
+    cycle by moving the ``messaging.actions.*`` handler imports to
+    text-anchored lazy imports inside each ``handle()`` method. Both
+    directions now import cleanly from a fresh interpreter.
     """
-    reverse_runtime_service = (
-        first == "apply_pilot.features.matches.service"
-        and second == "apply_pilot.features.apply_worker.runtime"
-    )
-    if reverse_runtime_service:
-        # See the module docstring under "Known limitation" — the
-        # cycle re-enters ``matches.service`` via the eager
-        # ``messaging.actions.accept`` import before the lazy contract
-        # in ``apply_worker.runtime`` can fire.
-        _purge("apply_pilot")
-        with pytest.raises(
-            ImportError,
-            match="partially initialised module|partially initialized module",
-        ):
-            importlib.import_module(first)
-            importlib.import_module(second)
-        return
-
     _purge("apply_pilot")
     importlib.import_module(first)
     importlib.import_module(second)
@@ -264,12 +239,9 @@ def test_match_service_available_via_matches_service() -> None:
     """``MatchService`` is reachable from the canonical ``matches.service``.
 
     The lazy-import contract above is meaningless if the symbol is
-    not reachable at all. ``matches.service`` is imported here via
-    :mod:`apply_pilot.features.apply_worker.runtime` as a pre-warm so
-    the existing cross-slice cycle does not blow up the assertion
-    (see the module docstring, "Known limitation").
+    not reachable at all. ``matches.service`` is imported directly —
+    PR #287 broke the cross-slice cycle, so no pre-warm is needed.
     """
-    importlib.import_module("apply_pilot.features.apply_worker.runtime")
     from apply_pilot.features.matches.service import MatchService
 
     assert isinstance(MatchService, type)
