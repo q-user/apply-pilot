@@ -69,6 +69,16 @@ class VacancyRepository(Protocol):
         since: datetime | None = None,
     ) -> int: ...
     def get_by_ids(self, vacancy_ids: Sequence[uuid.UUID]) -> Sequence[Vacancy]: ...
+    def find_existing_in_batch(self, external_ids):
+        """Single SELECT ... WHERE external_id IN (...) -> set[str] (Fix #260)."""
+        from sqlalchemy import select
+        if not external_ids:
+            return set()
+        rows = self._session.execute(
+            select(Vacancy.external_id).where(Vacancy.external_id.in_(list(external_ids)))
+        ).scalars().all()
+        return set(rows)
+
 
 
 # ---------------------------------------------------------------------------
