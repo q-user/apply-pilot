@@ -82,7 +82,6 @@ class VacancyMatchRepository(Protocol):
     ) -> set[uuid.UUID]: ...
 
 
-
 # ---------------------------------------------------------------------------
 # In-memory implementation
 # ---------------------------------------------------------------------------
@@ -161,6 +160,7 @@ class InMemoryVacancyMatchRepository:
     def find_existing(self, profile_id: uuid.UUID, vacancy_id: uuid.UUID) -> VacancyMatch | None:
         match_id = self._by_pair.get((profile_id, vacancy_id))
         return self._by_id.get(match_id) if match_id is not None else None
+
     def find_existing_in_batch(
         self,
         profile_id: uuid.UUID,
@@ -172,10 +172,9 @@ class InMemoryVacancyMatchRepository:
             for mid in vacancy_ids
             if any(
                 m.vacancy_id == mid and m.search_profile_id == profile_id
-                for m in self._matches_by_id.values()
+                for m in self._by_id.values()
             )
         }
-
 
     def update_status(
         self,
@@ -516,6 +515,7 @@ class SqlVacancyMatchRepository:
         finally:
             if self._session is None:
                 session.close()
+
     def find_existing_in_batch(
         self,
         profile_id: uuid.UUID,
@@ -525,12 +525,12 @@ class SqlVacancyMatchRepository:
         if not vacancy_ids:
             return set()
         from sqlalchemy import select
+
         stmt = select(VacancyMatch.vacancy_id).where(
             VacancyMatch.search_profile_id == profile_id,
             VacancyMatch.vacancy_id.in_(list(vacancy_ids)),
         )
         return {row[0] for row in self._session.execute(stmt).all()}
-
 
 
 __all__ = [
