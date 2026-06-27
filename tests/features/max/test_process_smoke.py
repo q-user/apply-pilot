@@ -249,7 +249,7 @@ def test_boot_with_fake_token_does_not_crash_on_imports() -> None:
         env={
             "MAX_BOT_TOKEN": "smoke-test-token",
             "MAX_POLLING_TIMEOUT": "2",
-            "APP_DATABASE_URL": "sqlite+pysqlite:///:memory:",
+            "DATABASE_URL": "sqlite+pysqlite:///:memory:",
             "PYTHONUNBUFFERED": "1",
         },
     )
@@ -285,7 +285,7 @@ def test_missing_token_exits_cleanly() -> None:
     run = _run_bot(
         env={
             "MAX_BOT_TOKEN": "",
-            "APP_DATABASE_URL": "sqlite+pysqlite:///:memory:",
+            "DATABASE_URL": "sqlite+pysqlite:///:memory:",
         },
     )
     try:

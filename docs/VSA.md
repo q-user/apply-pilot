@@ -255,7 +255,7 @@ is small; the cost of removing a premature abstraction is not.
   ones: a `@dataclass(frozen=True)` value type and a `get_*_settings()`
   builder that reads the environment.
 * Environment variable names are prefixed with `APP_` (e.g.
-  `APP_DATABASE_URL`, `APP_LOG_LEVEL`). This avoids collisions with
+  `DATABASE_URL`, `APP_LOG_LEVEL`). This avoids collisions with
   third-party tooling and makes the project's surface obvious in a
   process listing.
 
