@@ -8,6 +8,7 @@ the new contract on the repository shape (session stays open across
 multiple reads) and re-grep-gates the codebase so the lambda form
 stays gone.
 """
+
 from __future__ import annotations
 
 import uuid
