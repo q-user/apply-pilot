@@ -41,6 +41,12 @@ class VacancyMatchRepository(Protocol):
 
     def create(self, match: VacancyMatch) -> VacancyMatch: ...
     def get_by_id(self, match_id: uuid.UUID) -> VacancyMatch | None: ...
+    def get_with_owner(
+        self,
+        match_id: uuid.UUID,
+        profile_id: uuid.UUID,
+    ) -> VacancyMatch | None: ...
+
     def list_by_profile(
         self,
         profile_id: uuid.UUID,
@@ -123,6 +129,17 @@ class InMemoryVacancyMatchRepository:
 
     def get_by_id(self, match_id: uuid.UUID) -> VacancyMatch | None:
         return self._by_id.get(match_id)
+    def get_with_owner(
+        self,
+        match_id: uuid.UUID,
+        profile_id: uuid.UUID,
+    ) -> VacancyMatch | None:
+        """Single-call ownership-aware fetch (Fix #263)."""
+        for m in self._matches_by_id.values():
+            if m.id == match_id and m.search_profile_id == profile_id:
+                return m
+        return None
+
 
     def list_by_profile(
         self,
@@ -416,6 +433,19 @@ class SqlVacancyMatchRepository:
         finally:
             if self._session is None:
                 session.close()
+    def get_with_owner(
+        self,
+        match_id: uuid.UUID,
+        profile_id: uuid.UUID,
+    ) -> VacancyMatch | None:
+        """Single-call ownership-aware fetch (Fix #263)."""
+        from sqlalchemy import select
+        stmt = select(VacancyMatch).where(
+            VacancyMatch.id == match_id,
+            VacancyMatch.search_profile_id == profile_id,
+        )
+        return self._session.execute(stmt).scalar_one_or_none()
+
 
     def list_by_profile(
         self,
