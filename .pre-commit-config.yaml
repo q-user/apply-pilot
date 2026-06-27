@@ -1,14 +1,44 @@
+# Pre-commit hooks for apply-pilot.
+#
+# Versions are pinned to match the tools that CI (`.github/workflows/ci.yml`)
+# runs, so a local `pre-commit run --all-files` answers exactly the same
+# checks as CI. Bump these at the same time as pyproject.toml/CI.
+#
+# Install once per worktree (idempotent — re-running after pulling changes is safe):
+#     uv run pre-commit install
+# Run all hooks against the full repo (mirrors CI):
+#     uv run pre-commit run --all-files
+#
+# Team rule (see README "Pre-commit hygiene" section): NEVER `git push`
+# without first running `uv run pre-commit run --all-files`. A failing
+# pre-commit run blocks the push workflow for everyone reading the diff
+# and risks the same kind of red-PR churn that occurred in sprints where
+# pre-commit was not installed.
+
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.6.9
+    # MUST match CI ruff version. Local was 0.15.17; CI step
+    # `uv run ruff check .` resolves to the same pinned version via uv.lock.
+    rev: v0.15.17
     hooks:
       - id: ruff
         args: [--fix]
       - id: ruff-format
 
-  - repo: https://github.com/astral-sh/ty-pre-commit
+  - repo: https://github.com/astral-sh/ty
+    # Type checker; matches the `ty check src/` step in CI.
     rev: v0.0.49
     hooks:
       - id: ty
-        files: ^src/
-        args: []
+        files: '^src/'
+
+  - repo: local
+    hooks:
+      # Fast import graph check. Catches circular imports and missing
+      # environment variables that surface during collection, before
+      # any test body runs. Keeps the hook under ~10s for fast feedback.
+      - id: pytest-collection
+        name: pytest collection check (cycle / env-var guard)
+        entry: uv run --project . pytest --co -q tests/
+        language: system
+        pass_filenames: false
