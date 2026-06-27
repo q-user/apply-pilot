@@ -10,59 +10,20 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
 
 from sqlalchemy import (
-    CHAR,
     Boolean,
     DateTime,
     String,
-    TypeDecorator,
     func,
 )
 from sqlalchemy import (
     text as sa_text,
 )
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
-from sqlalchemy.engine.interfaces import Dialect
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.sql.type_api import TypeEngine
 
 from apply_pilot.db import Base
-
-
-class GUID(TypeDecorator):
-    """Platform-independent UUID column.
-
-    Stores values as ``CHAR(36)`` on sqlite (and other backends without
-    a native UUID type) and as the native ``UUID`` type on PostgreSQL.
-    This keeps the slice runnable in the in-memory sqlite tests while
-    still using the production-grade type once we cut over to Postgres.
-    """
-
-    impl: type[CHAR] = CHAR
-    cache_ok = True
-
-    def load_dialect_impl(self, dialect: Dialect) -> TypeEngine[Any]:
-        if dialect.name == "postgresql":
-            return dialect.type_descriptor(PG_UUID(as_uuid=True))
-        return dialect.type_descriptor(CHAR(36))
-
-    def process_bind_param(self, value: object, dialect: Dialect) -> str | uuid.UUID | None:
-        if value is None:
-            return None
-        if not isinstance(value, uuid.UUID):
-            value = uuid.UUID(str(value))
-        if dialect.name == "postgresql":
-            return value
-        return str(value)
-
-    def process_result_value(self, value: object, dialect: Dialect) -> uuid.UUID | None:
-        if value is None:
-            return None
-        if isinstance(value, uuid.UUID):
-            return value
-        return uuid.UUID(str(value))
+from apply_pilot.shared.types import GUID  # noqa: F401  # re-export for backward compat
 
 
 class User(Base):
