@@ -49,10 +49,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.13"
           enable-cache: true
@@ -90,3 +90,4 @@ jobs:
         run: uv run pytest -n auto
         env:
           DATABASE_URL: sqlite:///./app.db
+##
