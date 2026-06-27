@@ -122,11 +122,17 @@ def _all_match_rows(match_repo: VacancyMatchRepository) -> Sequence[VacancyMatch
     The :class:`InMemoryVacancyMatchRepository` exposes a private
     ``_by_id`` dict; the SQL implementation already returns the full
     set in a single round-trip so it never reaches this path.
+
+    The previous version defined ``items`` only on the dict branch
+    and then unconditionally ``return items`` — a stray reference to
+    a name that did not yet exist. That raised ``UnboundLocalError``
+    and made the defensive fallback (the line below) unreachable.
+    Issue #293: return the dict snapshot immediately and leave the
+    fallback to handle fakes that do not expose ``_by_id``.
     """
     by_id = getattr(match_repo, "_by_id", None)
     if isinstance(by_id, dict):
-        items: list[VacancyMatch] = list(by_id.values())
-    return items
+        return list(by_id.values())
     # Defensive fallback for fakes that don't expose the storage dict:
     # call the public read method and ask for a very large limit.
     return list(match_repo.list_by_profile(uuid.uuid4(), limit=10_000))

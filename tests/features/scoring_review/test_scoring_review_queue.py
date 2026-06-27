@@ -85,6 +85,49 @@ def _seed_match(
     return owner, profile.id, match.id
 
 
+class TestAllMatchRowsFallback:
+    """Regression for issue #293: the defensive fallback must not raise.
+
+    The old ``_all_match_rows`` defined ``items`` only on the dict
+    branch and then fell through ``return items`` — a stray reference
+    that raised ``UnboundLocalError``. Verify both branches now
+    succeed.
+    """
+
+    def test_dict_branch_returns_rows(self) -> None:
+        from apply_pilot.features.scoring_review.repository import (
+            _all_match_rows,
+        )
+
+        class _RepoWithDict:
+            def __init__(self) -> None:
+                self._by_id = {}
+
+        repo = _RepoWithDict()
+        # Empty dict branch: returns []. Does not raise.
+        assert _all_match_rows(repo) == []
+
+    def test_non_dict_branch_uses_public_method(self) -> None:
+        from apply_pilot.features.scoring_review.repository import (
+            _all_match_rows,
+        )
+
+        class _RepoWithoutDict:
+            calls: list = []
+
+            def list_by_profile(self, profile_id, *, limit: int = 20):
+                self.calls.append((profile_id, limit))
+                return []
+
+        repo = _RepoWithoutDict()
+        result = _all_match_rows(repo)
+        # Fallback invoked exactly once with a synthetic id and the
+        # safe upper-bound limit. Returns the public read result.
+        assert result == []
+        assert len(repo.calls) == 1
+        assert repo.calls[0][1] == 10_000
+
+
 class TestInMemoryQueue:
     def test_filters_by_threshold(
         self,
