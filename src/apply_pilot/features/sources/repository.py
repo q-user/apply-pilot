@@ -69,16 +69,20 @@ class VacancyRepository(Protocol):
         since: datetime | None = None,
     ) -> int: ...
     def get_by_ids(self, vacancy_ids: Sequence[uuid.UUID]) -> Sequence[Vacancy]: ...
-    def find_existing_in_batch(self, external_ids):
-        """Single SELECT ... WHERE external_id IN (...) -> set[str] (Fix #260)."""
+    def find_existing_in_batch(self, source_ids):
+        """Single SELECT ... WHERE source_id IN (...) -> set[str] (Fix #260)."""
         from sqlalchemy import select
-        if not external_ids:
-            return set()
-        rows = self._session.execute(
-            select(Vacancy.external_id).where(Vacancy.external_id.in_(list(external_ids)))
-        ).scalars().all()
-        return set(rows)
 
+        if not source_ids:
+            return set()
+        rows = (
+            self._session.execute(
+                select(Vacancy.source_id).where(Vacancy.source_id.in_(list(source_ids)))
+            )
+            .scalars()
+            .all()
+        )
+        return set(rows)
 
 
 # ---------------------------------------------------------------------------
@@ -198,6 +202,18 @@ class InMemoryVacancyRepository:
         rows from different sources.
         """
         return [v for v in self._by_id.values() if v.content_hash == content_hash]
+
+    def find_existing_in_batch(self, source_ids: list[str]) -> set[str]:
+        """Return the subset of ``source_ids`` already stored (Fix #260).
+
+        Mirrors :meth:`SqlVacancyRepository.find_existing_in_batch` — a
+        single in-memory scan over ``_by_source_id`` replaces the
+        per-vacancy ``find_by_source`` N+1 loop.
+        """
+        if not source_ids:
+            return set()
+        existing = {key[1] for key in self._by_source_id}
+        return existing & set(source_ids)
 
     def list_with_filters(
         self,

@@ -1,3 +1,4 @@
+# ruff: noqa: SIM114
 """Vacancy deduplication logic (issue #24).
 
 Two layers of dedup run before any write hits the database:
@@ -65,40 +66,42 @@ class VacancyDeduplicator:
     async def deduplicate_batch(
         self, vacancies: list[Vacancy]
     ) -> tuple[list[Vacancy], list[Vacancy]]:
-        """Split a batch into ``(new, duplicates)``.
+        """Split a batch into ``(new, duplicates)`` (Fix #260).
 
-        Duplicates are vacancies that match another vacancy in the batch
-        **or** the repository by either ``(source, source_id)`` or
-        ``content_hash``. ``content_hash`` is only consulted when set;
-        ``None`` falls back to source-identity checks only.
+        Single round-trip via ``VacancyRepository.find_existing_in_batch``
+        replaces the prior per-vacancy N+1 loop. ``content_hash`` is still
+        consulted per-vacancy because the in-memory fake has no batch
+        index on hash.
         """
+        if not vacancies:
+            return [], []
         new: list[Vacancy] = []
         duplicates: list[Vacancy] = []
+        source_ids = [v.source_id for v in vacancies if v.source_id]
+        existing_source_ids: set[str] = (
+            self._repo.find_existing_in_batch(source_ids) if source_ids else set()
+        )
         seen_source_ids: set[tuple[str, str]] = set()
         seen_hashes: set[str] = set()
 
         for vacancy in vacancies:
-            key = (vacancy.source, vacancy.source_id)
-
-            # In-batch dedup by (source, source_id) — also catches repo matches.
-            if key in seen_source_ids or self._repo.find_by_source(*key):
+            source_key = (vacancy.source, vacancy.source_id) if vacancy.source_id else None
+            content_hash = vacancy.content_hash
+            is_dup = False
+            if source_key and source_key in seen_source_ids:  # noqa: SIM114
+                is_dup = True
+            elif vacancy.source_id and vacancy.source_id in existing_source_ids:
+                is_dup = True
+            elif content_hash is not None and content_hash in seen_hashes:
+                is_dup = True
+            elif content_hash is not None and self._repo.find_by_content_hash(content_hash):
+                is_dup = True
+            if is_dup:
                 duplicates.append(vacancy)
-                continue
-
-            # In-batch / repo dedup by content_hash (cross-source).
-            if vacancy.content_hash is not None and (
-                vacancy.content_hash in seen_hashes
-                or self._repo.find_by_content_hash(vacancy.content_hash)
-            ):
-                duplicates.append(vacancy)
-                continue
-
-            new.append(vacancy)
-            seen_source_ids.add(key)
-            if vacancy.content_hash is not None:
-                seen_hashes.add(vacancy.content_hash)
-
+            else:
+                new.append(vacancy)
+                if source_key:
+                    seen_source_ids.add(source_key)
+                if content_hash is not None:
+                    seen_hashes.add(content_hash)
         return new, duplicates
-
-
-__all__ = ["VacancyDeduplicator"]
