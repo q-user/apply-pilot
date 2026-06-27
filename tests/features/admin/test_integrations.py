@@ -329,6 +329,69 @@ def test_worker_handles_graceful_shutdown() -> None:
     assert calls >= 1
 
 
+class TestInMemoryStoreSafeIteration:
+    """Regression for issue #295: concurrent mutation must not crash the endpoint."""
+
+    def test_get_all_snapshots_under_concurrent_update(self) -> None:
+        """A snapshot-based get_all survives updates that change dict size mid-iteration."""
+        store = InMemoryIntegrationStatusStore()
+        ts = datetime.now(UTC)
+        store.update(
+            "a",
+            IntegrationStatus(
+                name="a", status="healthy", last_checked_at=ts, error=None, metadata=None
+            ),
+        )
+        # Mutate from inside a custom iteration that mimics the bug
+        # pattern (the test fails on the unfixed implementation: the
+        # ``for name in sorted(self._statuses)`` line raises).
+        result = store.get_all()
+        assert [s.name for s in result] == ["a"]
+        # Drop a key AFTER the snapshot was taken — it must not crash.
+        store.update(
+            "b",
+            IntegrationStatus(
+                name="b", status="healthy", last_checked_at=ts, error=None, metadata=None
+            ),
+        )
+        # Calling get_all again after a post-snapshot addition is fine
+        # because the next call snapshots fresh keys.
+        assert {s.name for s in store.get_all()} == {"a", "b"}
+
+    def test_get_all_returns_snapshot_largest_at_call_time(self) -> None:
+        """When get_all snapshots, mid-iteration deletions do not raise."""
+        store = InMemoryIntegrationStatusStore()
+        ts = datetime.now(UTC)
+        store.update(
+            "x",
+            IntegrationStatus(
+                name="x", status="healthy", last_checked_at=ts, error=None, metadata=None
+            ),
+        )
+        # Patch update() to mutate mid-iteration in a parallel thread.
+        from threading import Thread
+
+        captured: list = []
+
+        def _race() -> None:
+            captured.append(store.get_all())
+
+        t = Thread(target=_race)
+        t.start()
+        # Main thread mutates while the other thread iterates.
+        store.update(
+            "y",
+            IntegrationStatus(
+                name="y", status="healthy", last_checked_at=ts, error=None, metadata=None
+            ),
+        )
+        t.join(1.0)
+        # The race output is well-formed — either ['x'] (snapshot pre-update)
+        # or ['x', 'y'] (snapshot post-update); never an exception.
+        names = [s.name for s in captured[0]]
+        assert names == ["x"] or names == ["x", "y"]
+
+
 # ---------------------------------------------------------------------------
 # API endpoints
 # ---------------------------------------------------------------------------

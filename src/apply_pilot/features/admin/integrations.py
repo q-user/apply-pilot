@@ -156,8 +156,18 @@ class InMemoryIntegrationStatusStore:
         self._statuses: dict[str, IntegrationStatus] = {}
 
     def get_all(self) -> list[IntegrationStatus]:
-        """Return every known status sorted by ``name`` for stable output."""
-        return [self._statuses[name] for name in sorted(self._statuses)]
+        """Return every known status sorted by ``name`` for stable output.
+
+        Issue #295: a sync ``def`` FastAPI endpoint that iterates
+        ``self._statuses`` runs in a Starlette threadpool while the
+        worker mutates the same dict in the main event loop. Iterating
+        a dict whose size changes raises ``RuntimeError: dictionary
+        changed size during iteration``. Snapshot the keys into a
+        plain dict first so the iteration is immune to concurrent
+        mutation.
+        """
+        statuses = dict(self._statuses)
+        return [statuses[name] for name in sorted(statuses)]
 
     def update(self, name: str, status: IntegrationStatus) -> None:
         """Insert or replace the status stored under *name*."""
