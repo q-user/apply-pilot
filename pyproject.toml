@@ -16,6 +16,15 @@ dependencies = [
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
     "asyncpg>=0.31.0",
+    # Sync PG driver for the eager ``engine`` singleton at module-load
+    # time of ``apply_pilot.db``; SQLAlchemy pre-imports the DBAPI during
+    # ``create_engine``. The driver has to be installed by every
+    # prod-equivalent sync (``docker`` build stage, CI, and any
+    # ``uv sync --frozen --no-dev``) because the import cascade is
+    # triggered by *every* entry point (``apply-pilot-api``,
+    # ``apply-pilot-bot``, ``apply-pilot-max-bot``, ``apply-pilot``,
+    # Alembic env, scripts touching ``Base.metadata``) — not just FastAPI.
+    "psycopg[binary]>=3.2",
     "redis[hiredis]>=8.0.0",
     "httpx>=0.28.1",
     "fakeredis>=2.36.1",
@@ -80,9 +89,9 @@ prepend_sys_path = ["src"]
 
 # ty configuration. See https://docs.astral.sh/ty/reference/configuration/
 # for the schema; ty is already scoped to ``src/`` by the CI command
+
 [dependency-groups]
 dev = [
-    "psycopg[binary]>=3.2",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",
     "pytest-timeout>=2.4.0",
